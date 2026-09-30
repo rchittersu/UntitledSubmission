@@ -10,3 +10,8 @@
 *.out
 *.synctex.gz
 Template/main.pdf
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/

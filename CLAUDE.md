@@ -14,6 +14,7 @@ Research project: **ultra-high-resolution (native sensor resolution, ~30 MP+) si
   - `main.bib` — template entries only; **none of the paper's citation keys exist yet** (all `\cite`s are undefined).
   - `notes.txt` — informal research notes (inconsistency taxonomy for tiled inference, papers to read, open directions).
   - Build artifacts (`*.aux`, `*.log`, `main.pdf`, …) are git-ignored.
+- `code/` — evaluation harness (`uhdd` package + scripts, see `code/README.md`). Written outside, run in the secure env; outside can only test on CPU (`pytest code/tests`).
 - `plan/` — research plans shared by both envs. `plan/evaluation.md`: test sets, baselines, protocol, metrics, first secure-env tasks (current priority).
 - Build: `cd Template && latexmk -pdf main.tex`.
 
@@ -32,7 +33,7 @@ This project is worked on by **two Claude instances**:
 
 | | **Outside env** (this checkout, origin of the repo) | **Secure env** |
 |---|---|---|
-| Has | Paper sources, notes, internet access | Code, data, GPUs, experiments, a clone of this repo |
+| Has | Paper sources, notes, `code/` (written here, CPU-tested only), internet | Data, GPUs, experiments, a clone of this repo |
 | Inbound | — | Can pull the latest version of this repo at any time |
 | Outbound | Anything | **Exactly one text file per handoff: a git patch**, copy-pasted out by the user |
 
@@ -55,12 +56,12 @@ git checkout -b handoff/<topic>
 handoff/make_patch.sh                      # -> ../handoff_<date>.patch
 ```
 
-`make_patch.sh` works from **any origin branch**: the base is the current branch's `origin/*` upstream, else the `origin/*` branch HEAD is closest to, or explicitly `BASE=<branch>` (e.g. `BASE=paper-v2` = `origin/paper-v2`). The patch covers all commits since the fork point from that branch (`git format-patch --stdout --base=<fork-point>`), so the base branch moving on later is harmless. It refuses to write the patch if it touches paths outside `Template/`, `plan/`, `handoff/from_secure/`, `CLAUDE.md`, `.gitignore`, contains binary files, or has no report in `handoff/from_secure/`, and warns about uncommitted changes. The report's `Context` section should name the base branch. The user copies the printed file out verbatim.
+`make_patch.sh` works from **any origin branch**: the base is the current branch's `origin/*` upstream, else the `origin/*` branch HEAD is closest to, or explicitly `BASE=<branch>` (e.g. `BASE=paper-v2` = `origin/paper-v2`). The patch covers all commits since the fork point from that branch (`git format-patch --stdout --base=<fork-point>`), so the base branch moving on later is harmless. It refuses to write the patch if it touches paths outside `Template/`, `plan/`, `code/`, `handoff/from_secure/`, `CLAUDE.md`, `.gitignore`, contains binary files, or has no report in `handoff/from_secure/`, and warns about uncommitted changes. The report's `Context` section should name the base branch. The user copies the printed file out verbatim.
 
 Applying it here: `git am -3 <file>.patch` (fallback: `git apply --3way`, or manual edit if the base diverged).
 
 Patch rules:
-- **Only paths of this repo** (`handoff/from_secure/`, `Template/`, `plan/`, `CLAUDE.md`). Never include the secure codebase, data, logs, or configs. If secure code lives inside this clone, keep it out of the handoff commits.
+- **Only paths of this repo** (`handoff/from_secure/`, `Template/`, `plan/`, `code/`, `CLAUDE.md`). Changes to `code/` (fixes, new metrics/baselines) are welcome; other secure-only code, data, logs and configs never leave. Keep code free of internal paths (use the `UHDD_*` env vars).
 - **Text only**: no binary files (`make_patch.sh` checks this). Figures travel as plot data (CSV/table in the report or a `.dat`/pgfplots/TikZ file), not images.
 - **No sensitive content**: no credentials, internal hostnames/paths, proprietary dataset names or internal identifiers unless the user explicitly says they are cleared to leave. Describe them generically (e.g. "internal 50 MP smartphone test set, N=120 images").
 - Keep paper diffs minimal (no whitespace-only reflow of paragraphs) so they apply cleanly.
@@ -113,3 +114,10 @@ Literature checks, writing help, citations to verify, decisions needed.
 1. Save it, apply with `git am -3`, resolve conflicts, check LaTeX still builds.
 2. Read the report; update claims/`\todo{}`s the results resolve; flag claims the results contradict.
 3. Add a line to `handoff/LOG.md` (date, direction, file, one-line summary, status) and commit, so the next pull brings the secure env up to date.
+
+## Code conventions (`code/`)
+
+- Efficiency first: one process per GPU (`--gpus all`), prefetching readers, async writers, GPU metrics, process pools for CPU work. Keep images in native 8/16-bit until on the device.
+- Never resize to satisfy architecture size constraints: reflect-pad to the model's `multiple` and crop back (see `code/README.md`).
+- Every script writes machine-readable results (CSV/JSON); `summarize.py` turns them into the Markdown tables that go into handoff reports.
+- Add a CPU test in `code/tests` for new logic; run `pytest -q code/tests` before handing off.

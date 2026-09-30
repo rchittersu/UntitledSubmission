@@ -1,0 +1,8 @@
+torch>=2.2
+numpy
+opencv-python-headless
+scipy
+pyyaml
+einops          # Restormer
+pyiqa           # lpips, dists, musiq, maniqa, clipiqa (optional for other metrics)
+pytest

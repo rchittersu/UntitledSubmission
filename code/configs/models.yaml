@@ -1,0 +1,60 @@
+# Model registry for scripts/run_model.py (see uhdd/models.py).
+# Paths use environment variables so no machine-specific paths are committed:
+#   UHDD_REPOS   = folder with cloned third-party repos
+#   UHDD_WEIGHTS = folder with checkpoints
+#
+# Fields: kind (torch|builtin), op (builtin: identity|bicubic), repo,
+#   import (pkg.module:Class, or file.py:Class relative to repo -- preferred), kwargs, weights, state_key,
+#   strict, multiple (H/W divisibility), scale (output/input), input_range, output_index,
+#   clamp, adapter (module:function for non-standard models).
+# [V] = verify against the original repo before trusting numbers.
+
+models:
+  identity:            # the blurry input itself (lower bound / sanity check)
+    kind: builtin
+    op: identity
+
+  bicubic_x4:          # x4 upsampling of a low-res result (G2 baseline)
+    kind: builtin
+    op: bicubic
+    scale: 4
+
+  restormer_dpdd:      # Restormer, single-image defocus deblurring (DPDD), CVPR 2022
+    repo: ${UHDD_REPOS}/Restormer
+    import: basicsr/models/archs/restormer_arch.py:Restormer   # file import: skips basicsr/__init__
+    kwargs:
+      inp_channels: 3
+      out_channels: 3
+      dim: 48
+      num_blocks: [4, 6, 6, 8]
+      num_refinement_blocks: 4
+      heads: [1, 2, 4, 8]
+      ffn_expansion_factor: 2.66
+      bias: false
+      LayerNorm_type: WithBias
+      dual_pixel_task: false
+    weights: ${UHDD_WEIGHTS}/restormer/single_image_defocus_deblurring.pth
+    state_key: params
+    multiple: 8        # 3 downsamplings; their test script pads to 8
+
+  # ---- templates, fill in after checking each repo [V] ----
+  # lakdnet_dpdd:
+  #   repo: ${UHDD_REPOS}/LaKDNet
+  #   import: <module>:<Class>
+  #   kwargs: {}
+  #   weights: ${UHDD_WEIGHTS}/lakdnet/<file>.pth
+  #   multiple: <2^levels>
+  # drbnet_dpdd:
+  #   repo: ${UHDD_REPOS}/DRBNet
+  #   import: <module>:<Class>
+  #   output_index: -1  # if the net returns multi-scale outputs [V]
+  #   multiple: <..>
+  # ifan_dpdd:          # uses its own framework -> write an adapter
+  #   repo: ${UHDD_REPOS}/IFAN
+  #   import: <module>:<Class>
+  #   adapter: uhdd.adapters.ifan:wrap
+  # swinir_x4:           # SR on top of low-res results; window 8 -> multiple 8
+  #   repo: ${UHDD_REPOS}/SwinIR
+  #   import: models/network_swinir.py:SwinIR
+  #   scale: 4
+  #   multiple: 8
