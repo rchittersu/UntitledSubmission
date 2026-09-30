@@ -48,13 +48,13 @@ Everything the secure env wants to communicate travels as **one patch file again
 Producing it in the secure env:
 
 ```bash
-git pull                                   # start from the latest outside version
+git pull                                   # start from the latest outside version (any branch)
 git checkout -b handoff/<topic>
 # ... write handoff/from_secure/<date>_<topic>.md, edit Template/..., commit (one or more commits) ...
 handoff/make_patch.sh                      # -> ../handoff_<date>.patch
 ```
 
-`make_patch.sh` runs `git format-patch --stdout --base=origin/main origin/main..HEAD` and refuses to write the patch if it touches paths outside `Template/`, `handoff/from_secure/`, `CLAUDE.md`, `.gitignore`, contains binary files, or has no report in `handoff/from_secure/`. It warns about uncommitted changes and if `origin/main` has moved ahead (then `git rebase origin/main` first). Override the base with `BASE=<ref>`. The user copies the printed file out verbatim.
+`make_patch.sh` works from **any origin branch**: the base is the current branch's `origin/*` upstream, else the `origin/*` branch HEAD is closest to, or explicitly `BASE=<branch>` (e.g. `BASE=paper-v2` = `origin/paper-v2`). The patch covers all commits since the fork point from that branch (`git format-patch --stdout --base=<fork-point>`), so the base branch moving on later is harmless. It refuses to write the patch if it touches paths outside `Template/`, `handoff/from_secure/`, `CLAUDE.md`, `.gitignore`, contains binary files, or has no report in `handoff/from_secure/`, and warns about uncommitted changes. The report's `Context` section should name the base branch. The user copies the printed file out verbatim.
 
 Applying it here: `git am -3 <file>.patch` (fallback: `git apply --3way`, or manual edit if the base diverged).
 
