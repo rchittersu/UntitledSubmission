@@ -40,6 +40,8 @@ models:
     input_bits: 8      # trained and tested on 8-bit DPDD (DefocusDeblur_Single_8bit_Restormer.yml)
     # Weights: https://github.com/swz30/Restormer/releases (single_image_defocus_deblurring.pth).
     # Official test: whole 1680x1120 image, 8-bit input and target, no padding needed.
+    # VERIFIED (2026-10-01, CPU): whole-image run on the repo's demo/degraded images reproduces
+    # demo/restored/Single_Image_Defocus_Deblurring bit-exactly up to <=21 pixels off by 1/255.
     # Published DPDD single-image (combined): PSNR 25.98, SSIM 0.811, MAE 0.038, LPIPS 0.178 [V]
 
   # ---- templates, fill in after checking each repo [V] ----

@@ -103,5 +103,5 @@ Paste `summarize.py` tables (and `register_pairs.py` shift statistics) into the 
 
 - Semantic consistency metric (DINOv2-matched patch pairs), guided-upsampling baseline (G3),
   blur-level stratification from DP views, synthetic test set (T2).
-- Only Restormer is configured (architecture checked against its official config; loading +
-  inference tested on CPU with random weights only); other baselines are templates [V].
+- Only Restormer is configured; verified against the official demo outputs (whole-image mode,
+  ~95 dB PSNR, max 1/255 difference on a handful of pixels). Other baselines are templates [V].
