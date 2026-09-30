@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Compare our pipeline (models.build + run_tiled, whole image) with each repo's own test code path.
 
-  check_against_official.py restormer? lakdnet_dpdd_l drbnet_single ifan swinir_x4 swinir_x4_real
+  check_against_official.py lakdnet_dpdd_l drbnet_single ifan swinir_x4 swinir_x4_real
 
 Uses the demo images shipped with Restormer ($UHDD_REPOS/Restormer/demo/degraded) unless
 --images is given. Prints max |ours - official| (expect ~1e-6), tiled-vs-whole PSNR and runtime.
