@@ -60,7 +60,7 @@ Applying it here: `git am -3 <file>.patch` (fallback: `git apply --3way`, or man
 
 Patch rules:
 - **Only paths of this repo** (`handoff/`, `Template/`, `CLAUDE.md`, …). Never include the secure codebase, data, logs, or configs. If secure code lives inside this clone, keep it out of the handoff commits.
-- **Text only**: no binary files (check `git diff --stat origin/main` shows no `Bin`). Figures travel as plot data (CSV/table in the report or a `.dat`/pgfplots/TikZ file), not images.
+- **Text only**: no binary files (`make_patch.sh` checks this). Figures travel as plot data (CSV/table in the report or a `.dat`/pgfplots/TikZ file), not images.
 - **No sensitive content**: no credentials, internal hostnames/paths, proprietary dataset names or internal identifiers unless the user explicitly says they are cleared to leave. Describe them generically (e.g. "internal 50 MP smartphone test set, N=120 images").
 - Keep paper diffs minimal (no whitespace-only reflow of paragraphs) so they apply cleanly.
 - Do not edit `handoff/LOG.md` (outside maintains it) to avoid conflicts.
