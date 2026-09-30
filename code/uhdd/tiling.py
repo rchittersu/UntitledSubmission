@@ -9,6 +9,9 @@ Design choices:
   accumulation is in float32 regardless of the model precision.
 - Supports models with an integer output scale s (super-resolution): output tiles are T*s.
 - The tile grid is returned so seam metrics can be evaluated on each method's own grid.
+- Models whose input depends on absolute image position (e.g. Bokehlicious' position maps)
+  set `fn.positional = True` and are called as fn(tiles, boxes=[(y, x, h, w), ...],
+  full_hw=(H, W)), with boxes in image coordinates (may extend past H/W into padding).
 """
 from __future__ import annotations
 
@@ -75,9 +78,14 @@ def run_tiled(fn: Callable[[torch.Tensor], torch.Tensor], x: torch.Tensor, spec:
     assert x.shape[0] == 1, "one image at a time; tiles are batched internally"
     H, W = x.shape[-2:]
 
+    positional = getattr(fn, "positional", False)
+
+    def call(t: torch.Tensor, boxes: list[tuple[int, int, int, int]]) -> torch.Tensor:
+        return (fn(t, boxes=boxes, full_hw=(H, W)) if positional else fn(t)).float()
+
     if spec.tile <= 0:
         xp, hw = pad_to_multiple(x, multiple)
-        y = fn(xp).float()
+        y = call(xp, [(0, 0, *xp.shape[-2:])])
         return crop(y, hw, scale), {"mode": "whole", "padded": list(xp.shape[-2:]), "scale": scale}
 
     T = round_up(spec.tile, max(multiple, 1))
@@ -104,7 +112,7 @@ def run_tiled(fn: Callable[[torch.Tensor], torch.Tensor], x: torch.Tensor, spec:
     for b in range(0, len(coords), spec.batch):
         chunk = coords[b:b + spec.batch]
         tiles = torch.cat([xp[..., ys[iy]:ys[iy] + T, xs[ix]:xs[ix] + T] for iy, ix in chunk], dim=0)
-        pred = fn(tiles).float()
+        pred = call(tiles, [(ys[iy], xs[ix], T, T) for iy, ix in chunk])
         for k, (iy, ix) in enumerate(chunk):
             sy, sx, win = ys[iy] * scale, xs[ix] * scale, window(iy, ix)
             out[..., sy:sy + Ts, sx:sx + Ts].addcmul_(pred[k:k + 1], win)

@@ -34,8 +34,12 @@ class Restorer:
     scale: int = 1
     spec: dict = field(default_factory=dict)
 
-    def __call__(self, x: torch.Tensor) -> torch.Tensor:
-        return self.fn(x)
+    @property
+    def positional(self) -> bool:
+        return getattr(self.fn, "positional", False)
+
+    def __call__(self, x: torch.Tensor, **kw) -> torch.Tensor:
+        return self.fn(x, **kw)
 
 
 def _expand(v: Any) -> Any:
@@ -126,8 +130,11 @@ def build(name: str, config: str | Path, device: torch.device | str,
     elif kind == "torch":
         if "repo" in spec:
             sys.path.insert(0, spec["repo"])
-        net = _import(spec["import"], spec.get("repo"))(**spec.get("kwargs", {}))
-        if spec.get("weights"):
+        if "factory" in spec:  # callable(spec) -> nn.Module, for models built by config helpers
+            net = _import(spec["factory"], spec.get("repo"))(spec)
+        else:
+            net = _import(spec["import"], spec.get("repo"))(**spec.get("kwargs", {}))
+        if spec.get("weights") and not spec.get("weights_in_factory"):
             _load_state_dict(net, spec)
         net = net.eval().to(device)
         if channels_last:

@@ -39,6 +39,34 @@ Restormer 8, NAFNet 16; windowed transformers: window × 2^#downsamplings, e.g. 
 - Downscaling (`prepare_scales`) crops a remainder of < s pixels so the low-res grid stays
   exactly aligned with the native one (DPDD 6720×4480 is divisible by 2 and 4, nothing is cropped).
 
+## Baselines
+
+All entries live in `configs/models.yaml`. Each was checked on CPU by running the authors' own
+preprocessing + model call next to ours on the same images (max abs difference reported).
+
+| Config name | Method | Trained on | Weights source (→ `$UHDD_WEIGHTS/...`) | Extra deps | Check vs official code |
+|---|---|---|---|---|---|
+| `restormer_dpdd` | Restormer (CVPR'22) | DPDD | GitHub release `swz30/Restormer` v1.0 `single_image_defocus_deblurring.pth` → `restormer/` | einops | reproduces official demo outputs (≤1/255 on ≤21 px) |
+| `bokehlicious_deblur` | Bokehlicious, RealDefocus deblur variant | RealDefocus | in repo: `checkpoints/defocus_deblur.zpaq` (`zpaq x`) → `bokehlicious/defocus_deblur.pt` | timm, zpaq | ≤ 7e-7 |
+| `lakdnet_dpdd_l`, `lakdnet_dpdd_s` | LaKDNet (L / S) | DPDD | `lakdnet.mpi-inf.mpg.de/Weights/Defocus/train_on_dpdd_{l,s}/…pth` → `lakdnet/` | einops | ≤ 1.7e-6 |
+| `drbnet_single` | DRBNet (CVPR'22) | LFDOF+DPDD | `python download_ckpts.py` in repo (gdrive id `1vGImev9LdagttXE_nN1gZGVstVTRVQHt`), unzip → `drbnet/ckpts/single/` | torchvision | ≤ 4.5e-7 |
+| `ifan` | IFAN (CVPR'21) | DPDD | `checkpoints.zip` (Dropbox/OneDrive in IFAN README) → `ifan/IFAN.pytorch` | easydict | ≤ 1.0e-6 (checkpoint: keep `module.Network.*`, drop training-only `reblurNet`) |
+| `swinir_x4` | SwinIR-M x4 classical (upsampler) | DF2K | GitHub release `JingyunLiang/SwinIR` v0.0 `001_classicalSR_DF2K_s64w8_SwinIR-M_x4.pth` → `swinir/` | timm | exact (0) |
+| `swinir_x4_real` | SwinIR-M x4 real-world GAN (upsampler) | BSRGAN degr. | same release, `003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x4_GAN.pth` → `swinir/` | timm | exact (0) |
+
+Repos go to `$UHDD_REPOS/<Name>`: `swz30/Restormer`, `TimSeizinger/Bokehlicious`,
+`lingyanruan/LaKDNet`, `lingyanruan/DRBNet`, `codeslake/IFAN`, `JingyunLiang/SwinIR`.
+
+Early observation (demo images, ~0.2 MP, 128 px tiles / 32 overlap vs. whole image): tiling
+alone changes outputs by 35–45 dB PSNR (DRBNet least, LaKDNet/IFAN/Restormer most), i.e. the
+patch-wise gap already appears at low resolution.
+
+Protocol details reproduced from each official test script: 8-bit inputs (`input_bits: 8`) for
+Restormer/LaKDNet/DRBNet/IFAN; DRBNet works in [-1, 1]; IFAN returns a dict (`result`);
+Bokehlicious needs full-image position maps (handled per tile) and the blurry input's f-number
+(`av`, DPDD = 4). Official scripts that *crop* to a multiple (DRBNet 16, IFAN 8) are equivalent
+to our padding on DPDD (1680×1120 is divisible by 16).
+
 ## Restormer setup and reproduction check
 
 ```bash
@@ -103,5 +131,5 @@ Paste `summarize.py` tables (and `register_pairs.py` shift statistics) into the 
 
 - Semantic consistency metric (DINOv2-matched patch pairs), guided-upsampling baseline (G3),
   blur-level stratification from DP views, synthetic test set (T2).
-- Only Restormer is configured; verified against the official demo outputs (whole-image mode,
-  ~95 dB PSNR, max 1/255 difference on a handful of pixels). Other baselines are templates [V].
+- A recent DPDD-trained transformer/Mamba baseline with public weights is still to be added.
+- Diffusion SR upsamplers (StableSR/SUPIR/OSEDiff) are not configured yet (large SD backbones).

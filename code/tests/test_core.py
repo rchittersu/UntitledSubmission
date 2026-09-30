@@ -195,3 +195,21 @@ def test_scripts_end_to_end(tmp_path):
     assert io.read_image(tmp_path / "up" / "a.png").shape == (96, 128, 3)
     table = run(s / "summarize.py", tmp_path / "id" / "metrics_t.json").stdout
     assert "| Method |" in table
+
+
+def test_positional_tiling_matches_whole():
+    """Position-dependent models get full-image coordinates per tile (Bokehlicious adapter)."""
+    from uhdd.adapters.bokehlicious import pos_map
+
+    def fn(t, boxes, full_hw):
+        pm = torch.stack([pos_map(*full_hw, y, x, h, w, t.device) for y, x, h, w in boxes])
+        return t * 0.5 + pm[:, :1] * 0.25 + pm[:, 1:] * 0.25   # pointwise in position
+
+    fn.positional = True
+    x = rand_img(70, 101)
+    whole, _ = run_tiled(fn, x, TileSpec(0), 4)
+    tiled, _ = run_tiled(fn, x, TileSpec(32, 8, 3, "linear"), 4)
+    assert torch.allclose(whole, tiled, atol=1e-6)
+    # whole-image map equals the reference definition on a landscape image: x spans [0, 1]
+    pm = pos_map(70, 101, 0, 0, 70, 101, "cpu")
+    assert abs(float(pm[0, 0, 0])) < 1e-7 and abs(float(pm[0, 0, -1]) - 1) < 1e-6

@@ -44,24 +44,69 @@ models:
     # demo/restored/Single_Image_Defocus_Deblurring bit-exactly up to <=21 pixels off by 1/255.
     # Published DPDD single-image (combined): PSNR 25.98, SSIM 0.811, MAE 0.038, LPIPS 0.178 [V]
 
-  # ---- templates, fill in after checking each repo [V] ----
-  # lakdnet_dpdd:
-  #   repo: ${UHDD_REPOS}/LaKDNet
-  #   import: <module>:<Class>
-  #   kwargs: {}
-  #   weights: ${UHDD_WEIGHTS}/lakdnet/<file>.pth
-  #   multiple: <2^levels>
-  # drbnet_dpdd:
-  #   repo: ${UHDD_REPOS}/DRBNet
-  #   import: <module>:<Class>
-  #   output_index: -1  # if the net returns multi-scale outputs [V]
-  #   multiple: <..>
-  # ifan_dpdd:          # uses its own framework -> write an adapter
-  #   repo: ${UHDD_REPOS}/IFAN
-  #   import: <module>:<Class>
-  #   adapter: uhdd.adapters.ifan:wrap
-  # swinir_x4:           # SR on top of low-res results; window 8 -> multiple 8
-  #   repo: ${UHDD_REPOS}/SwinIR
-  #   import: models/network_swinir.py:SwinIR
-  #   scale: 4
-  #   multiple: 8
+  bokehlicious_deblur: # Bokehlicious, RealDefocus defocus-deblurring variant (ICCV 2025 / arXiv 2607.21078)
+    repo: ${UHDD_REPOS}/Bokehlicious
+    factory: uhdd.adapters.bokehlicious:build
+    adapter: uhdd.adapters.bokehlicious:wrap
+    size: defocus_deblur
+    weights: ${UHDD_WEIGHTS}/bokehlicious/defocus_deblur.pt   # `zpaq x checkpoints/defocus_deblur.zpaq`
+    multiple: 4        # U-Net depth 2; transformer windows are padded inside the model
+    av: 4.0            # f-number of the blurry input (DPDD: f/4) -> attention range; RealDefocus uses EXIF
+    # Trained on RealDefocus (not DPDD) -> cross-dataset baseline on DPDD. Needs `timm`.
+
+  lakdnet_dpdd_l:      # LaKDNet large, single-view, trained on DPDD (arXiv 2302.02234)
+    repo: ${UHDD_REPOS}/LaKDNet
+    import: models/LaKDNet.py:LaKDNet
+    kwargs: {inp_channels: 3, out_channels: 3, dim: 48, num_blocks: [8, 12, 12, 16], mix_kernel_size: [9, 9, 9, 9]}
+    weights: ${UHDD_WEIGHTS}/lakdnet/train_on_dpdd_l.pth   # lakdnet.mpi-inf.mpg.de/Weights/Defocus/train_on_dpdd_l/
+    multiple: 8        # official run.py reflect-pads to 8
+    input_bits: 8      # official single-view test reads 8-bit
+    # README (DPDD): PSNR 26.25, SSIM 0.813
+
+  lakdnet_dpdd_s:      # LaKDNet small
+    repo: ${UHDD_REPOS}/LaKDNet
+    import: models/LaKDNet.py:LaKDNet
+    kwargs: {inp_channels: 3, out_channels: 3, dim: 32, num_blocks: [8, 12, 12, 16], mix_kernel_size: [9, 9, 9, 9]}
+    weights: ${UHDD_WEIGHTS}/lakdnet/train_on_dpdd_s.pth
+    multiple: 8
+    input_bits: 8
+    # README (DPDD): PSNR 26.15, SSIM 0.810
+
+  drbnet_single:       # DRBNet single-image (CVPR 2022), trained on LFDOF + DPDD
+    repo: ${UHDD_REPOS}/DRBNet
+    import: models/DRBNet.py:DRBNet_single
+    weights: ${UHDD_WEIGHTS}/drbnet/ckpts/single/single_image_defocus_deblurring.pth  # download_ckpts.py (gdrive)
+    multiple: 16       # official test crops to a multiple of 16 (DPDD 1680x1120 unaffected); we pad
+    input_bits: 8
+    input_range: [-1.0, 1.0]
+    # Needs torchvision (imported by the model file).
+
+  ifan:                # IFAN (CVPR 2021), trained on DPDD
+    repo: ${UHDD_REPOS}/IFAN
+    factory: uhdd.adapters.ifan:build
+    adapter: uhdd.adapters.ifan:wrap
+    weights: ${UHDD_WEIGHTS}/ifan/IFAN.pytorch   # from checkpoints.zip (Dropbox/OneDrive links in README)
+    weights_in_factory: true
+    multiple: 8        # official test crops to a multiple of 8; we pad
+    input_bits: 8
+    # Needs easydict.
+
+  swinir_x4:           # SwinIR-M classical x4 SR (bicubic degradation), regression upsampler for G2
+    repo: ${UHDD_REPOS}/SwinIR
+    import: models/network_swinir.py:SwinIR
+    kwargs: {upscale: 4, in_chans: 3, img_size: 64, window_size: 8, img_range: 1.0, depths: [6, 6, 6, 6, 6, 6],
+             embed_dim: 180, num_heads: [6, 6, 6, 6, 6, 6], mlp_ratio: 2, upsampler: pixelshuffle, resi_connection: 1conv}
+    weights: ${UHDD_WEIGHTS}/swinir/001_classicalSR_DF2K_s64w8_SwinIR-M_x4.pth   # GitHub releases v0.0
+    state_key: params
+    scale: 4
+    multiple: 8        # window size
+
+  swinir_x4_real:      # SwinIR-M real-world x4 (BSRGAN degradations, GAN), perceptual upsampler for G2
+    repo: ${UHDD_REPOS}/SwinIR
+    import: models/network_swinir.py:SwinIR
+    kwargs: {upscale: 4, in_chans: 3, img_size: 64, window_size: 8, img_range: 1.0, depths: [6, 6, 6, 6, 6, 6],
+             embed_dim: 180, num_heads: [6, 6, 6, 6, 6, 6], mlp_ratio: 2, upsampler: nearest+conv, resi_connection: 1conv}
+    weights: ${UHDD_WEIGHTS}/swinir/003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x4_GAN.pth
+    state_key: params_ema
+    scale: 4
+    multiple: 8

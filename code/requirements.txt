@@ -3,6 +3,9 @@ numpy
 opencv-python-headless
 scipy
 pyyaml
-einops          # Restormer
+einops          # Restormer, LaKDNet
+timm            # Bokehlicious, SwinIR
+torchvision     # DRBNet (imported by its model file)
+easydict        # IFAN config
 pyiqa           # lpips, dists, musiq, maniqa, clipiqa (optional for other metrics)
 pytest
