@@ -1,0 +1,196 @@
+#!/usr/bin/env python
+"""Run a matrix of pipelines (deblur model x resolution x tiling x upsampler) and evaluate them.
+
+  run_matrix.py experiments/dpdd_p1.yaml [--gpus all] [--only REGEX] [--dry-run]
+
+Experiment file (see experiments/dpdd_p1.yaml):
+  data:     inputs/targets/masks folder per scale factor (1 = native, 4 = 1/4 resolution)
+  results:  output root
+  run:      default run_model.py options (tile, overlap, tile_batch, blend, precision, ...)
+  eval:     metrics, native border crop (divided by the evaluated scale), extra options
+  pipelines: list of {group, name, for, steps}; `for` is a grid of template variables that
+             are substituted into name/steps with str.format, e.g.
+               - group: g2_lowres_upsample
+                 name: "{m}@x4+{up}"
+                 for: {m: [restormer_dpdd, ifan], up: [bicubic_x4, swinir_x4]}
+                 steps:
+                   - {model: "{m}", scale: 4, tile: 0}
+                   - {model: "{up}"}
+The first step reads the data inputs at `scale`; each later step reads the previous output.
+A step's output scale = input scale / model scale (SR models have scale 4). The final output
+is evaluated against the targets at its scale.
+
+Evaluations are cached per final step and eval `tag`: change the tag (or delete
+metrics_<tag>.json) after changing metrics. Step outputs are cached under <results>/steps/<chain key>, where the key encodes the full
+chain (input scale, models, tiling), so shared prefixes are computed once. Finished steps
+(meta.json covering all images) and finished evaluations are skipped: the runner is resumable.
+Per group, a Markdown table is written to <results>/tables/<group>.md.
+"""
+from __future__ import annotations
+
+import argparse
+import itertools
+import json
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+import yaml
+
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parent))
+
+from uhdd.io import list_images  # noqa: E402
+from uhdd.models import _expand, load_config  # noqa: E402
+
+RUN_KEYS = ["tile", "overlap", "tile_batch", "blend", "precision", "input_bits", "save_bits"]
+
+
+def expand_pipelines(spec: list[dict]) -> list[dict]:
+    out = []
+    for p in spec:
+        grid = p.get("for", {})
+        keys = list(grid)
+        for combo in itertools.product(*(grid[k] for k in keys)) if keys else [()]:
+            env = dict(zip(keys, combo))
+            fmt = lambda v: v.format(**env) if isinstance(v, str) else v
+            out.append({"group": p.get("group", "main"), "name": fmt(p["name"]),
+                        "steps": [{k: fmt(v) for k, v in s.items()} for s in p["steps"]]})
+    return out
+
+
+def step_tag(step: dict, run: dict) -> str:
+    tile = step.get("tile", run.get("tile", 0))
+    tag = f"{step['model']}@" + (f"t{tile}o{step.get('overlap', run.get('overlap', 64))}" if tile else "whole")
+    for k in ("blend", "precision", "input_bits"):
+        if k in step:
+            tag += f"-{k}{step[k]}"
+    return re.sub(r"[^A-Za-z0-9_.@+-]", "_", tag)
+
+
+def plan(exp: dict, model_cfg: dict) -> list[dict]:
+    """Resolve each pipeline into concrete steps with input/output folders and scales."""
+    root = Path(exp["results"])
+    run = exp.get("run", {})
+    jobs = []
+    for p in expand_pipelines(exp["pipelines"]):
+        scale = int(p["steps"][0]["scale"])
+        src = Path(exp["data"]["inputs"][scale])
+        key = f"x{scale}"
+        steps = []
+        for st in p["steps"]:
+            if st["model"] not in model_cfg:
+                raise KeyError(f"pipeline {p['name']}: unknown model {st['model']}")
+            key += "__" + step_tag(st, run)
+            out = root / "steps" / key
+            opts = {k: st.get(k, run.get(k)) for k in RUN_KEYS if st.get(k, run.get(k)) is not None}
+            steps.append({"model": st["model"], "inputs": src, "out": out, "opts": opts})
+            src = out
+            scale = scale // int(model_cfg[st["model"]].get("scale", 1))
+            if scale < 1:
+                raise ValueError(f"pipeline {p['name']}: output would exceed native resolution")
+        jobs.append({**p, "steps": steps, "final": src, "eval_scale": scale})
+    return jobs
+
+
+def done(out: Path, n: int) -> bool:
+    meta = out / "meta.json"
+    return meta.exists() and len(json.loads(meta.read_text())["images"]) >= n
+
+
+def sh(cmd: list, dry: bool) -> None:
+    print("  $ " + " ".join(map(str, cmd)), flush=True)
+    if not dry:
+        subprocess.run(list(map(str, cmd)), check=True)
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("experiment")
+    ap.add_argument("--config", default=str(HERE.parent / "configs" / "models.yaml"))
+    ap.add_argument("--gpus", default="all")
+    ap.add_argument("--workers", type=int, default=2)
+    ap.add_argument("--only", help="regex on pipeline names")
+    ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--no-eval", action="store_true")
+    a = ap.parse_args()
+
+    exp = _expand(yaml.safe_load(Path(a.experiment).read_text()))
+    exp["data"] = {k: {int(s): v for s, v in d.items()} for k, d in exp["data"].items()}
+    model_cfg = load_config(a.config)
+    jobs = plan(exp, model_cfg)
+    if a.only:
+        jobs = [j for j in jobs if re.search(a.only, j["name"])]
+    ev = exp.get("eval", {})
+    tag = ev.get("tag", "eval")
+    py = sys.executable
+
+    unique_steps = {str(s["out"]) for j in jobs for s in j["steps"]}
+    print(f"{len(jobs)} pipelines, {len(unique_steps)} unique steps", flush=True)
+
+    for j in jobs:
+        print(f"\n[{j['group']}] {j['name']}", flush=True)
+        first = Path(j["steps"][0]["inputs"])
+        n = len(list_images(first)) if first.exists() else 0
+        for s in j["steps"]:
+            if n and done(s["out"], n):
+                print(f"  cached: {s['out'].name}")
+                continue
+            cmd = [py, HERE / "run_model.py", "--model", s["model"], "--config", a.config,
+                   "--inputs", s["inputs"], "--out", s["out"], "--gpus", a.gpus,
+                   "--workers", a.workers, "--skip-existing"]
+            for k, v in s["opts"].items():
+                cmd += [f"--{k.replace('_', '-')}", v]
+            sh(cmd, a.dry_run)
+
+        if a.no_eval:
+            continue
+        sc = j["eval_scale"]
+        result = j["final"] / f"metrics_{tag}.json"
+        if result.exists():
+            print(f"  evaluated: {result}")
+        else:
+            cmd = [py, HERE / "evaluate.py", "--pred", j["final"], "--targets", exp["data"]["targets"][sc],
+                   "--scale", sc, "--crop", ev.get("crop_native", 0) // sc, "--metrics", ev["metrics"],
+                   "--tag", tag, "--label", j["name"], "--gpus", a.gpus, "--workers", a.workers]
+            if sc in exp["data"].get("masks", {}):
+                cmd += ["--masks", exp["data"]["masks"][sc]]
+            for k, v in ev.get("options", {}).items():
+                cmd += [f"--{k.replace('_', '-')}", v]
+            sh(cmd, a.dry_run)
+        j["result"] = result
+
+    if a.dry_run or a.no_eval:
+        return
+    tables = Path(exp["results"]) / "tables"
+    tables.mkdir(parents=True, exist_ok=True)
+    groups: dict[str, list[dict]] = {}
+    for j in jobs:
+        groups.setdefault(j["group"], []).append(j)
+    pdir = Path(exp["results"]) / "pipelines"
+    pdir.mkdir(parents=True, exist_ok=True)
+    for g, js in groups.items():
+        files = []
+        for j in js:  # per-pipeline summary: its own label + total runtime over all steps
+            if not j["result"].exists():
+                continue
+            r = json.loads(j["result"].read_text())
+            steps = [json.loads((s["out"] / "meta.json").read_text())["images"] for s in j["steps"]]
+            per_img = [sum(st[k]["time_s"] for st in steps) for k in steps[-1]]
+            r["label"], r["steps"] = j["name"], [str(s["out"].name) for s in j["steps"]]
+            r["metrics"]["pipeline_time_s"] = {"mean": sum(per_img) / len(per_img), "std": 0.0, "n": len(per_img)}
+            r["metrics"]["peak_mem_gb"] = {"mean": max(v.get("peak_mem_gb") or 0 for st in steps for v in st.values()),
+                                           "std": 0.0, "n": len(per_img)}
+            f = pdir / (re.sub(r"[^A-Za-z0-9_.@+-]", "_", j["name"]) + f"__{tag}.json")
+            f.write_text(json.dumps(r, indent=1))
+            files.append(str(f))
+        md = subprocess.run([py, HERE / "summarize.py", *files, *(["--cols", ev["table_cols"]] if ev.get("table_cols") else [])],
+                            check=True, capture_output=True, text=True).stdout
+        (tables / f"{g}.md").write_text(f"## {g}\n\n{md}")
+        print(f"\n## {g}\n{md}")
+
+
+if __name__ == "__main__":
+    main()

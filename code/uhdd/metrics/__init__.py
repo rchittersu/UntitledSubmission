@@ -28,7 +28,7 @@ DIRECTION = {"psnr": 1, "ssim": 1, "pm_psnr": 1, "pm_ssim": 1, "mae": -1, "hb_nm
              "lpips": -1, "dists": -1, "musiq": 1, "maniqa": 1, "clipiqa": 1, "lf_drift": -1,
              "seam_step": -1, "seam_ratio": -1, "sharp_lr_abs": -1, "sharp_lr_std": -1,
              "noise_lr_abs": -1, "noise_lr_std": -1, "slope_err_abs": -1, "slope_err_std": -1,
-             "time_s": -1, "peak_mem_gb": -1}
+             "time_s": -1, "pipeline_time_s": -1, "peak_mem_gb": -1}
 
 
 def compute(names: list[str], pred: torch.Tensor, gt: torch.Tensor | None,

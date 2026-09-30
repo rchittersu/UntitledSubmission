@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Collect metrics_*.json summaries into a Markdown table (for handoff reports / the paper).
 
-  summarize.py RES/x1/*/metrics_dpdd.json [--cols psnr,pm_psnr,ssim,lpips,seam_ratio,time_s]
+  summarize.py RES/x1/*/metrics_dpdd.json [path.json=Label ...] [--cols psnr,pm_psnr,ssim,lpips,seam_ratio,time_s]
                [--std] [--latex]
 
 Best value per column in bold (direction from uhdd.metrics.DIRECTION).
@@ -29,7 +29,13 @@ def main():
     ap.add_argument("--digits", type=int, default=3)
     a = ap.parse_args()
 
-    runs = [json.loads(Path(f).read_text()) for f in a.files]
+    runs = []
+    for f in a.files:  # "metrics.json" or "metrics.json=Row label"
+        path, _, label = f.partition("=")
+        r = json.loads(Path(path).read_text())
+        if label:
+            r["label"] = label
+        runs.append(r)
     cols = a.cols.split(",") if a.cols else list(dict.fromkeys(k for r in runs for k in r["metrics"]))
     best = {}
     for c in cols:

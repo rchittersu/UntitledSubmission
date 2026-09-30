@@ -84,6 +84,31 @@ python code/scripts/evaluate.py --pred $R/official/restormer --targets $OFF/targ
 Outputs are saved as 16-bit PNG; the tiny difference from Restormer's float evaluation is
 < 0.001 dB.
 
+## Running combinations: `run_matrix.py`
+
+All comparisons are declared in one experiment file and run with one command:
+
+```bash
+export UHDD_DATA=/data UHDD_RESULTS=/results
+python code/scripts/run_matrix.py code/experiments/dpdd_p1.yaml --dry-run      # print the plan
+python code/scripts/run_matrix.py code/experiments/dpdd_p1.yaml --gpus all     # run (resumable)
+python code/scripts/run_matrix.py code/experiments/dpdd_p1.yaml --only "restormer"  # subset
+```
+
+- A pipeline is a chain of steps (`deblur @ scale` → optional upsampler); `for:` grids expand
+  templates (`{m}`, `{s}`, `{up}`, `{t}`) into all combinations.
+- Step outputs are cached by their full chain, e.g. `steps/x4__restormer_dpdd@whole__swinir_x4@t256o32`,
+  so shared prefixes run once (the x4 Restormer result feeds all three upsamplers).
+- Every step uses the multi-GPU `run_model.py`; every final output the multi-GPU `evaluate.py`,
+  at the pipeline's output scale (border crop scaled accordingly).
+- Finished steps/evaluations are skipped; after changing metrics, change `eval.tag`.
+- Outputs: `results/pipelines/<name>__<tag>.json` (metrics + `pipeline_time_s` summed over steps +
+  peak memory) and `results/tables/<group>.md` — paste these into handoff reports.
+
+`experiments/dpdd_p1.yaml` = P1 plan: resolution-gap table (5 models × x4/x2/x1, 512 tiles),
+G1 native patch-wise (512 / 1024 tiles), G2 x4 whole-image deblur + {bicubic, SwinIR, SwinIR-real},
+and the blurry input as reference: 41 pipelines / 41 unique steps.
+
 ## Pipeline (P1 tasks of plan/evaluation.md)
 
 ```bash
@@ -100,7 +125,7 @@ python code/scripts/prepare_scales.py --inputs $D/inputs --targets $D/x1/targets
     --out $D --factors 2 4
 #   -> $D/x1/{targets,masks}, $D/x2/{inputs,targets,masks}, $D/x4/...  (x1 inputs = $D/inputs)
 
-# 3. resolution-gap table: same model at x4 / x2 / x1, tiled at the training crop size
+# 3. (manual equivalent of run_matrix) resolution-gap table: same model at x4 / x2 / x1
 for s in 4 2 1; do
   IN=$D/x$s/inputs; [ $s = 1 ] && IN=$D/inputs
   python code/scripts/run_model.py --model restormer_dpdd --inputs $IN --out $R/x$s/restormer_t512 \

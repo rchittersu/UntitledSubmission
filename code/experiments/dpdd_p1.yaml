@@ -1,0 +1,53 @@
+# P1 experiments on native-resolution DPDD (plan/evaluation.md, sections 2 and 5).
+# Run: python code/scripts/run_matrix.py code/experiments/dpdd_p1.yaml --gpus all [--dry-run]
+# Data layout produced by prepare_scales.py / register_pairs.py (see code/README.md).
+
+data:
+  inputs:  {1: "${UHDD_DATA}/dpdd_native/inputs", 2: "${UHDD_DATA}/dpdd_native/x2/inputs", 4: "${UHDD_DATA}/dpdd_native/x4/inputs"}
+  targets: {1: "${UHDD_DATA}/dpdd_native/x1/targets", 2: "${UHDD_DATA}/dpdd_native/x2/targets", 4: "${UHDD_DATA}/dpdd_native/x4/targets"}
+  masks:   {1: "${UHDD_DATA}/dpdd_native/x1/masks", 2: "${UHDD_DATA}/dpdd_native/x2/masks", 4: "${UHDD_DATA}/dpdd_native/x4/masks"}
+
+results: "${UHDD_RESULTS}/dpdd_p1"
+
+run:                     # run_model.py defaults, overridable per step
+  tile: 512
+  overlap: 64
+  tile_batch: 8
+  blend: linear
+  precision: fp32
+
+eval:
+  tag: dpdd
+  metrics: psnr,ssim,mae,pm,hb,lpips,dists,drift,seam,stats
+  crop_native: 64        # border crop at native res (divided by the evaluated scale)
+  table_cols: psnr,pm_psnr,ssim,pm_ssim,lpips,dists,hb_nmse_db,lf_drift,seam_ratio,sharp_lr_std,pipeline_time_s,peak_mem_gb
+
+pipelines:
+  # Table 1 -- resolution gap: same model, same tile size, at 1/4, 1/2 and native resolution
+  - group: t1_resolution_gap
+    name: "{m} @x{s} t512"
+    for: {m: [restormer_dpdd, lakdnet_dpdd_l, drbnet_single, ifan, bokehlicious_deblur], s: [4, 2, 1]}
+    steps:
+      - {model: "{m}", scale: "{s}"}
+
+  # G1 -- native patch-wise deblurring (main table rows); t512 shared with t1 via the cache
+  - group: g1_native_patchwise
+    name: "{m} native t{t}"
+    for: {m: [restormer_dpdd, lakdnet_dpdd_l, drbnet_single, ifan, bokehlicious_deblur], t: [512, 1024]}
+    steps:
+      - {model: "{m}", scale: 1, tile: "{t}"}
+
+  # G2 -- deblur at 1/4 resolution (whole image, = standard DPDD protocol) + x4 upsampling
+  - group: g2_lowres_upsample
+    name: "{m} @x4 + {up}"
+    for: {m: [restormer_dpdd, lakdnet_dpdd_l, drbnet_single, ifan, bokehlicious_deblur],
+          up: [bicubic_x4, swinir_x4, swinir_x4_real]}
+    steps:
+      - {model: "{m}", scale: 4, tile: 0}
+      - {model: "{up}", tile: 256, overlap: 32}
+
+  # references
+  - group: references
+    name: "input (blurry)"
+    steps:
+      - {model: identity, scale: 1, tile: 0}

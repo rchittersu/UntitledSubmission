@@ -213,3 +213,46 @@ def test_positional_tiling_matches_whole():
     # whole-image map equals the reference definition on a landscape image: x spans [0, 1]
     pm = pos_map(70, 101, 0, 0, 70, 101, "cpu")
     assert abs(float(pm[0, 0, 0])) < 1e-7 and abs(float(pm[0, 0, -1]) - 1) < 1e-6
+
+
+def test_run_matrix_end_to_end(tmp_path):
+    import json
+    import yaml
+    for d in ("inputs", "x1/targets", "x4/inputs", "x4/targets"):
+        (tmp_path / "data" / d).mkdir(parents=True)
+    rng = np.random.default_rng(0)
+    for n in ("a", "b"):
+        img = rng.integers(0, 65536, (64, 96, 3), dtype=np.uint16)
+        io.write_image(tmp_path / "data" / "inputs" / f"{n}.png", img)
+        io.write_image(tmp_path / "data" / "x1" / "targets" / f"{n}.png", img)
+        small = img[::4, ::4]
+        io.write_image(tmp_path / "data" / "x4" / "inputs" / f"{n}.png", small)
+        io.write_image(tmp_path / "data" / "x4" / "targets" / f"{n}.png", small)
+    D = str(tmp_path / "data")
+    exp = {
+        "data": {"inputs": {1: f"{D}/inputs", 4: f"{D}/x4/inputs"},
+                 "targets": {1: f"{D}/x1/targets", 4: f"{D}/x4/targets"}},
+        "results": str(tmp_path / "res"),
+        "run": {"tile": 32, "overlap": 8, "tile_batch": 2},
+        "eval": {"tag": "t", "metrics": "psnr,ssim,seam", "crop_native": 8},
+        "pipelines": [
+            {"group": "gap", "name": "id @x{s}", "for": {"s": [4, 1]}, "steps": [{"model": "identity", "scale": "{s}"}]},
+            {"group": "up", "name": "id @x4 + {up}", "for": {"up": ["bicubic_x4", "identity"]},
+             "steps": [{"model": "identity", "scale": 4, "tile": 0}, {"model": "{up}", "tile": 0}]},
+        ],
+    }
+    ef = tmp_path / "exp.yaml"
+    ef.write_text(yaml.safe_dump(exp))
+    cmd = [sys.executable, str(ROOT / "scripts" / "run_matrix.py"), str(ef), "--gpus", "cpu", "--workers", "0"]
+    out = subprocess.run(cmd, check=True, capture_output=True, text=True).stdout
+    assert "4 pipelines, 5 unique steps" in out           # x4 identity whole is shared by both "up" rows
+    gap = (tmp_path / "res" / "tables" / "gap.md").read_text()
+    assert "id @x1" in gap and "id @x4" in gap
+    up = (tmp_path / "res" / "tables" / "up.md").read_text()
+    assert "id @x4 + bicubic_x4" in up and "pipeline_time_s" in up
+    p = json.loads((tmp_path / "res" / "pipelines" / "id_@x4_+_bicubic_x4__t.json").read_text())
+    assert len(p["steps"]) == 2 and p["n_images"] == 2
+    # identity @x4 + identity would be evaluated at x4 (no upsampling): scale bookkeeping
+    assert json.loads((tmp_path / "res" / "pipelines" / "id_@x4_+_identity__t.json").read_text())["settings"]["scale"] == 4
+    out2 = subprocess.run(cmd, check=True, capture_output=True, text=True).stdout   # resumable
+    assert "run_model.py" not in out2 and "cached" in out2
