@@ -51,8 +51,10 @@ Producing it in the secure env:
 git pull                                   # start from the latest outside version
 git checkout -b handoff/<topic>
 # ... write handoff/from_secure/<date>_<topic>.md, edit Template/..., commit (one or more commits) ...
-git format-patch --stdout --base=origin/main origin/main..HEAD > <date>_<topic>.patch
+handoff/make_patch.sh                      # -> ../handoff_<date>.patch
 ```
+
+`make_patch.sh` runs `git format-patch --stdout --base=origin/main origin/main..HEAD` and refuses to write the patch if it touches paths outside `Template/`, `handoff/from_secure/`, `CLAUDE.md`, `.gitignore`, contains binary files, or has no report in `handoff/from_secure/`. It warns about uncommitted changes and if `origin/main` has moved ahead (then `git rebase origin/main` first). Override the base with `BASE=<ref>`. The user copies the printed file out verbatim.
 
 Applying it here: `git am -3 <file>.patch` (fallback: `git apply --3way`, or manual edit if the base diverged).
 
