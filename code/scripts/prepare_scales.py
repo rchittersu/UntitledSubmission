@@ -4,12 +4,14 @@
   prepare_scales.py --inputs IN --targets TG --out OUT --factors 2 4 [--masks M] [--filter area]
   -> OUT/x2/{inputs,targets,masks}/..., OUT/x4/...
 
-Integer factors with `area` = exact s x s box average (cv2.INTER_AREA), `bicubic_aa` = torch
-antialiased bicubic. Masks are downscaled conservatively (a low-res pixel is valid only if all
+Integer factors with `area` = exact s x s box average (cv2.INTER_AREA, default), cv2
+`linear`/`cubic`/`lanczos`/`nearest` (no antialiasing), `bicubic_aa` = torch antialiased bicubic
+(close to MATLAB imresize). Masks are downscaled conservatively (a low-res pixel is valid only if all
 its native pixels are). Native bit depth is preserved.
 
 --reference DIR compares our 1/4 inputs against an official low-res release (e.g. DPDD
-1680x1120) for every filter and prints PSNR, to pick the filter that reproduces it.
+1680x1120) for every filter and prints PSNR, to identify how the release was made.
+Portrait images in the reference are matched after rotating ours if needed.
 """
 from __future__ import annotations
 
@@ -28,12 +30,19 @@ import numpy as np  # noqa: E402
 from uhdd.io import list_images, pair_folders, read_image, write_image  # noqa: E402
 
 
+# cv2 "linear" (INTER_LINEAR, no antialiasing) is the cv2.resize default used by the official
+# DPDNet code (DPDNet/data.py, test mode); the paper does not state how 1680x1120 was made.
+CV2_FILTERS = {"area": cv2.INTER_AREA, "linear": cv2.INTER_LINEAR, "cubic": cv2.INTER_CUBIC,
+               "lanczos": cv2.INTER_LANCZOS4, "nearest": cv2.INTER_NEAREST}
+FILTERS = [*CV2_FILTERS, "bicubic_aa"]
+
+
 def downscale(img: np.ndarray, f: int, filt: str) -> np.ndarray:
     H, W = img.shape[:2]
     if H % f or W % f:
         img = img[: H // f * f, : W // f * f]  # crop remainder so the grid stays aligned
-    if filt == "area":
-        return cv2.resize(img, (img.shape[1] // f, img.shape[0] // f), interpolation=cv2.INTER_AREA)
+    if filt in CV2_FILTERS:
+        return cv2.resize(img, (img.shape[1] // f, img.shape[0] // f), interpolation=CV2_FILTERS[filt])
     if filt == "bicubic_aa":
         import torch
         import torch.nn.functional as F
@@ -79,10 +88,14 @@ def compare_reference(pairs, ref_dir: str, f: int, n: int) -> None:
     byname = {p.name: p for p in pairs}
     norm = lambda x: x.astype(np.float64) / (65535.0 if x.dtype == np.uint16 else 255.0)
     imgs = {k: (read_image(byname[k].input), norm(read_image(ref[k]))) for k in names}
-    for filt in ("area", "bicubic_aa"):
+    print("PSNR of our downscaled inputs vs the reference (>~60 dB = same pipeline up to rounding;\n"
+          "all low (<~45 dB) = produced differently, e.g. resized during raw export):")
+    for filt in FILTERS:
         ps = []
         for k, (native, b) in imgs.items():
             a = norm(downscale(native, f, filt))
+            if a.shape != b.shape and a.shape[:2] == b.shape[1::-1]:
+                a = np.rot90(a)  # orientation differs between releases
             if a.shape != b.shape:
                 sys.exit(f"shape mismatch {k}: ours {a.shape} vs reference {b.shape}")
             ps.append(10 * np.log10(1 / max(np.mean((a - b) ** 2), 1e-20)))
@@ -97,7 +110,7 @@ def main():
     ap.add_argument("--masks")
     ap.add_argument("--out", required=True)
     ap.add_argument("--factors", type=int, nargs="+", default=[2, 4])
-    ap.add_argument("--filter", default="area", choices=["area", "bicubic_aa"])
+    ap.add_argument("--filter", default="area", choices=FILTERS)
     ap.add_argument("--procs", type=int, default=os.cpu_count())
     ap.add_argument("--overwrite", action="store_true", help="rewrite existing outputs")
     ap.add_argument("--reference", help="official low-res inputs to compare filters against")

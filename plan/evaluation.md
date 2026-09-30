@@ -7,7 +7,8 @@ Legend: **[D]** decision needed from user, **[V]** fact to verify, **[P1..P4]** 
 
 ## 0. Key facts that shape the protocol
 
-- **DPDD full resolution is released**: 500 scenes, Canon EOS 5D Mark IV, 6720×4480 (30 MP), 16-bit PNG + raw CR2, split 70/15/15 → test = 76 scenes. The standard benchmark resolution 1680×1120 is **exactly 1/4 of native** → Stage 1 at 4× down = the standard DPDD protocol, so every published pretrained model is a valid anchor out of the box. [V: blurry/sharp apertures f/4 vs f/22]
+- **DPDD full resolution is released**: 500 scenes, Canon EOS 5D Mark IV, 6720×4480 (30 MP), 16-bit PNG + raw CR2, split 70/15/15 → test = 76 scenes. The standard benchmark resolution 1680×1120 is **exactly 1/4 of native** → Stage 1 at 4× down = the standard DPDD protocol, so every published pretrained model is a valid anchor out of the box. (f/4 blurry, f/22 sharp — verified in the paper)
+- **How DPDD 1680×1120 was made is not documented.** The paper only says images are downscaled to 1680×1120 before training. The official DPDNet code (`DPDNet/data.py`, test mode) applies `cv2.resize(img, (1680, 1120))` = cv2 default **INTER_LINEAR, no antialiasing** (aliases fine detail; if the release was made this way the standard benchmark itself contains aliasing). Verified facts from the paper: blurry f/4, sharp f/22, tripod + remote trigger, same focus distance/focal length, 16-bit sRGB PNG processed from CR2. Metrics in their code: PSNR/SSIM on float [0,1] 16-bit, `compare_ssim(..., multichannel=True)` → our `fidelity.ssim` matches it. Resolve empirically: `prepare_scales.py --reference` compares all filters against the official release (>~60 dB = identical pipeline). If none matches (e.g. resized during raw export in Canon DPP), use our own `area` downscaling for all resolution-gap experiments (grid-consistent with native) and the official files only for reproducing published numbers.
 - **Ground truth is diffraction-limited at native res.** Airy disk diameter ≈ 2.44·λ·N = 2.44·0.55µm·22 ≈ 30µm; 5D IV pixel pitch ≈ 5.36µm → **~5–6 px blur in the "sharp" GT** at native res (≈1.4 px at 1/4 res, hence invisible in the standard protocol). A sharper-than-GT output is penalized by PSNR/SSIM. Must be handled explicitly (§3.1).
 - **Misalignment** between the two captures scales ×4 at native res (a ~1 px error at 1680×1120 becomes ~4 px). Needs registration (§3.2).
 - **Other real paired sets are not native**: RealDOF (IFAN, 50 scenes, ~2320×1536, beam-splitter, test-only) and RealDefocus/RealBokeh (released at 3 MP; captured at 6000×4000 but full-res not public). Usable only as mid-resolution / generalization checks.
@@ -87,7 +88,7 @@ Proposal: **(a) primary for PSNR/SSIM on T1, raw (unmatched) numbers in supp, (c
 
 ## 6. First tasks for the secure env (in order)
 
-1. **[P1] Data**: DPDD test at native res; build 1×, 1/2, 1/4 versions; verify 1/4 matches official 1680×1120 release (resampling filter!). [V]
+1. **[P1] Data**: DPDD test at native res; run `prepare_scales.py --reference <official 1680x1120>` and report the PSNR per filter; build 1×, 1/2, 1/4 versions.
 2. **[P1] Registration** (§3.2) + frozen masks; reproduce published 1680×1120 numbers for 2–3 methods.
 3. **[P1] Metric suite**: fidelity (+PSF-matched, high-band), NR, consistency 1–4, as one script with per-image CSV output.
 4. **[P1] Resolution-gap analysis** (Table 1) with G1 methods.
