@@ -29,29 +29,43 @@ Research project: **ultra-high-resolution (native sensor resolution, ~30 MP+) si
 
 This project is worked on by **two Claude instances**:
 
-| | **Outside env** (this checkout) | **Secure env** |
+| | **Outside env** (this checkout, origin of the repo) | **Secure env** |
 |---|---|---|
-| Has | Paper sources, notes, internet access | Code, data, GPUs, experiments, its own clone of this repo |
-| Can send out | Anything | **Only text: patches (unified diffs) and Markdown** |
+| Has | Paper sources, notes, internet access | Code, data, GPUs, experiments, a clone of this repo |
+| Inbound | — | Can pull the latest version of this repo at any time |
+| Outbound | Anything | **Exactly one text file per handoff: a git patch**, copy-pasted out by the user |
 
 The secure env currently has only bits and pieces (some eval setups); implementation is effectively starting from scratch.
 
-Nothing binary (images, PDFs, checkpoints, data, logs as files) can leave the secure env. Everything must be communicated as text that a human copies out. Therefore the secure-env agent must write **self-contained, copy-pasteable Markdown handoff reports** following the protocol below.
+### Outside → secure
 
-### Handoff directories
+No special format needed: commit to this repo and the user pulls it into the secure env. Task briefs go in `handoff/to_secure/YYYY-MM-DD_<topic>.md` (goal, the paper claim it concerns — quoted, exact experiments/ablations requested, expected tables/metrics, priority).
 
-- `handoff/from_secure/` — reports written in the secure env, carried out and dropped here.
-- `handoff/to_secure/` — task briefs / questions written here, carried into the secure env.
+### Secure → outside: one patch file
 
-File name: `YYYY-MM-DD_<short-topic>.md` (e.g. `2026-10-04_stage1-affinity-ablation.md`). One report per logical unit of work. Transfer is plain copy-paste, so length is not a hard constraint, but keep reports focused.
+Everything the secure env wants to communicate travels as **one patch file against this repo**. The narrative report is not sent separately — it is a **new Markdown file inside the patch**, at `handoff/from_secure/YYYY-MM-DD_<topic>.md`. Paper edits (LaTeX, bib, notes, figures-as-code) are ordinary changes in the same patch.
 
-### Git base
+Producing it in the secure env:
 
-Both sides use git so patches apply cleanly. The secure env clones this repo; every report must state the **commit hash of this repo it was diffed against** (in `Context`). Paper patches must be produced with `git diff` against that commit so they can be applied here with `git apply`. When the outside side commits applied patches, the next brief states the new base commit.
+```bash
+git pull                                   # start from the latest outside version
+git checkout -b handoff/<topic>
+# ... write handoff/from_secure/<date>_<topic>.md, edit Template/..., commit (one or more commits) ...
+git format-patch --stdout --base=origin/main origin/main..HEAD > <date>_<topic>.patch
+```
 
-### Handoff report format (secure → outside)
+Applying it here: `git am -3 <file>.patch` (fallback: `git apply --3way`, or manual edit if the base diverged).
 
-The outside agent has **no access** to the secure code, data, or run logs. Write as if the reader knows the paper (this repo) but nothing else. Use this template:
+Patch rules:
+- **Only paths of this repo** (`handoff/`, `Template/`, `CLAUDE.md`, …). Never include the secure codebase, data, logs, or configs. If secure code lives inside this clone, keep it out of the handoff commits.
+- **Text only**: no binary files (check `git diff --stat origin/main` shows no `Bin`). Figures travel as plot data (CSV/table in the report or a `.dat`/pgfplots/TikZ file), not images.
+- **No sensitive content**: no credentials, internal hostnames/paths, proprietary dataset names or internal identifiers unless the user explicitly says they are cleared to leave. Describe them generically (e.g. "internal 50 MP smartphone test set, N=120 images").
+- Keep paper diffs minimal (no whitespace-only reflow of paragraphs) so they apply cleanly.
+- Do not edit `handoff/LOG.md` (outside maintains it) to avoid conflicts.
+
+### Report format (the `.md` inside the patch)
+
+The outside agent has **no access** to the secure code, data, or run logs. Write as if the reader knows the paper (this repo) but nothing else:
 
 ````markdown
 # <Topic> — <YYYY-MM-DD>
@@ -60,66 +74,39 @@ The outside agent has **no access** to the secure code, data, or run logs. Write
 3–6 bullets: what was done, headline result, what changes in the paper/plan.
 
 ## Context
-Which task brief this answers (link `handoff/to_secure/...` if any), and the base state
-(repo version or last handoff this builds on).
+Which brief this answers (`handoff/to_secure/...`, if any) and the base commit of this repo.
 
 ## What was done
 Methods, configs, and settings that matter for writing the paper
 (architecture, backbone, resolution, patch size, steps, datasets/splits, #params, GPU, runtime).
-Give exact values, not "default".
+Exact values, not "default".
 
 ## Results
-Numbers as Markdown tables with units, dataset/split, resolution, and number of images.
-Mark best per column in **bold**. State seeds / variance if run more than once.
-For anything visual (figures, qualitative results): describe in words what is seen, and
-where useful provide the plot data as a small table or CSV block so a figure can be
-regenerated here (pgfplots/matplotlib). Never reference a figure by file path only.
+Markdown tables with units, dataset/split, resolution, #images, metric direction (↑/↓).
+Best per column in **bold**. Seeds / variance if run more than once.
+Anything visual: describe in words what is seen, and give the plot data as a table/CSV block
+so the figure can be regenerated outside. Never reference a figure by file path only.
 
 ## Decisions & findings
-What worked, what did not, surprises, and anything that contradicts claims in `sec/1_intro.tex`
-(quote the sentence and say what should change).
+What worked, what did not, surprises, and anything that contradicts claims in the paper
+(quote the sentence and say what should change). Mark **verified** results vs. **hypotheses**.
 
-## Paper patches
-Changes to files in THIS repo (LaTeX, bib, notes) as unified diffs against the current
-version, one fenced ```diff block per file, with paths relative to repo root, e.g.:
-
-```diff
---- a/Template/sec/1_intro.tex
-+++ b/Template/sec/1_intro.tex
-@@ -115,3 +115,3 @@
-...
-```
-
-New files: give the full content in a fenced block headed by its path.
-Keep diffs minimal (no whitespace-only reflow). If a diff is large or fragile, give the
-replacement text of the whole paragraph/section instead, with the exact first and last line
-it replaces.
+## Paper changes in this patch
+One line per changed file: what changed and why.
 
 ## Code state (for the record only)
-Short description of relevant code changes in the secure repo (module names, key functions,
-config names) — enough to refer to them later. Code diffs are optional; include only small,
-paper-relevant snippets (e.g. a loss or metric definition) so they can be described accurately.
+Short description of relevant secure-side code (module/function/config names) so it can be
+referred to later. Small paper-relevant snippets (e.g. a loss or metric definition) may be
+pasted inline; no full code.
 
 ## Open questions / needs from outside
 Literature checks, writing help, citations to verify, decisions needed.
 
 ## Next steps
-What the secure env plans to do next.
 ````
 
-Rules for the secure-env agent:
-- **Text only.** No attachments, no base64 blobs of images/binaries.
-- **No sensitive content**: no credentials, internal hostnames/paths, proprietary dataset names or internal identifiers unless the user explicitly says they are cleared to leave. Describe them generically (e.g. "internal 50 MP smartphone test set, N=120 images").
-- Every number must say what it is measured on (dataset, split, resolution, metric direction ↑/↓).
-- Distinguish clearly between **verified** results and **expectations/hypotheses**.
-- Prefer many small reports over one huge report.
+### Outside-agent duties when a patch arrives
 
-### Task brief format (outside → secure)
-
-Files in `handoff/to_secure/` contain: goal, relevant paper section/claim (quote it), exact experiments/ablations requested, the metrics and tables expected back, and priority. The secure agent answers with a report that links the brief.
-
-### Outside-agent duties when a report arrives
-
-1. Read the whole report; apply the `Paper patches` (`git apply --3way`, or manual edit if the base diverged) and check LaTeX still builds.
-2. Update claims/`\todo{}`s in the paper that the results resolve; flag claims the results contradict.
-3. Keep `handoff/LOG.md` updated: one line per report/brief (date, file, one-line summary, status).
+1. Save it, apply with `git am -3`, resolve conflicts, check LaTeX still builds.
+2. Read the report; update claims/`\todo{}`s the results resolve; flag claims the results contradict.
+3. Add a line to `handoff/LOG.md` (date, direction, file, one-line summary, status) and commit, so the next pull brings the secure env up to date.
