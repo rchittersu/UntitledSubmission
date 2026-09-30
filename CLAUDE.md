@@ -39,7 +39,7 @@ The secure env currently has only bits and pieces (some eval setups); implementa
 
 ### Outside → secure
 
-No special format needed: commit to this repo and the user pulls it into the secure env. Task briefs go in `handoff/to_secure/YYYY-MM-DD_<topic>.md` (goal, the paper claim it concerns — quoted, exact experiments/ablations requested, expected tables/metrics, priority).
+Nothing to do: the user pulls this repo into the secure env whenever needed, so the repo itself (paper, notes, `CLAUDE.md`, `handoff/LOG.md`) is the channel. Requests to the secure agent are given by the user directly.
 
 ### Secure → outside: one patch file
 
@@ -74,7 +74,7 @@ The outside agent has **no access** to the secure code, data, or run logs. Write
 3–6 bullets: what was done, headline result, what changes in the paper/plan.
 
 ## Context
-Which brief this answers (`handoff/to_secure/...`, if any) and the base commit of this repo.
+What task this answers and the base commit of this repo.
 
 ## What was done
 Methods, configs, and settings that matter for writing the paper
