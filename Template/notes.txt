@@ -1,0 +1,44 @@
+# Types of inconsistancies : 
+
+1. Low frequency : color, brightness, contrast, tone shifts. (Can be easily eliminated by global guidance)
+
+2. High frequency : a edge around line where two tiles meet. (I don't think we should be concerned about these because of overlap we do, will need to worry only in case we eliminate overlapping completely)
+
+3. Semantic level : different plausible hallucinations of same texture. 
+
+4. Statistical : Different sharpness, noise level, grain or spectral slope across tiles without hard seam. 
+
+I feel like referring few things before we move further should be a good idea. 
+
+https://syncdiffusion.github.io/#huggingface_demo (basically they add perceptual quality based loss for coherence)
+Paper has (Coherence) Intra-LPIPS [53] and Intra-Style-L [14]: To assess the coherence of the generated panoramas, we introduce two metrics. Intra-LPIPS and Intra-Style-L, which are computed as the averages of LPIPS [53] and Style Loss [14], respectively, between a pair of non-overlapping window images from the same panorama. Specifically, we divide the panorama into 6 windows, each with dimensions of 512 × 512 and then compute the average of LPIPS and Style Loss across the 15 combinations of these cropped views. To provide a reference for the scale of these values, we generate 500 single-window-size images using the same Stable Diffusion model and compute the LPIPS and Style Loss for randomly selected 1,000 pairs of these reference images.
+
+They also refer how joint diffusion works. 
+
+In my words, During reverse diffusion process, at each step, we try to predict window state from previous step (for every window we do this separately) and then average out the over all these predictions which act as window state for next step. Mask is basically to tell for each pixel like what windows contribute to it. 
+
+
+https://yingqinghe.github.io/scalecrafter/
+
+these gyus don't propose any metric but show with contemporary works that problem is real and explain the reason as well. (Small receptive field of convolution kernals and increasing no of attention tokens is not solving the problem). So, they proposed dilated, dispersed kernal and do some pixel level caliberations. Also they use noise damped cfg to compensate for inability to generate fine structure due to increased receptive field. 
+For tiled inference they use, statistics from VAE GroupNorm. 
+
+Okay additional todos : Read BokehMe (At the end), cover bokelicious 2025 challenge. 
+
+
+BokehMe : 10 blender rendered 3d scenes and various bokehs. 
+
+Patchfusion : metric (since they used depth related metrics like if we use IQA as guiding metrics) but methods related to depth estimation. (TODO : Check if processing whole image (maybe use a smaller image) in single and tiles result in different IQA results). Also, consistency error : MSE on overlaps (very crude not really capturing global picture so not much relevant)
+
+
+# Additional inputs : 
+
+For SR if we are going forward, compare single image across models. 
+In case of bokeh, sub-sampling and then guided upsampling is something we need to sneak out on or make it out of scope or try it.
+For recent bokeh related works, search defocus tasks.
+DoF should be accounted for metrics in SR based probelm statement. Also, for both directions, see what resolution training, evaluation and testing is happening. Mostly, there will be a gap as academic papers tend to compare just small single tile solution. 
+
+There is this barcelona university paper using reasoning and training a model for metric calculation. (look in that direction as well)
+Also SR evaluations run with degraded images on VOSR, CASR. 
+Unbokeh is apparently a relatively easy problem for formulation as entire thing is generation oriented and structures and all since we are generating, we can demand them to be uniform, in case of SR we have to check with GT for that. 
+Okay, let's set out the direction of work from here. 

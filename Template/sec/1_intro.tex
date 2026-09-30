@@ -1,0 +1,688 @@
+% =====================================================================
+%  Introduction + Related Work
+%  Ultra-High-Resolution Defocus Deblurring via Blur-Guided
+%  Generative Upsampling
+% ---------------------------------------------------------------------
+%  Macros (move to preamble if preferred)
+% =====================================================================
+\providecommand{\method}{\textsc{Method}}          % TODO: final name
+\providecommand{\todo}[1]{{\color{red}[TODO: #1]}}
+\providecommand{\etal}{\textit{et al.}}
+\providecommand{\ie}{\textit{i.e.}}
+\providecommand{\eg}{\textit{e.g.}}
+\providecommand{\vs}{\textit{vs.}}
+% Requires: \usepackage{xcolor}
+
+% =====================================================================
+\section{Introduction}
+\label{sec:intro}
+% =====================================================================
+
+Defocus blur is an unavoidable consequence of finite depth of field.
+Whenever a scene spans a range of depths larger than the depth of field of
+the lens, regions away from the focal plane are imaged as a spatially varying
+superposition of circles of confusion (CoC) whose size grows with the
+distance from the focal plane and with the aperture diameter.
+Wide apertures are routinely used to gather light in low-light conditions,
+to enable fast shutter speeds, or simply because the photographer mis-focused,
+and the result is a photograph in which only a thin slab of the scene is sharp.
+Single-image defocus deblurring aims to recover an all-in-focus image from
+such an observation, and has progressed rapidly with learning-based
+methods~\cite{abuolaim2020dpdd,son2021kpac,lee2021ifan,ruan2022drbnet,
+quan2023nrknet,zamir2022restormer,li2023jdrl}.
+
+At the same time, the resolution of the images people actually capture has
+grown far beyond the resolution at which these methods are developed and
+evaluated. Interchangeable-lens cameras routinely record $24$--$60$\,MP, and
+smartphone main sensors reach $50$--$200$\,MP.
+In contrast, the de facto protocol in defocus deblurring trains networks on
+$512\times512$ crops and evaluates on images downsampled to roughly
+$2$\,MP; the standard DPDD benchmark~\cite{abuolaim2020dpdd}, for instance,
+is distributed and evaluated at $1680\times1120$, although it was captured
+at the full $6720\times4480$ resolution of a Canon EOS~5D Mark~IV.
+% VERIFY: DPDD capture resolution / camera / released resolution.
+This mismatch is not a cosmetic one. Downsampling by a factor $s$ shrinks
+every CoC by the same factor, so a model evaluated at low resolution solves
+a substantially easier problem: blur kernels are small relative to its
+receptive field and to the training crop, and the high-frequency content
+that is hardest to restore has already been discarded.
+The question of how to produce an all-in-focus image \emph{at the native
+resolution of the sensor} has, to our knowledge, not been addressed.
+
+\begin{figure}[t]
+  \centering
+  % \includegraphics[width=\linewidth]{figures/teaser.pdf}
+  \fbox{\parbox[c][4cm][c]{0.95\linewidth}{\centering Teaser placeholder}}
+  \caption{\textbf{Defocus deblurring at native resolution.}
+  On a $30$\,MP DPDD image, applying a state-of-the-art deblurring network
+  patch-wise at native resolution leaves large-CoC regions unresolved and
+  produces visible seams (a); deblurring at low resolution and upsampling
+  with a super-resolution model yields inconsistent, hallucinated textures
+  across the image (b). \method{} upsamples the low-resolution deblurred
+  estimate under the guidance of the native-resolution blurry input,
+  transferring real detail where it survives and synthesizing it where it
+  does not, with related regions across the image restored consistently
+  through low-resolution-routed cross-patch attention (c).
+  \todo{final figure and panel labels}}
+  \label{fig:teaser}
+\end{figure}
+
+Two straightforward strategies exist for applying current methods to
+ultra-high-resolution (UHD) inputs, and both fail
+(Fig.~\ref{fig:teaser}).
+The first is to run the network directly at native resolution, necessarily
+in overlapping patches because of memory constraints.
+This suffers from two compounding problems.
+First, the CoC of strongly defocused regions grows proportionally with
+resolution and can exceed the patch size itself, so each patch lacks the
+spatial context required to invert its blur; networks trained at low
+resolution have furthermore never observed blur of this extent and degrade
+sharply out of distribution.
+Second, independent per-patch predictions disagree near patch boundaries,
+producing seams, tone shifts, and texture discontinuities that blending in
+overlapping regions only partially hides~\cite{chu2022tlc}.
+The second strategy is to downsample the input so that the blur falls back
+into the training distribution, deblur at low resolution, and upsample the
+result, either with an interpolation filter or with a (generative)
+super-resolution model~\cite{liang2021swinir,wang2021realesrgan,
+wang2024stablesr,yu2024supir,wu2024osediff}.
+Interpolation produces a soft image that no longer has native-resolution
+detail. Super-resolution models reintroduce high frequencies, but they do so
+by hallucination: they are blind to the native-resolution observation, and,
+since they are themselves applied in tiles at these resolutions, they
+synthesize textures that are inconsistent across the image and often
+unrelated to the actual scene.
+
+Our key observation is that the native-resolution blurry input is far from
+uninformative, and that the difficulty of defocus deblurring is naturally
+split across scales.
+Because defocus blur is spatially varying, the native-resolution observation
+contains, at every pixel, a different amount of recoverable information:
+in-focus regions retain their full detail; mildly defocused regions still
+carry frequencies above the Nyquist limit of the downsampled image; and only
+strongly defocused regions have lost high-frequency content altogether
+and require genuine synthesis.
+Conversely, the component of the problem that is hard at native
+resolution---inverting blur whose extent exceeds any tractable patch---is
+exactly the component that is easy at low resolution, where the whole image
+fits in a single forward pass and existing methods already perform well.
+This suggests decoupling the problem: let a low-resolution deblurring
+method establish the globally consistent structure of the all-in-focus
+image, and let a native-resolution model add high-frequency detail, copying
+it from the observation wherever it survives and generating it only where
+it does not.
+
+Building on this observation, we introduce \method{}, a \emph{blur-guided
+generative upsampler} for UHD defocus deblurring.
+\method{} consists of two stages connected by a compact interface.
+\emph{Stage~1} operates at $4\times$ lower resolution, where the entire
+image is processed jointly, and provides three signals:
+(i)~a low-resolution all-in-focus \emph{anchor};
+(ii)~a \emph{deblur-level map} that jointly encodes, per region, how much
+restoration was required and how reliable the resulting anchor is; this
+identifies where the native-resolution observation has lost detail and
+generative synthesis will be needed, and where the anchor should be
+trusted; and
+(iii)~a whole-image \emph{affinity map} derived from self-attention,
+indicating which regions of the image depict related content---nearby or
+distant repetitions of the same material, surface, or structure.
+When Stage~1 is our own transformer-based deblurring network, (ii) and
+(iii) are read out of the model implicitly, from its internal activations
+and attention maps, at negligible extra cost.
+\emph{Stage~2} is a native-resolution generative upsampler that operates
+patch-wise and consumes the three signals together with the
+native-resolution defocused image.
+The affinity map routes \emph{cross-patch attention}: each patch attends
+not only to its spatial neighbors but to the patches Stage~1 identifies as
+related, and overlapping predictions are fused in feature space, so that
+related content is restored consistently across the entire image even
+though inference runs patch-wise with bounded memory.
+The deblur-level map drives a \emph{blur-aware copy/generate} mechanism
+that transfers observed high-frequency detail where it survives and
+synthesizes it from the generative prior only where it does not. This
+grounds the output in real image content wherever possible, which is
+precisely what distinguishes our setting from super-resolution.
+The upsampler is trained as a multi-step conditional diffusion model and
+then distilled into a one-step generator, which makes inference on tens of
+megapixels practical and which, as we discuss in Sec.~\ref{sec:related},
+requires cross-patch consistency to be established within a single forward
+pass.
+
+A central property of this design is that Stage~2 depends on Stage~1 only
+through the interface, not through its internals. This makes \method{} a
+plug-in module that lifts \emph{any} existing low-resolution deblurring
+method to native resolution without retraining it. Off-the-shelf methods
+provide only the anchor, and we supply the remaining two signals with
+method-agnostic surrogates.
+The deblur-level map is approximated by a training-free
+\emph{re-blur agreement} surrogate: we re-blur the anchor with a sweep of
+defocus kernels and, per region, find the kernel that best reproduces the
+downsampled input. The size of that kernel estimates how much deblurring
+was performed, and the residual error at that kernel measures how
+consistent, and hence how reliable, the anchor is with the observation.
+Combined with the local sharpness of the input, which exposes regions the
+deblurring method left unrestored, these measurements are mapped to the
+format of the native deblur-level map by a tiny calibration head that is
+trained once, on anchors from a pool of methods, and itself depends only on
+black-box quantities.
+As a physics-only alternative, we also derive the map from monocular
+depth~\cite{yang2024depthanything,ke2024marigold}, since the CoC grows with
+the distance to the focal plane, which we locate from the sharpest regions
+of the input.
+Surrogates are necessarily cruder than the learned map; we quantify this
+gap explicitly and show that \method{} remains effective across methods
+nonetheless.
+The affinity map is approximated by cross-attention between features of a
+frozen vision foundation model~\cite{oquab2024dinov2,kirillov2023sam},
+whose representations are known to encode reliable semantic and texture
+correspondences~\cite{amir2021deepvit,tang2023dift}.
+To make Stage~2 robust to which variant of each signal it receives, we
+randomly interchange native and surrogate signals during training.
+For the same reason, the upsampler must not overfit to the artifact
+signature of any particular deblurrer. We therefore train it on a mixture
+of anchors: outputs of a pool of existing deblurring methods, and
+\emph{simulated} anchors obtained by degrading the downsampled ground truth
+with the error modes typical of low-resolution deblurring---residual
+defocus correlated with the defocus map, ringing, over-sharpening, and tone
+shifts.
+Finally, since real aperture-bracketed pairs at native resolution cover
+only a few hundred scenes, we complement them with defocused images
+synthesized from sharp high-resolution photographs using estimated depth
+and a physically based CoC rendering model, and fine-tune on real pairs to
+close the synthetic-to-real gap.
+
+Evaluating at native resolution raises its own difficulties, which we
+address with a dedicated protocol on the full-resolution DPDD
+data~\cite{abuolaim2020dpdd}.
+The all-in-focus ground truth is captured with a small aperture and is
+therefore diffraction-limited at native resolution, and the blurry and
+sharp captures, taken in succession, exhibit residual misalignment that is
+amplified by the resolution increase~\cite{li2023jdrl}.
+We therefore register image pairs before evaluation, complement
+full-reference fidelity metrics with perceptual and no-reference measures,
+and introduce metrics that directly quantify discontinuities along patch
+boundaries and texture consistency across patches, which whole-image PSNR
+largely fails to capture.
+\todo{Add additional native-resolution test set(s) once finalized,
+\eg, high-resolution smartphone captures.}
+
+In summary, our contributions are:
+\begin{itemize}
+  \item We identify and analyze the gap between the resolution at which
+        defocus deblurring is studied and the resolution at which images are
+        captured, showing that both native-resolution patch-wise inference
+        and low-resolution deblurring followed by super-resolution fail, for
+        complementary reasons rooted in the scaling of the circle of
+        confusion with resolution.
+  \item We propose \method{}, a two-stage framework whose low-resolution
+        stage provides an all-in-focus anchor, a deblur-level map, and a
+        whole-image affinity map, and whose native-resolution stage is a
+        blur-guided generative upsampler distilled to a single step. The
+        affinity map routes cross-patch attention to related content
+        anywhere in the image, and the deblur-level map drives a blur-aware
+        copy/generate mechanism that transfers real detail where it survives
+        and synthesizes it where it does not.
+  \item We make the upsampler agnostic to the low-resolution method through
+        method-agnostic surrogates for the interface signals---a physically
+        grounded re-blur agreement measure that jointly estimates deblur
+        level and anchor reliability, and foundation-feature affinities---
+        together with training on a mixture of real and simulated anchors.
+        \method{} consistently improves \todo{N} existing methods when
+        lifting them to $30$\,MP, without retraining them, including methods
+        held out from training entirely.
+  \item We establish a native-resolution evaluation protocol for defocus
+        deblurring on DPDD, including pair registration and patch-seam and
+        cross-patch consistency metrics. \method{} outperforms native
+        patch-wise inference and deblur-then-super-resolve pipelines by
+        \todo{X}\,dB PSNR and \todo{Y} LPIPS while running in \todo{Z}\,s
+        per $30$\,MP image.
+\end{itemize}
+
+
+% =====================================================================
+\section{Related Work}
+\label{sec:related}
+% =====================================================================
+
+\paragraph{Defocus deblurring.}
+Classical approaches treat defocus deblurring as a two-step problem: a
+spatially varying defocus map is first estimated, from edge
+cues~\cite{zhuo2011defocusmap,karaali2018edgedefocus} or learned
+predictors~\cite{lee2019dmenet}, and the image is then restored by
+non-blind deconvolution~\cite{krishnan2009hyperlaplacian}.
+Errors in the defocus map and the limited expressiveness of parametric
+kernels make these pipelines fragile on real photographs.
+Abuolaim and Brown~\cite{abuolaim2020dpdd} introduced DPDD, the first
+dataset of real defocused/all-in-focus pairs captured with a large and a
+small aperture, together with an end-to-end network, DPDNet, that exploits
+dual-pixel (DP) views; later work further leveraged DP
+data~\cite{abuolaim2021rdpd,pan2021dddnet,xin2021dpdefocus}.
+In the more widely applicable single-image setting, KPAC~\cite{son2021kpac}
+designs kernel-sharing parallel atrous convolutions tailored to the shape
+of defocus blur, IFAN~\cite{lee2021ifan} predicts spatially varying inverse
+kernels applied in feature space, DRBNet~\cite{ruan2022drbnet} trains on
+light-field-generated and real defocused images with a dynamic residual
+design, GKMNet and NRKNet~\cite{quan2021gkmnet,quan2023nrknet} model defocus
+with Gaussian kernel mixtures and recursive kernels, and
+JDRL~\cite{li2023jdrl} addresses the misalignment inherent to
+aperture-bracketed training pairs.
+General-purpose restoration backbones such as
+Uformer~\cite{wang2022uformer}, Restormer~\cite{zamir2022restormer}, and
+NAFNet~\cite{chen2022nafnet}, as well as large-kernel designs such as
+LaKDNet~\cite{ruan2023lakdnet}, set strong results on DPDD.
+All of these methods are trained on small crops and evaluated at
+$\approx2$\,MP, and are therefore implicitly calibrated to the CoC
+distribution at that resolution. Our own Stage~1 is a network of this
+kind, whose novelty lies not in its low-resolution accuracy but in exposing
+a deblur-level map and whole-image affinities for the native-resolution
+stage; all other methods can serve as interchangeable anchors through
+surrogate signals. Our focus is the step these methods leave open:
+producing the native-resolution result.
+
+\paragraph{Training data and defocus synthesis.}
+Real training pairs for defocus deblurring are obtained by aperture
+bracketing~\cite{abuolaim2020dpdd,lee2021ifan}, which limits datasets to a
+few hundred static scenes and introduces misalignment between
+captures~\cite{li2023jdrl}. Synthetic alternatives render defocus from
+all-in-focus images and depth, using light fields~\cite{ruan2022drbnet},
+layered or scattering-based CoC rendering~\cite{peng2022bokehme,
+sheng2024dr}, or, most recently, compound-lens models that reproduce
+realistic aberrations and bokeh~\cite{compoundlens2026}.
+Synthetic data scale easily to high resolution but leave a domain gap to
+real optics. We use synthesis to extend scene diversity at native
+resolution and fine-tune on real pairs. Orthogonally, we simulate not only
+the defocused input but also the \emph{low-resolution anchor}, so that the
+upsampler learns to handle the error modes of arbitrary deblurring methods
+rather than those of a fixed one; this mirrors degradation modeling in
+blind super-resolution~\cite{wang2021realesrgan,zhang2021bsrgan}, applied
+here to the output of a restoration method rather than to the sensor.
+
+\paragraph{Generative image restoration and deblurring.}
+Diffusion models have become a powerful prior for image restoration.
+Early work applied pixel-space diffusion to deblurring and
+super-resolution~\cite{saharia2022sr3,whang2022deblurring}; subsequent
+methods operate in compact latent spaces~\cite{xia2023diffir,
+chen2023hidiff} or adapt large pretrained text-to-image
+models~\cite{rombach2022ldm} through control
+branches~\cite{wang2024stablesr,lin2024diffbir,yu2024supir,
+yang2024pasd,wu2024seesr}.
+For defocus specifically, diffusion-based deblurring has been explored with
+residual diffusion~\cite{feng2025rddm}, multimodal and depth-aware
+guidance~\cite{mmgdiff2025}, blur-level-aware expert routing inside Stable
+Diffusion~\cite{mbsd2026}, score-based models for real-world
+blur~\cite{scoredefocus2025}, and as the all-in-focus stage of generative
+refocusing pipelines~\cite{genrefocus2025}.
+The cost of iterative sampling has motivated step
+distillation~\cite{salimans2022progressive,song2023consistency,
+sauer2024add,yin2024dmd}, and its application to restoration has produced
+one- and few-step restorers~\cite{wang2024sinsr,wu2024osediff,xie2024addsr,
+onestepdeblur2025}.
+These methods demonstrate the value of generative priors for recovering
+texture destroyed by blur, but they are designed and evaluated at low or
+moderate resolution, and at UHD resolutions they inherit the patch-wise
+inference problem discussed below. We follow the same train-then-distill
+recipe, but condition the model on the native-resolution observation and a
+global low-resolution anchor, and restrict synthesis to regions where the
+observation has lost detail.
+
+\paragraph{Ultra-high-definition restoration.}
+A growing body of work targets UHD (4K and beyond) restoration, largely for
+motion blur, low-light enhancement, and adverse weather; see the recent
+survey~\cite{uhdsurvey2025}.
+Typical designs process a heavily downsampled version of the input and
+recover the full resolution with learned upsampling, bilateral grids, or
+frequency-domain operators~\cite{zheng2021uhdmultiguided,
+zheng2022cubicmixer,wang2023llformer,wang2024uhdformer}, or adopt
+global--local
+architectures~\cite{glsgn2022}.
+MC-Blur~\cite{zhang2022mcblur} provides a UHD motion-deblurring benchmark,
+and most recently an autoregressive flow-matching model performs UHD
+deblurring coarse-to-fine by predicting a residual at each
+scale~\cite{uhdarflow2026}.
+Our decomposition shares the coarse-to-fine spirit of these methods, but
+differs in three respects that are specific to defocus: the scale split is
+motivated by the growth of the CoC with resolution; the native-resolution
+stage explicitly exploits the spatially varying amount of detail that
+survives in the defocused observation, rather than predicting the residual
+from the coarse estimate alone; and the low-resolution stage is an
+arbitrary existing method rather than a jointly trained component.
+
+\paragraph{Patch-wise inference and cross-patch consistency.}
+Memory limits force patch-wise processing at UHD resolutions, and it is
+well known that restoration networks trained on crops behave differently
+when applied to full images; TLC~\cite{chu2022tlc} traces part of this gap
+to global statistics aggregation and corrects it at test time.
+For generative models, independent patch predictions additionally make
+independent stochastic decisions, which produces seams and inconsistent
+content.
+In high-resolution and panoramic generation, MultiDiffusion and
+Mixture-of-Diffusers~\cite{bartal2023multidiffusion,
+jimenez2023mixtureofdiffusers} fuse overlapping predictions at every
+denoising step, SyncDiffusion~\cite{lee2023syncdiffusion} additionally
+synchronizes patches through a perceptual similarity loss,
+DemoFusion~\cite{du2024demofusion} and related
+works~\cite{he2024scalecrafter} progressively upscale with skip-residual
+guidance from a low-resolution generation, and Patch-DM~\cite{ding2023patchdm}
+uses feature collage for boundary-free synthesis.
+Tiled Diffusion~\cite{madar2025tiled} enforces seamless tiling constraints,
+and FrescoDiffusion~\cite{frescodiffusion2026} regularizes tiled denoising
+with an upsampled low-resolution latent prior.
+In restoration, StableSR~\cite{wang2024stablesr} and SUPIR~\cite{yu2024supir}
+aggregate overlapping latent tiles, Patch-Adapter~\cite{patchadapter2025}
+combines a low-resolution global adapter with reference-patch attention for
+4K inpainting, and OP4KSR~\cite{op4ksr2026} suppresses the periodic
+artifacts of one-step patch-free 4K super-resolution.
+Two limitations of these mechanisms matter in our setting.
+First, most of them were designed for multi-step samplers, where
+consistency can be negotiated over many denoising steps; after distillation
+to a single step, it must instead be established within one forward pass.
+Second, they enforce consistency \emph{locally}, between spatially
+overlapping or adjacent tiles, whereas the inconsistencies most visible in
+UHD restoration often arise between distant regions that depict the same
+content (\eg, two ends of a facade or a textured floor). \method{} addresses
+both: its cross-patch attention operates within a single forward pass, and
+it is routed by whole-image self-attention computed at low resolution, so
+that each patch exchanges information with the related patches wherever
+they lie in the image.
+
+\paragraph{Non-local context and spatially adaptive restoration.}
+Exploiting recurrence of similar content across an image is a long-standing
+principle in restoration, from non-local means and
+BM3D~\cite{buades2005nlm,dabov2007bm3d} to learned non-local
+operators~\cite{wang2018nonlocal,liu2018nlrn} and sparse or routed
+attention that restricts each query to its most relevant
+regions~\cite{zhu2023biformer}. More recently, features of self-supervised
+and generative foundation models~\cite{oquab2024dinov2,kirillov2023sam}
+have been shown to provide dense semantic correspondences without
+task-specific training~\cite{amir2021deepvit,tang2023dift}, making them a
+robust, training-free source of cross-region affinity.
+Computing such affinities directly at tens of megapixels is prohibitive; we
+instead obtain them at low resolution from the whole image, combining
+learned attention with frozen foundation features, and use them to select
+the native-resolution context of each patch, which keeps the per-patch cost
+bounded.
+Separately, restoration difficulty varies across an image, which has been
+exploited to allocate computation adaptively, \eg, by routing patches of
+different difficulty to networks of different capacity in
+ClassSR~\cite{kong2021classsr}. In defocus deblurring the variation is
+especially pronounced and physically grounded, as it follows the defocus
+level. \method{} uses a deblur-level map to decide how much to rely on the
+observation \vs the generative prior, avoiding both hallucination in sharp
+regions and under-restoration in strongly defocused ones.
+When this map is not available from the deblurring method, we derive it
+from a re-blur agreement surrogate. Re-blurring is a classical tool for
+defocus estimation: Zhuo and Sim~\cite{zhuo2011defocusmap} re-blur the
+input with a known Gaussian and infer the unknown blur from the ratio of
+gradients at edges, and related analysis-by-synthesis
+schemes~\cite{karaali2018edgedefocus,lee2019dmenet} select the kernel scale
+that best explains the observation.
+We apply the same principle to a different pair of images---the
+\emph{restored anchor} and the observation---so that the selected kernel
+scale measures the deblurring that was performed, and the residual measures
+whether the anchor is physically consistent with the input.
+Optionally, the disagreement of a method under test-time scale
+perturbations serves as an additional uncertainty cue, following standard
+practice in ensembles and test-time
+augmentation~\cite{lakshminarayanan2017ensembles,ayhan2018tta}, and
+monocular depth~\cite{yang2024depthanything,ke2024marigold} provides a
+physics-only alternative.
+
+\paragraph{Guided and reference-based upsampling.}
+Our upsampler is conditioned on a native-resolution guide, which relates it
+to joint-image upsampling. Joint bilateral
+upsampling~\cite{kopf2007jbu}, the guided filter~\cite{he2010guided}, and
+their learned counterparts~\cite{wu2018deepguided,gharbi2017hdrnet} transfer
+edges from a high-resolution guide to a low-resolution solution, and are
+widely used for depth and flow upsampling.
+Reference-based super-resolution~\cite{zhang2019srntt,yang2020ttsr,
+jiang2021c2matching} transfers textures from a separate high-resolution
+reference image through correspondence matching.
+Both families assume a guide that is sharp, either everywhere or where it is
+matched. In our setting the guide is the degraded observation itself, and
+its reliability varies continuously across the image with the local amount
+of defocus. \method{} models this reliability explicitly, copying
+high-frequency content from the guide where it is in focus, attenuating it
+as blur increases, and falling back to generative synthesis where it carries
+no usable detail.
+
+% =====================================================================
+%  Citation keys used (all must be added to the .bib; verify each entry)
+% ---------------------------------------------------------------------
+%  abuolaim2020dpdd      Abuolaim & Brown, ECCV 2020 (DPDD, DPDNet)
+%  abuolaim2021rdpd      Abuolaim et al., ICCV 2021 (multi-task DP / RDPD)
+%  pan2021dddnet         Pan et al., CVPR 2021 (dual-pixel deblur + depth)
+%  xin2021dpdefocus      Xin et al., ICCV 2021 (defocus map + deblur from DP)
+%  son2021kpac           Son et al., ICCV 2021 (KPAC)
+%  lee2021ifan           Lee et al., CVPR 2021 (IFAN)
+%  ruan2022drbnet        Ruan et al., CVPR 2022 (DRBNet)
+%  ruan2023lakdnet       Ruan et al., 2023 (LaKDNet)
+%  quan2021gkmnet        Quan et al., ICCV 2021 (Gaussian kernel mixture)
+%  quan2023nrknet        Quan et al., CVPR 2023 (NRKNet)
+%  li2023jdrl            Li et al., AAAI 2023 (misaligned training pairs)
+%  zamir2022restormer    Zamir et al., CVPR 2022
+%  wang2022uformer       Wang et al., CVPR 2022
+%  chen2022nafnet        Chen et al., ECCV 2022
+%  zhuo2011defocusmap    Zhuo & Sim, PR 2011
+%  karaali2018edgedefocus Karaali & Jung, TIP 2018
+%  lee2019dmenet         Lee et al., CVPR 2019 (DMENet)
+%  krishnan2009hyperlaplacian Krishnan & Fergus, NeurIPS 2009
+%  saharia2022sr3        Saharia et al., TPAMI 2022 (SR3)
+%  whang2022deblurring   Whang et al., CVPR 2022
+%  xia2023diffir         Xia et al., ICCV 2023
+%  chen2023hidiff        Chen et al., NeurIPS 2023 (HI-Diff)
+%  rombach2022ldm        Rombach et al., CVPR 2022
+%  wang2024stablesr      Wang et al., IJCV 2024
+%  lin2024diffbir        Lin et al., ECCV 2024
+%  yu2024supir           Yu et al., CVPR 2024
+%  yang2024pasd          Yang et al., ECCV 2024
+%  wu2024seesr           Wu et al., CVPR 2024
+%  wang2024sinsr         Wang et al., CVPR 2024
+%  wu2024osediff         Wu et al., NeurIPS 2024
+%  xie2024addsr          Xie et al., 2024 (AddSR)
+%  onestepdeblur2025     One-Step Diffusion for Motion Deblurring, arXiv 2503.06537
+%  feng2025rddm          Feng et al., AAAI 2025
+%  mmgdiff2025           Multimodal-guided diffusion + depth-aware fusion, PR 2025
+%  mbsd2026              Multi-Level Blur-Aware SD, AAAI 2026
+%  scoredefocus2025      Score-based real-world defocus, Sci. Rep. 2025
+%  genrefocus2025        Generative Refocusing, arXiv 2512.16923
+%  liang2021swinir       Liang et al., ICCVW 2021
+%  wang2021realesrgan    Wang et al., ICCVW 2021
+%  uhdsurvey2025         UHD restoration survey, arXiv 2505.16161
+%  zheng2021uhdmultiguided Zheng et al., CVPR 2021 (UHD multi-guided bilateral)
+%  zheng2022cubicmixer   Zheng et al., arXiv 2206.03678
+%  wang2023llformer      Wang et al., AAAI 2023 (UHD-LOL / LLFormer)
+%  wang2024uhdformer     Wang et al., AAAI 2024 (UHDformer)
+%  glsgn2022             Global-Local Stepwise GAN, arXiv 2207.08808
+%  zhang2022mcblur       Zhang et al., MC-Blur, TCSVT 2023 / arXiv 2112.00234
+%  uhdarflow2026         UHD deblurring via AR flow, arXiv 2603.10517
+%  chu2022tlc            Chu et al., ECCV 2022 (TLC)
+%  bartal2023multidiffusion Bar-Tal et al., ICML 2023
+%  jimenez2023mixtureofdiffusers Jimenez, arXiv 2023
+%  lee2023syncdiffusion  Lee et al., NeurIPS 2023
+%  du2024demofusion      Du et al., CVPR 2024
+%  he2024scalecrafter    He et al., ICLR 2024
+%  ding2023patchdm       Ding et al., WACV 2023 (Patch-DM)
+%  madar2025tiled        Madar & Fried, CVPR 2025
+%  frescodiffusion2026   FrescoDiffusion, arXiv 2603.17555
+%  patchadapter2025      Patch-Adapter, arXiv 2510.13419
+%  op4ksr2026            OP4KSR, arXiv 2605.13457
+%  kopf2007jbu           Kopf et al., SIGGRAPH 2007
+%  he2010guided          He et al., ECCV 2010 / TPAMI 2013
+%  wu2018deepguided      Wu et al., CVPR 2018
+%  gharbi2017hdrnet      Gharbi et al., SIGGRAPH 2017
+%  zhang2019srntt        Zhang et al., CVPR 2019
+%  yang2020ttsr          Yang et al., CVPR 2020
+%  jiang2021c2matching   Jiang et al., CVPR 2021
+%  salimans2022progressive Salimans & Ho, ICLR 2022 (progressive distillation)
+%  song2023consistency   Song et al., ICML 2023 (consistency models)
+%  sauer2024add          Sauer et al., ECCV 2024 (adversarial diffusion distillation)
+%  yin2024dmd            Yin et al., CVPR 2024 (distribution matching distillation)
+%  buades2005nlm         Buades et al., CVPR 2005 (non-local means)
+%  dabov2007bm3d         Dabov et al., TIP 2007 (BM3D)
+%  wang2018nonlocal      Wang et al., CVPR 2018 (non-local neural networks)
+%  liu2018nlrn           Liu et al., NeurIPS 2018 (NLRN)
+%  zhu2023biformer       Zhu et al., CVPR 2023 (BiFormer, bi-level routing attention)
+%  kong2021classsr       Kong et al., CVPR 2021 (ClassSR)
+%  oquab2024dinov2       Oquab et al., TMLR 2024 (DINOv2)
+%  kirillov2023sam       Kirillov et al., ICCV 2023 (Segment Anything)
+%  amir2021deepvit       Amir et al., ECCVW 2022 / arXiv 2021 (Deep ViT features as dense descriptors)
+%  tang2023dift          Tang et al., NeurIPS 2023 (DIFT, diffusion features for correspondence)
+%  peng2022bokehme       Peng et al., CVPR 2022 (BokehMe)
+%  sheng2024dr           Sheng et al., CVPR 2024 (Dr.Bokeh)  -- VERIFY venue/key
+%  compoundlens2026      Realistic Compound-Lens Defocus Blur Synthesis, arXiv 2607.05837
+%  zhang2021bsrgan       Zhang et al., ICCV 2021 (BSRGAN degradation model)
+%  yang2024depthanything Yang et al., CVPR 2024 (Depth Anything)
+%  ke2024marigold        Ke et al., CVPR 2024 (Marigold)
+%  lakshminarayanan2017ensembles Lakshminarayanan et al., NeurIPS 2017 (deep ensembles)
+%  ayhan2018tta          Ayhan & Berens, MIDL 2018 (test-time augmentation uncertainty)
+% =====================================================================
+
+% =====================================================================
+%  Method subsection: surrogate interface signals for off-the-shelf
+%  low-resolution deblurring methods ("cross play").
+%  Uses macros from intro_related.tex (\method, \todo, \eg, \ie).
+%  Requires: amsmath, amssymb
+% =====================================================================
+
+\subsection{Surrogate Interface for Off-the-Shelf Methods}
+\label{sec:surrogates}
+
+Stage~2 consumes three signals from Stage~1: the anchor $\hat{x}$, the
+deblur-level map $m$, and the affinity map $A$
+(Sec.~\todo{ref to interface section}).
+Our own Stage~1 produces $m$ and $A$ natively. An arbitrary deblurring
+method $\mathcal{M}$, in contrast, is a black box that returns only
+$\hat{x} = \mathcal{M}(y)$, where $y$ denotes the defocused input
+downsampled by the factor $s=4$. We construct $m$ and $A$ from quantities
+that can be measured for any such method.
+
+\paragraph{Notation.}
+All quantities in this section are computed at low resolution.
+$p$ indexes pixels, $G_\sigma$ is a Gaussian window of standard deviation
+$\sigma$ that defines local neighborhoods, and $\lvert\cdot\rvert$ is
+applied per pixel and averaged over color channels.
+$k_r$ denotes a normalized defocus kernel of radius $r$, and
+$\mathcal{R} = \{r_0{=}0, r_1, \dots, r_{K}\}$ is a discrete set of radii
+spanning the CoC range observed at low resolution (\todo{values}).
+
+\paragraph{Re-blur agreement.}
+If $\hat{x}$ is a faithful all-in-focus estimate, then re-blurring it with
+the correct local defocus kernel should reproduce the observation, since
+defocus is well approximated locally by a convolution with a kernel whose
+size depends on depth~\cite{zhuo2011defocusmap}. For each radius
+$r \in \mathcal{R}$ we therefore compute a local, contrast-normalized
+re-blur error
+\begin{equation}
+  e_r(p) \;=\;
+  \frac{\big(G_\sigma * \lvert k_r * \hat{x} - y \rvert\big)(p)}
+       {c(p) + \epsilon},
+  \qquad
+  c(p) = \sqrt{\big(G_\sigma * (y - G_\sigma * y)^2\big)(p)},
+  \label{eq:reblur_error}
+\end{equation}
+where $c$ is the local standard deviation of $y$, which makes errors
+comparable between flat and textured regions and reduces the influence of
+noise. From the error profile over $\mathcal{R}$ we extract
+\begin{align}
+  r^*(p) &= \arg\min_{r \in \mathcal{R}} e_r(p),
+  \label{eq:rstar}\\
+  \rho(p) &= e_{r^*(p)}(p).
+  \label{eq:rho}
+\end{align}
+The selected radius $r^*$ estimates \emph{how much deblurring was
+performed} at $p$: it is close to zero in regions that were already in
+focus and grows with the defocus that $\mathcal{M}$ removed. The residual
+$\rho$ measures \emph{reliability}: when no kernel in $\mathcal{R}$ explains
+$y$ from $\hat{x}$, the anchor is inconsistent with the observation, \eg,
+because of hallucinated structure, ringing, or tone shifts.
+In practice we replace the hard $\arg\min$ by a soft-argmin over
+$\mathcal{R}$ with temperature $\tau$ for sub-radius precision, and use a
+disc--Gaussian mixture for $k_r$ to account for the non-ideal shape of real
+defocus kernels (\todo{fit on DPDD train?}).
+The sweep requires $K{+}1$ convolutions at low resolution, which is
+negligible compared with Stage~2.
+
+\paragraph{Unrestored regions.}
+Re-blur agreement alone has a blind spot. If $\mathcal{M}$ fails to
+restore a strongly defocused region and returns it essentially unchanged,
+$\hat{x} \approx y$ there, so that $r^* \approx 0$ and $\rho \approx 0$:
+the region appears both in focus and reliable. We resolve this ambiguity
+with a no-reference sharpness measure of the input,
+\begin{equation}
+  s(p) = \frac{\big(G_\sigma * \lvert \nabla y \rvert\big)(p)}
+              {c(p) + \epsilon},
+  \label{eq:sharpness}
+\end{equation}
+which is low wherever the observation lacks high-frequency content,
+regardless of what $\mathcal{M}$ did. A region with small $r^*$ \emph{and}
+small $s$ is thus identified as defocused but unrestored, and hence as
+requiring generation.
+
+\paragraph{Optional: perturbation disagreement.}
+Where additional low-resolution passes are affordable, we measure the
+instability of $\mathcal{M}$ under input rescaling,
+\begin{equation}
+  v(p) = \operatorname{Var}_{\alpha \in \mathcal{A}}
+         \Big[\, \mathcal{U}_{1/\alpha}\big(\mathcal{M}(\mathcal{U}_{\alpha}\, y)\big)(p) \Big],
+  \label{eq:tta}
+\end{equation}
+where $\mathcal{U}_\alpha$ resamples by factor $\alpha$ and
+$\mathcal{A} = \{0.9, 1, 1.1\}$ (\todo{values}). We use scale rather than
+flip perturbations, to which many restoration networks are nearly
+equivariant. Disagreement is a standard proxy for predictive
+uncertainty~\cite{lakshminarayanan2017ensembles,ayhan2018tta} and
+complements $\rho$, which detects inconsistency with the observation but
+not ambiguity among plausible restorations.
+
+\paragraph{Calibration to the native map.}
+Stage~2 is trained on the native map $m$ produced by our Stage~1. Rather
+than fusing the surrogate cues by hand, we learn a lightweight calibration
+head $h_\phi$, a small convolutional network with a local receptive field
+(\todo{architecture}), that maps them to the same format:
+\begin{equation}
+  \tilde{m} = h_\phi\big(\, r^*/r_K,\; \rho,\; s,\; [v] \,\big),
+  \qquad
+  \phi^\star = \arg\min_\phi\;
+  \mathbb{E}_{\mathcal{M} \sim \mathcal{P},\, y}
+  \big\lVert h_\phi(\cdot) - m \big\rVert_1 ,
+  \label{eq:calib}
+\end{equation}
+where $[v]$ is included only when perturbation disagreement is used, $m$ is
+the native map of our Stage~1 for the same input, and the expectation is
+over training images and a pool $\mathcal{P}$ of deblurring methods
+together with our simulated anchors. Because every input to $h_\phi$ is a
+black-box measurement, the calibrated surrogate remains method-agnostic,
+and we evaluate it on methods excluded from $\mathcal{P}$.
+The surrogate map $\tilde{m}$ is bilinearly upsampled to native resolution
+and cropped per patch in the same way as $m$.
+
+\paragraph{Affinity surrogate.}
+For the affinity map, we extract features $F = \Phi(\hat{x})$ from a frozen
+vision foundation model $\Phi$~\cite{oquab2024dinov2} on the anchor, pool
+them to the patch grid used by Stage~2, and define
+\begin{equation}
+  \tilde{A}_{ij} = \operatorname{softmax}_j
+  \Big( \tfrac{1}{\sqrt{d}}\, \bar{F}_i^{\top} \bar{F}_j \Big),
+  \label{eq:affinity}
+\end{equation}
+where $\bar{F}_i \in \mathbb{R}^d$ is the $\ell_2$-normalized pooled feature
+of patch $i$. As with the native affinity map $A$, the related patches
+for patch $i$ are the top-$k$ entries of row $i$ (\todo{$k$}).
+
+\paragraph{Training with interchangeable signals.}
+To make Stage~2 robust to which variant of each signal it receives, we
+replace, during training, $m$ by $\tilde{m}$ and $A$ by $\tilde{A}$
+independently with probability $p_{\text{sur}}$ (\todo{value}).
+In Sec.~\todo{ref experiments} we report the gap between native and
+surrogate signals for our own Stage~1, and the gains obtained with
+surrogate signals for off-the-shelf methods.
+
+\paragraph{Limitations of the surrogate.}
+The local convolution model underlying Eq.~\eqref{eq:reblur_error} is
+violated at occlusion boundaries, where foreground and background blur mix;
+we keep $\sigma$ small to confine the resulting errors. Sensor noise
+inflates $e_r$ uniformly across radii and is largely absorbed by the
+contrast normalization. Finally, the surrogate cannot distinguish a
+correct restoration from an incorrect one that is equally consistent with
+the observation, since both re-blur to $y$; the perturbation disagreement
+$v$ partially addresses this case.
