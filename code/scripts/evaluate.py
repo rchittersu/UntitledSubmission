@@ -42,6 +42,9 @@ def worker(rank: int, world: int, device: torch.device, a, records: list, infos:
     for rec in loader(ImageDataset(items), a.workers):
         pred = to_tensor(rec["pred"], device)
         gt = to_tensor(rec["target"], device) if rec.get("target") is not None else None
+        if gt is not None and a.target_bits:  # e.g. 8 to match protocols evaluated on 8-bit targets
+            q = 2 ** a.target_bits - 1
+            gt = gt.mul(q).round_().div_(q)
         mask = rec["mask"].to(device)[None, None] if rec.get("mask") is not None else None
         if gt is not None and pred.shape != gt.shape:
             raise ValueError(f"{rec['name']}: pred {tuple(pred.shape)} vs target {tuple(gt.shape)}")
@@ -66,6 +69,7 @@ def main():
     ap.add_argument("--scale", type=int, default=1, help="native / evaluated resolution")
     ap.add_argument("--fnum", type=float, default=22.0, help="target capture f-number (PSF-matched metrics)")
     ap.add_argument("--hb-s", type=int, default=4, help="high-band cutoff factor")
+    ap.add_argument("--target-bits", type=int, choices=[8, 16], help="quantize targets (8 = Restormer DPDD protocol)")
     ap.add_argument("--crop", type=int, default=0, help="border pixels removed before evaluation")
     ap.add_argument("--fr-tile", type=int, default=1024)
     ap.add_argument("--cell", type=int, default=256)

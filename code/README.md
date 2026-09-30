@@ -39,6 +39,23 @@ Restormer 8, NAFNet 16; windowed transformers: window × 2^#downsamplings, e.g. 
 - Downscaling (`prepare_scales`) crops a remainder of < s pixels so the low-res grid stays
   exactly aligned with the native one (DPDD 6720×4480 is divisible by 2 and 4, nothing is cropped).
 
+## Restormer setup and reproduction check
+
+```bash
+git clone https://github.com/swz30/Restormer $UHDD_REPOS/Restormer
+mkdir -p $UHDD_WEIGHTS/restormer && wget -P $UHDD_WEIGHTS/restormer \
+    https://github.com/swz30/Restormer/releases/download/v1.0/single_image_defocus_deblurring.pth
+
+# official protocol: whole 1680x1120 images, 8-bit input (from config) and 8-bit targets
+python code/scripts/run_model.py --model restormer_dpdd --inputs $OFF/inputC --out $R/official/restormer --gpus all
+python code/scripts/evaluate.py --pred $R/official/restormer --targets $OFF/target --target-bits 8 \
+    --metrics psnr,ssim,mae,lpips --tag official --gpus all
+# expected (paper): PSNR 25.98, SSIM 0.811, MAE 0.038, LPIPS 0.178  -> must match to ~0.01
+```
+`$OFF` = official DPDD test set (Restormer's `Datasets/test/DPDD`: `inputC/`, `target/`, same file names).
+Outputs are saved as 16-bit PNG; the tiny difference from Restormer's float evaluation is
+< 0.001 dB.
+
 ## Pipeline (P1 tasks of plan/evaluation.md)
 
 ```bash
@@ -86,4 +103,5 @@ Paste `summarize.py` tables (and `register_pairs.py` shift statistics) into the 
 
 - Semantic consistency metric (DINOv2-matched patch pairs), guided-upsampling baseline (G3),
   blur-level stratification from DP views, synthetic test set (T2).
-- Only Restormer is configured; other baselines are templates in `configs/models.yaml` [V].
+- Only Restormer is configured (architecture checked against its official config; loading +
+  inference tested on CPU with random weights only); other baselines are templates [V].

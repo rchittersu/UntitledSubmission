@@ -40,12 +40,16 @@ def worker(rank: int, world: int, device: torch.device, a: argparse.Namespace, t
     model = models.build(a.model, a.config, device, channels_last=a.channels_last, compile=a.compile)
     spec = TileSpec(a.tile, a.overlap, a.tile_batch, a.blend)
     amp = PRECISION[a.precision]
+    in_bits = a.input_bits if a.input_bits is not None else model.spec.get("input_bits")
     out_dtype = np.uint16 if a.save_bits == 16 else np.uint8
     writer = AsyncWriter(workers=a.write_threads)
     meta, cuda = {}, device.type == "cuda"
 
     for rec in loader(ImageDataset(items), a.workers):
         x = to_tensor(rec["input"], device)
+        if in_bits:  # reproduce models trained/tested on 8-bit data (e.g. Restormer DPDD)
+            q = 2 ** in_bits - 1
+            x = x.mul(q).round_().div_(q)
         if cuda:
             torch.cuda.reset_peak_memory_stats(device)
             torch.cuda.synchronize(device)
@@ -81,6 +85,8 @@ def main():
     ap.add_argument("--precision", default="fp32", choices=list(PRECISION))
     ap.add_argument("--channels-last", action="store_true")
     ap.add_argument("--compile", action="store_true", help="torch.compile (pays off with fixed tile size)")
+    ap.add_argument("--input-bits", type=int, choices=[8, 16],
+                    help="quantize inputs to this bit depth (default: model's input_bits in the config, else none)")
     ap.add_argument("--save-bits", type=int, default=16, choices=[8, 16])
     ap.add_argument("--workers", type=int, default=2, help="reader processes per GPU")
     ap.add_argument("--write-threads", type=int, default=4)

@@ -6,7 +6,8 @@
 # Fields: kind (torch|builtin), op (builtin: identity|bicubic), repo,
 #   import (pkg.module:Class, or file.py:Class relative to repo -- preferred), kwargs, weights, state_key,
 #   strict, multiple (H/W divisibility), scale (output/input), input_range, output_index,
-#   clamp, adapter (module:function for non-standard models).
+#   clamp, input_bits (quantize inputs, e.g. 8 for models trained on 8-bit data),
+#   adapter (module:function for non-standard models).
 # [V] = verify against the original repo before trusting numbers.
 
 models:
@@ -35,7 +36,11 @@ models:
       dual_pixel_task: false
     weights: ${UHDD_WEIGHTS}/restormer/single_image_defocus_deblurring.pth
     state_key: params
-    multiple: 8        # 3 downsamplings; their test script pads to 8
+    multiple: 8        # 3 downsamplings
+    input_bits: 8      # trained and tested on 8-bit DPDD (DefocusDeblur_Single_8bit_Restormer.yml)
+    # Weights: https://github.com/swz30/Restormer/releases (single_image_defocus_deblurring.pth).
+    # Official test: whole 1680x1120 image, 8-bit input and target, no padding needed.
+    # Published DPDD single-image (combined): PSNR 25.98, SSIM 0.811, MAE 0.038, LPIPS 0.178 [V]
 
   # ---- templates, fill in after checking each repo [V] ----
   # lakdnet_dpdd:
