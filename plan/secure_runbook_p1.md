@@ -19,7 +19,7 @@ If a step blocks, stop, write the report with what you have, and hand off.
 git pull                                  # base for the handoff patch
 git checkout -b handoff/p1-eval
 python -m venv .venv && source .venv/bin/activate      # or conda; Python >= 3.10
-pip install -r code/requirements.txt       # torch (CUDA build!), opencv, scipy, pyiqa, timm, einops, easydict, torchvision
+pip install -r code/requirements.txt       # torch (CUDA build!), opencv, scipy, pyiqa, timm, einops, easydict, torchvision, safetensors
 pytest -q code/tests                       # expect: 36 passed
 python -c "import torch; print(torch.__version__, torch.cuda.device_count(), torch.cuda.get_device_name(0))"
 ```
@@ -53,8 +53,9 @@ wget -P restormer https://github.com/swz30/Restormer/releases/download/v1.0/sing
 wget -P lakdnet https://lakdnet.mpi-inf.mpg.de/Weights/Defocus/train_on_dpdd_l/train_on_dpdd_l.pth
 wget -P lakdnet https://lakdnet.mpi-inf.mpg.de/Weights/Defocus/train_on_dpdd_s/train_on_dpdd_s.pth
 (cd drbnet && gdown 1vGImev9LdagttXE_nN1gZGVstVTRVQHt -O ckpts.zip && unzip -q ckpts.zip)   # -> drbnet/ckpts/single/...
-(cd ifan && wget -O checkpoints.zip 'https://www.dropbox.com/s/qohhmr9p81u0syi/checkpoints.zip?dl=1' \
-         && unzip -q checkpoints.zip IFAN.pytorch)                                            # 961 MB zip, only IFAN.pytorch needed
+wget -P ifan https://github.com/jacobsparts/ifan-rs/releases/download/v0.1.0/IFAN.safetensors
+# ^ public GitHub mirror (42 MB), verified bit-identical to the official IFAN.pytorch deblurring
+#   network. (Official alternative: Dropbox checkpoints.zip -> IFAN.pytorch; set `weights:` accordingly.)
 wget -P swinir https://github.com/JingyunLiang/SwinIR/releases/download/v0.0/001_classicalSR_DF2K_s64w8_SwinIR-M_x4.pth
 wget -P swinir https://github.com/JingyunLiang/SwinIR/releases/download/v0.0/003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x4_GAN.pth
 ```
@@ -68,7 +69,8 @@ ef1ce51c4cafd82b63d91048f1589048308cfbae98470e07d0fc16614d255557  bokehlicious/d
 8f954fe18c4f8f4f03302cf6adaccb586faf5816160c407ca3a1a6aa5f3121f6  lakdnet/train_on_dpdd_l.pth
 5f32974e06605ef7723cd2d8bdf22d586626b8de82eb620709744b655ec374b1  lakdnet/train_on_dpdd_s.pth
 7e711340686e9ee728829d60e443d2ee28b5a45f6c0415632c22b7f099712382  drbnet/ckpts/single/single_image_defocus_deblurring.pth
-9770cb367301330301badb4d0c52eabae6e685ca989d18ea7cc873ea0f6768ca  ifan/IFAN.pytorch
+baa8ba206149a7e4c0350a9817425cf5e496c2008fcab7e6a92914f5fe96fe82  ifan/IFAN.safetensors
+9770cb367301330301badb4d0c52eabae6e685ca989d18ea7cc873ea0f6768ca  ifan/IFAN.pytorch          (only if using the official zip)
 4e78e33f22c1aa8a773db0cf4a7381bae97c2362c717f155439ebc690cbd9215  swinir/001_classicalSR_DF2K_s64w8_SwinIR-M_x4.pth
 b9afb61e65e04eb7f8aba5095d070bbe9af28df76acd0c9405aeb33b814bcfc6  swinir/003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x4_GAN.pth
 ```

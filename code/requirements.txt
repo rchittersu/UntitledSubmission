@@ -7,5 +7,6 @@ einops          # Restormer, LaKDNet
 timm            # Bokehlicious, SwinIR
 torchvision     # DRBNet (imported by its model file)
 easydict        # IFAN config
+safetensors     # IFAN weights mirror
 pyiqa           # lpips, dists, musiq, maniqa, clipiqa (optional for other metrics)
 pytest

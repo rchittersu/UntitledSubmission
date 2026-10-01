@@ -50,7 +50,7 @@ preprocessing + model call next to ours on the same images (max abs difference r
 | `bokehlicious_deblur` | Bokehlicious, RealDefocus deblur variant | RealDefocus | in repo: `checkpoints/defocus_deblur.zpaq` (`zpaq x`) → `bokehlicious/defocus_deblur.pt` | timm, zpaq | ≤ 7e-7 |
 | `lakdnet_dpdd_l`, `lakdnet_dpdd_s` | LaKDNet (L / S) | DPDD | `lakdnet.mpi-inf.mpg.de/Weights/Defocus/train_on_dpdd_{l,s}/…pth` → `lakdnet/` | einops | ≤ 1.7e-6 |
 | `drbnet_single` | DRBNet (CVPR'22) | LFDOF+DPDD | `python download_ckpts.py` in repo (gdrive id `1vGImev9LdagttXE_nN1gZGVstVTRVQHt`), unzip → `drbnet/ckpts/single/` | torchvision | ≤ 4.5e-7 |
-| `ifan` | IFAN (CVPR'21) | DPDD | `checkpoints.zip` (Dropbox/OneDrive in IFAN README) → `ifan/IFAN.pytorch` | easydict | ≤ 1.0e-6 (checkpoint: keep `module.Network.*`, drop training-only `reblurNet`) |
+| `ifan` | IFAN (CVPR'21) | DPDD | `github.com/jacobsparts/ifan-rs/releases/download/v0.1.0/IFAN.safetensors` → `ifan/` (bit-identical conversion; or official `checkpoints.zip` → `IFAN.pytorch`) | easydict, safetensors | ≤ 1.0e-6 (checkpoint: keep `module.Network.*`, drop training-only `reblurNet`) |
 | `swinir_x4` | SwinIR-M x4 classical (upsampler) | DF2K | GitHub release `JingyunLiang/SwinIR` v0.0 `001_classicalSR_DF2K_s64w8_SwinIR-M_x4.pth` → `swinir/` | timm | exact (0) |
 | `swinir_x4_real` | SwinIR-M x4 real-world GAN (upsampler) | BSRGAN degr. | same release, `003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x4_GAN.pth` → `swinir/` | timm | exact (0) |
 

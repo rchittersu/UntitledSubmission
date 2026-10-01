@@ -85,7 +85,8 @@ models:
     repo: ${UHDD_REPOS}/IFAN
     factory: uhdd.adapters.ifan:build
     adapter: uhdd.adapters.ifan:wrap
-    weights: ${UHDD_WEIGHTS}/ifan/IFAN.pytorch   # from checkpoints.zip (Dropbox/OneDrive links in README)
+    weights: ${UHDD_WEIGHTS}/ifan/IFAN.safetensors   # github.com/jacobsparts/ifan-rs/releases/download/v0.1.0/IFAN.safetensors
+    # (bit-identical to official IFAN.pytorch deblurring net; IFAN.pytorch from the official zip also works)
     weights_in_factory: true
     multiple: 8        # official test crops to a multiple of 8; we pad
     input_bits: 8
