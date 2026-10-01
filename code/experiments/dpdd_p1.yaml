@@ -35,7 +35,7 @@ pipelines:
     name: "{m} native t{t}"
     for: {m: [restormer_dpdd, lakdnet_dpdd_l, drbnet_single, ifan, bokehlicious_deblur], t: [512, 1024]}
     steps:
-      - {model: "{m}", scale: 1, tile: "{t}"}
+      - {model: "{m}", scale: 1, tile: "{t}", tile_batch: 2}   # 1024 tiles x batch 8 exceeds cuDNN 32-bit indexing
 
   # G2 -- deblur at 1/4 resolution (whole image, = standard DPDD protocol) + x4 upsampling
   - group: g2_lowres_upsample
