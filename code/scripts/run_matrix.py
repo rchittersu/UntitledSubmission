@@ -25,6 +25,8 @@ metrics_<tag>.json) after changing metrics. Step outputs are cached under <resul
 chain (input scale, models, tiling), so shared prefixes are computed once. Finished steps
 (meta.json covering all images) and finished evaluations are skipped: the runner is resumable.
 Per group, a Markdown table is written to <results>/tables/<group>.md.
+If eval.metrics contains `gridshift`, the last step of every tiled pipeline is also run on a tile
+grid shifted by half a stride (<step>@shift<k>) and passed to evaluate.py --pred-shift.
 """
 from __future__ import annotations
 
@@ -134,7 +136,16 @@ def main():
         print(f"\n[{j['group']}] {j['name']}", flush=True)
         first = Path(j["steps"][0]["inputs"])
         n = len(list_images(first)) if first.exists() else 0
-        for s in j["steps"]:
+        steps = list(j["steps"])
+        shift = None
+        if "gridshift" in ev.get("metrics", "") and int(steps[-1]["opts"].get("tile", 0) or 0) > 0:
+            # same last step on a grid shifted by half a stride: content-free tiling metrics
+            last = steps[-1]
+            t, o = int(last["opts"]["tile"]), int(last["opts"].get("overlap", 64))
+            shift = {**last, "out": last["out"].with_name(last["out"].name + f"@shift{(t - o) // 2}"),
+                     "opts": {**last["opts"], "grid_offset": (t - o) // 2}}
+            steps.append(shift)
+        for s in steps:
             if n and done(s["out"], n):
                 print(f"  cached: {s['out'].name}")
                 continue
@@ -157,6 +168,8 @@ def main():
                    "--tag", tag, "--label", j["name"], "--gpus", a.gpus, "--workers", a.workers]
             if sc in exp["data"].get("masks", {}):
                 cmd += ["--masks", exp["data"]["masks"][sc]]
+            if shift is not None:
+                cmd += ["--pred-shift", shift["out"]]
             for k, v in ev.get("options", {}).items():
                 cmd += [f"--{k.replace('_', '-')}", v]
             sh(cmd, a.dry_run)
@@ -180,6 +193,7 @@ def main():
             steps = [json.loads((s["out"] / "meta.json").read_text())["images"] for s in j["steps"]]
             per_img = [sum(st[k]["time_s"] for st in steps) for k in steps[-1]]
             r["label"], r["steps"] = j["name"], [str(s["out"].name) for s in j["steps"]]
+            r["csv"] = str(j["result"].with_suffix(".csv"))
             r["metrics"]["pipeline_time_s"] = {"mean": sum(per_img) / len(per_img), "std": 0.0, "n": len(per_img)}
             r["metrics"]["peak_mem_gb"] = {"mean": max(v.get("peak_mem_gb") or 0 for st in steps for v in st.values()),
                                            "std": 0.0, "n": len(per_img)}

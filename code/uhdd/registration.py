@@ -8,6 +8,12 @@ Coarse-to-fine ECC (OpenCV) on Gaussian-smoothed luminance; the smoothing also r
 influence of the defocus difference between the two images. The target is warped only if the
 estimated motion moves any image corner by more than `min_shift` pixels, to avoid adding
 interpolation blur to already aligned pairs.
+
+Motion model: euclidean (shift + rotation) by default. On the official DPDD 1680x1120 test pairs
+(76) translation/euclidean ECC give corner shifts of median 0.41/0.58 px, max 3.8/4.3 px, while
+affine/homography report median 1.3/2.1 px, max 18/30 px for a negligible gain in correlation
+(e.g. 1P0A2513: 0.5 px vs 19.5 px, ECC 0.953 vs 0.962): the extra degrees of freedom fit the
+blur difference between the f/4 and f/22 captures, not real motion (tripod, fixed focus/zoom).
 """
 from __future__ import annotations
 
@@ -22,7 +28,7 @@ MOTION = {"translation": cv2.MOTION_TRANSLATION, "euclidean": cv2.MOTION_EUCLIDE
 
 @dataclass
 class RegConfig:
-    motion: str = "homography"
+    motion: str = "euclidean"  # see note below
     levels: tuple[int, ...] = (16, 8, 4, 2)   # downsampling factors, coarse to fine
     iters: int = 100
     eps: float = 1e-6

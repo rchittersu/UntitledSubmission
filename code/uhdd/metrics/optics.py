@@ -5,7 +5,10 @@
    A prediction sharper than the target is penalized by PSNR/SSIM. We therefore blur the
    prediction with the target's diffraction PSF before comparing ("pm_" metrics), which removes
    the penalty for detail beyond the target's own optical cutoff.
-   [V: f-number of DPDD targets; check the target MTF actually follows the Airy model.]
+   Measured (secure env, slanted edges on raw): the f/22 targets are blurrier than Airy x pixel
+   aperture, extra Gaussian sigma ~0.7-0.8 px at native resolution. Part of that (optical
+   low-pass filter, pixel aperture) is shared by the f/4 input, so the right extra blur is
+   undecided: `pm` = Airy only (primary), `pmg` = Airy + Gaussian(extra_sigma) (sensitivity).
 
 2. High-band error. Native-resolution detail is exactly what a 1/s-resolution anchor cannot
    contain. H(x) = x - U(D(x)) keeps frequencies above the 1/s Nyquist limit (D = s x s box
@@ -43,8 +46,19 @@ def airy_kernel(wavelength_um: float, fnum: float, pitch_um: float,
     return (k / k.sum()).astype(np.float32)
 
 
+def gaussian_blur(x: torch.Tensor, sigma: float) -> torch.Tensor:
+    if sigma <= 0:
+        return x
+    r = max(1, int(math.ceil(3 * sigma)))
+    t = torch.arange(-r, r + 1, device=x.device, dtype=x.dtype)
+    k = torch.exp(-0.5 * (t / sigma) ** 2)
+    k = (k / k.sum()).view(1, 1, 1, -1).repeat(x.shape[1], 1, 1, 1)
+    x = F.conv2d(F.pad(x, (r, r, 0, 0), mode="reflect"), k, groups=x.shape[1])
+    return F.conv2d(F.pad(x, (0, 0, r, r), mode="reflect"), k.transpose(-1, -2), groups=x.shape[1])
+
+
 def psf_match(pred: torch.Tensor, fnum: float = 22.0, pitch_um: float = DPDD_PITCH_UM,
-              scale: int = 1) -> torch.Tensor:
+              scale: int = 1, extra_sigma_native: float = 0.0) -> torch.Tensor:
     """Blur 1x3xHxW `pred` with the per-channel diffraction PSF of the target capture.
 
     `scale` = downsampling factor of the evaluated resolution (pixel pitch grows by it).
@@ -55,7 +69,8 @@ def psf_match(pred: torch.Tensor, fnum: float = 22.0, pitch_um: float = DPDD_PIT
     weight = torch.stack(ks)[:, None].to(pred.device, pred.dtype)  # 3x1xKxK
     p = K // 2
     x = F.pad(pred, (p, p, p, p), mode="reflect")
-    return F.conv2d(x, weight, groups=3)
+    # optional extra Gaussian blur (sigma in native pixels, scaled to the evaluated resolution)
+    return gaussian_blur(F.conv2d(x, weight, groups=3), extra_sigma_native / scale)
 
 
 def high_band(x: torch.Tensor, s: int) -> torch.Tensor:

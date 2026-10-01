@@ -42,7 +42,7 @@ def main():
     ap.add_argument("--inputs", required=True)
     ap.add_argument("--targets", required=True)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--motion", default="homography", choices=["translation", "euclidean", "affine", "homography"])
+    ap.add_argument("--motion", default="euclidean", choices=["translation", "euclidean", "affine", "homography"])
     ap.add_argument("--levels", type=int, nargs="+", default=[16, 8, 4, 2])
     ap.add_argument("--min-shift", type=float, default=0.3)
     ap.add_argument("--procs", type=int, default=max(1, (os.cpu_count() or 4) // 4))

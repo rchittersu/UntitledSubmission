@@ -29,18 +29,25 @@ class TileSpec:
     overlap: int = 64        # overlap between neighboring tiles (input pixels)
     batch: int = 4           # tiles per forward pass
     blend: str = "linear"    # linear | gaussian | hard | mean
+    offset: int = 0          # shift interior tile starts by this many px (grid-shift consistency test)
 
 
-def grid_positions(length: int, tile: int, overlap: int) -> list[int]:
-    """Tile start positions covering [0, length) with at least `overlap` overlap."""
+def grid_positions(length: int, tile: int, overlap: int, offset: int = 0) -> list[int]:
+    """Tile start positions covering [0, length) with at least `overlap` overlap.
+
+    offset > 0 shifts every interior tile start by -offset (the first tile stays at 0 and the
+    last at length - tile, so their overlaps grow): two runs with offsets 0 and ~stride/2 have
+    disjoint seam lines, which the grid-shift consistency metric exploits.
+    """
     if length <= tile:
         return [0]
     stride = tile - overlap
     if stride <= 0:
         raise ValueError(f"overlap {overlap} must be < tile {tile}")
-    pos = list(range(0, length - tile, stride))
+    offset %= stride
+    pos = [0] + [p for p in range(stride - offset, length - tile, stride) if p > 0]
     pos.append(length - tile)
-    return pos
+    return sorted(set(pos))
 
 
 def blend_window(size: int, overlap: int, mode: str, device,
@@ -92,7 +99,7 @@ def run_tiled(fn: Callable[[torch.Tensor], torch.Tensor], x: torch.Tensor, spec:
     O = min(spec.overlap, T - 1)
     xp = pad_to(x, max(H, T), max(W, T))
     Hp, Wp = xp.shape[-2:]
-    ys, xs = grid_positions(Hp, T, O), grid_positions(Wp, T, O)
+    ys, xs = grid_positions(Hp, T, O, spec.offset), grid_positions(Wp, T, O, spec.offset)
     coords = [(iy, ix) for iy in range(len(ys)) for ix in range(len(xs))]
 
     Ts = T * scale

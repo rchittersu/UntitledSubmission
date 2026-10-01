@@ -38,7 +38,7 @@ PRECISION = {"fp32": None, "fp16": torch.float16, "bf16": torch.bfloat16}
 def worker(rank: int, world: int, device: torch.device, a: argparse.Namespace, todo: list) -> None:
     items = shard(todo, rank, world, key=lambda r: r["input"].stat().st_size)
     model = models.build(a.model, a.config, device, channels_last=a.channels_last, compile=a.compile)
-    spec = TileSpec(a.tile, a.overlap, a.tile_batch, a.blend)
+    spec = TileSpec(a.tile, a.overlap, a.tile_batch, a.blend, a.grid_offset)
     amp = PRECISION[a.precision]
     in_bits = a.input_bits if a.input_bits is not None else model.spec.get("input_bits")
     out_dtype = np.uint16 if a.save_bits == 16 else np.uint8
@@ -82,6 +82,7 @@ def main():
     ap.add_argument("--overlap", type=int, default=64)
     ap.add_argument("--tile-batch", type=int, default=4)
     ap.add_argument("--blend", default="linear", choices=["linear", "gaussian", "hard", "mean"])
+    ap.add_argument("--grid-offset", type=int, default=0, help="shift the tile grid (grid-shift consistency runs)")
     ap.add_argument("--precision", default="fp32", choices=list(PRECISION))
     ap.add_argument("--channels-last", action="store_true")
     ap.add_argument("--compile", action="store_true", help="torch.compile (pays off with fixed tile size)")

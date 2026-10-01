@@ -3,6 +3,12 @@
 1. Low-frequency drift: tone/color error that varies across the image.
 2. Seams: step discontinuities of the error along a method's own tile boundaries.
 3. Semantic/texture consistency: TODO (DINOv2-matched patch pairs), see plan/evaluation.md 4.3.
+5. Grid-shift consistency: the same model run with two tile grids offset by ~half a stride.
+   The difference of the two outputs contains no image content, only tiling effects, so it
+   measures (a) how much the result depends on the arbitrary grid (`gs_mad`, `gs_psnr`) and
+   (b) seams as steps of that difference at either grid's seam lines (`gs_seam_step`, 8-bit
+   units; `gs_seam_ratio` vs. lines away from both grids). Preferred over `seam_*`, whose
+   content-dependent floor on untiled images is ~1.2 with a wide spread (measured on DPDD).
 4. Statistical: per-cell sharpness / noise / spectral slope compared with the target; the
    *spread* of the log-ratio across cells measures inconsistency (a uniform bias is not).
 
@@ -135,4 +141,32 @@ def stat_consistency(pred: torch.Tensor, gt: torch.Tensor, cell: int = 256) -> d
         out[f"{k}_lr_abs"], out[f"{k}_lr_std"] = lr.abs().mean().item(), lr.std().item()
     d = sp["slope"] - sg["slope"]
     out["slope_err_abs"], out["slope_err_std"] = d.abs().mean().item(), d.std().item()
+    return out
+
+
+# ---------------------------------------------------------------- 5. grid-shift consistency
+def grid_shift_metrics(pred: torch.Tensor, pred_shift: torch.Tensor, info: dict, info_shift: dict,
+                       crop: int = 0, w: int = 16, block: int = 64) -> dict[str, float]:
+    d = luma(pred - pred_shift)
+    mse = (pred - pred_shift).pow(2).mean().item()
+    out = {"gs_mad": (pred - pred_shift).abs().mean().item() * 255,
+           "gs_psnr": float("inf") if mse == 0 else 10 * math.log10(1 / mse)}
+    ya, xa = seam_lines(info, crop)
+    yb, xb = seam_lines(info_shift, crop)
+    rows, cols = sorted(set(ya + yb)), sorted(set(xa + xb))
+    if not rows and not cols:
+        return {**out, "gs_seam_step": float("nan"), "gs_seam_ratio": float("nan")}
+
+    def both(r, c):
+        vals = [v for v in (_step_at(d, c, w, block), _step_at(d.transpose(-1, -2), r, w, block)) if v is not None]
+        return torch.stack(vals).mean() if vals else None
+
+    def away(lines: list[int], size: int) -> list[int]:  # controls: midpoints between all seam lines
+        pts = sorted(set([0] + lines + [size]))
+        return [int((a + b) // 2) for a, b in zip(pts[:-1], pts[1:]) if b - a > 4 * w]
+
+    seam = both(rows, cols)
+    ctrl = both(away(rows, d.shape[-2]), away(cols, d.shape[-1]))
+    out["gs_seam_step"] = seam.item() * 255 if seam is not None else float("nan")
+    out["gs_seam_ratio"] = (seam / ctrl).item() if seam is not None and ctrl is not None and ctrl > 0 else float("nan")
     return out

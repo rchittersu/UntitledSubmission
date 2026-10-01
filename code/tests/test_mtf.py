@@ -38,3 +38,10 @@ def test_theory_mtf_shape():
     assert abs(m.theory_mtf(0.0) - 1) < 1e-9
     assert m.theory_mtf(0.5) < 1e-9                         # f/22 diffraction cutoff 0.44 c/px < Nyquist
     assert m.theory_mtf(0.5, fnum=4.0) > 0.4                # f/4 has no diffraction limit below Nyquist
+
+
+def test_in_focus_mapping():
+    mask = np.zeros((1120, 1680), bool)
+    mask[100, 200] = True
+    assert m.in_focus(mask, 100 * 4 + 12, 200 * 4 + 12)
+    assert not m.in_focus(mask, 500 * 4 + 12, 200 * 4 + 12)

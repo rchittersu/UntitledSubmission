@@ -234,7 +234,7 @@ def test_run_matrix_end_to_end(tmp_path):
                  "targets": {1: f"{D}/x1/targets", 4: f"{D}/x4/targets"}},
         "results": str(tmp_path / "res"),
         "run": {"tile": 32, "overlap": 8, "tile_batch": 2},
-        "eval": {"tag": "t", "metrics": "psnr,ssim,seam", "crop_native": 8},
+        "eval": {"tag": "t", "metrics": "psnr,ssim,seam,gridshift", "crop_native": 8},
         "pipelines": [
             {"group": "gap", "name": "id @x{s}", "for": {"s": [4, 1]}, "steps": [{"model": "identity", "scale": "{s}"}]},
             {"group": "up", "name": "id @x4 + {up}", "for": {"up": ["bicubic_x4", "identity"]},
@@ -246,6 +246,7 @@ def test_run_matrix_end_to_end(tmp_path):
     cmd = [sys.executable, str(ROOT / "scripts" / "run_matrix.py"), str(ef), "--gpus", "cpu", "--workers", "0"]
     out = subprocess.run(cmd, check=True, capture_output=True, text=True).stdout
     assert "4 pipelines, 5 unique steps" in out           # x4 identity whole is shared by both "up" rows
+    assert "@shift" in out                                # tiled last steps get a shifted-grid twin
     gap = (tmp_path / "res" / "tables" / "gap.md").read_text()
     assert "id @x1" in gap and "id @x4" in gap
     up = (tmp_path / "res" / "tables" / "up.md").read_text()
@@ -254,5 +255,39 @@ def test_run_matrix_end_to_end(tmp_path):
     assert len(p["steps"]) == 2 and p["n_images"] == 2
     # identity @x4 + identity would be evaluated at x4 (no upsampling): scale bookkeeping
     assert json.loads((tmp_path / "res" / "pipelines" / "id_@x4_+_identity__t.json").read_text())["settings"]["scale"] == 4
+    pj = sorted(str(f) for f in (tmp_path / "res" / "pipelines").glob("id_@x*_t*.json")) or \
+        sorted(str(f) for f in (tmp_path / "res" / "pipelines").glob("*.json"))
+    tab = subprocess.run([sys.executable, str(ROOT / "scripts" / "summarize.py"), *pj, "--ci",
+                          "--ref", json.loads(open(pj[0]).read())["label"], "--cols", "psnr,ssim"],
+                         check=True, capture_output=True, text=True).stdout
+    assert "Paired differences" in tab and "[" in tab
     out2 = subprocess.run(cmd, check=True, capture_output=True, text=True).stdout   # resumable
     assert "run_model.py" not in out2 and "cached" in out2
+
+
+def test_grid_offset_positions_cover_and_shift():
+    for L, T, O in [(1120, 512, 64), (1680, 512, 64), (700, 256, 32)]:
+        stride = T - O
+        a, b = grid_positions(L, T, O), grid_positions(L, T, O, stride // 2)
+        for p in (a, b):
+            assert p[0] == 0 and p[-1] == L - T
+            assert all(0 < q - r <= stride for r, q in zip(p, p[1:]))
+        assert set(a[1:-1]).isdisjoint(b[1:-1])           # interior seams differ
+
+
+def test_grid_shift_metric():
+    from uhdd.metrics.consistency import grid_shift_metrics
+    x = rand_img(300, 420)
+    spec, spec_s = TileSpec(128, 32, 4, "hard"), TileSpec(128, 32, 4, "hard", offset=48)
+    # tile-local model: identical outputs on both grids -> no difference at all
+    y1, i1 = run_tiled(lambda t: t * 0.9, x, spec)
+    y2, i2 = run_tiled(lambda t: t * 0.9, x, spec_s)
+    m = grid_shift_metrics(y1, y2, i1, i2)
+    assert m["gs_mad"] < 1e-4 and m["gs_psnr"] > 80
+    # per-tile brightness offsets (context-dependent model) -> steps at seams
+    offs = iter(torch.linspace(-0.05, 0.05, 1000)[torch.randperm(1000)].tolist())
+    net = lambda t: t + torch.tensor([next(offs) for _ in range(t.shape[0])]).view(-1, 1, 1, 1)
+    y1, i1 = run_tiled(net, x, spec)
+    y2, i2 = run_tiled(net, x, spec_s)
+    m = grid_shift_metrics(y1, y2, i1, i2)
+    assert m["gs_mad"] > 1 and m["gs_seam_ratio"] > 3

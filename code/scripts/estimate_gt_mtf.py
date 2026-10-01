@@ -9,6 +9,10 @@ Defocused edges have low MTF, so per image we keep the sharpest edges (envelope)
 curve. Theory: diffraction (circular aperture, lambda, N, pixel pitch) x pixel-aperture sinc.
 
   python estimate_gt_mtf.py --zip cr2.zip --names a,b,c --out mtf.json [--procs 8]
+  # focal-plane only (relative f/22 vs f/4 blur): masks from dp_maps.py on the official DP views;
+  # for f/22 targets pass the paired f/4 stems so both use the same focal-plane regions
+  python estimate_gt_mtf.py --zip cr2.zip --names <f4 stems> --focus-dir DP --out f4_focus.json
+  python estimate_gt_mtf.py --zip cr2.zip --names <f22 stems> --focus-of <f4 stems> --focus-dir DP --out f22_focus.json
 """
 import argparse
 import json
@@ -142,7 +146,25 @@ def find_edges(g, k=150, win=24, min_sep=40):
     return picked
 
 
-def analyse_cr2(path, k=150, roi=96):
+def load_focus(focus_dir, stem):
+    """Focal-plane mask from dp_maps.py (1680x1120, DP views of the f/4 capture) or None."""
+    if not focus_dir:
+        return None
+    import cv2
+    p = os.path.join(focus_dir, f"{stem}_focus.png")
+    m = cv2.imread(p, cv2.IMREAD_GRAYSCALE)
+    return None if m is None else m > 127
+
+
+def in_focus(mask, raw_y, raw_x, crop=(12, 12), f=4, r=2):
+    """Raw-sensor pixel -> native (minus develop_raw.py CROP offset) -> DP grid (/4); any focus within r."""
+    y, x = (raw_y - crop[0]) // f, (raw_x - crop[1]) // f
+    if not (0 <= y < mask.shape[0] and 0 <= x < mask.shape[1]):
+        return False
+    return bool(mask[max(0, y - r):y + r + 1, max(0, x - r):x + r + 1].any())
+
+
+def analyse_cr2(path, k=150, roi=96, focus=None):
     import rawpy
     with rawpy.imread(path) as r:
         raw = r.raw_image_visible.astype(np.float32)
@@ -154,7 +176,9 @@ def analyse_cr2(path, k=150, roi=96):
     H, W = raw.shape
     g = _green_halfres(raw[: H // 2 * 2, : W // 2 * 2], mask[: H // 2 * 2, : W // 2 * 2])
     res = []
-    for r0, c0, tr in find_edges(g, k):
+    for r0, c0, tr in find_edges(g, k if focus is None else 4 * k):
+        if focus is not None and not in_focus(focus, 2 * r0, 2 * c0):
+            continue
         y0, x0 = max(0, 2 * r0 - roi // 2), max(0, 2 * c0 - roi // 2)
         sub = raw[y0:y0 + roi, x0:x0 + roi]
         m = mask[y0:y0 + roi, x0:x0 + roi] > 0
@@ -172,11 +196,11 @@ def analyse_cr2(path, k=150, roi=96):
 
 
 def _job(args):
-    zf, stem, k = args
+    zf, stem, k, focus_dir, focus_stem = args
     with tempfile.TemporaryDirectory() as tmp:
         with zipfile.ZipFile(zf) as z:
             p = z.extract(f"CR2/{stem}.CR2", tmp)
-        return stem, analyse_cr2(p, k)
+        return stem, analyse_cr2(p, k, focus=load_focus(focus_dir, focus_stem or stem))
 
 
 def summarize(edges_per_image, top_frac=0.15):
@@ -199,10 +223,15 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--k", type=int, default=150, help="max candidate edges per image")
     ap.add_argument("--procs", type=int, default=8)
+    ap.add_argument("--focus-dir", help="dp_maps.py output: keep only edges on the f/4 focal plane")
+    ap.add_argument("--focus-of", help="comma-separated stems whose focus mask applies to --names, in order "
+                                       "(e.g. the f/4 stems when --names are the f/22 targets)")
     a = ap.parse_args()
     stems = a.names.split(",")
+    fo = a.focus_of.split(",") if a.focus_of else [None] * len(stems)
+    assert len(fo) == len(stems), "--focus-of must list one stem per --names entry"
     with ProcessPoolExecutor(a.procs) as ex:
-        res = dict(ex.map(_job, [(a.zip, s, a.k) for s in stems]))
+        res = dict(ex.map(_job, [(a.zip, s, a.k, a.focus_dir, f) for s, f in zip(stems, fo)]))
     json.dump(res, open(a.out, "w"))
     curve, m50, n = summarize(list(res.values()))
     print(f"{n} images, edges/image median {int(np.median([len(v) for v in res.values()]))}, envelope MTF50 {m50:.3f} c/px")
