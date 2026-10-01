@@ -142,6 +142,19 @@ python code/scripts/run_model.py --model bicubic_x4 --inputs $R/x4/restormer_t51
 
 Paste `summarize.py` tables (and `register_pairs.py` shift statistics) into the handoff report.
 
+## Native test set from raw and optics checks
+
+```bash
+# CR2 -> native 16-bit PNG matching the official release's look: fit once on train scenes, apply to any scenes
+python code/scripts/develop_raw.py fit --zip cr2.zip --official <official_train_source_dir> <official_train_target_dir> --map map.json
+python code/scripts/develop_raw.py eval --zip cr2.zip --official <official_test_dirs> --map map.json      # held-out PSNR at 1/4 scale
+python code/scripts/develop_raw.py develop --zip cr2.zip --map map.json --out <dir> --names <stem,stem,...>
+# slanted-edge MTF on the raw green photosites (is the f/22 target diffraction-limited?)
+python code/scripts/estimate_gt_mtf.py --zip cr2.zip --names <stem,...> --out mtf.json
+```
+Official DPDD pairs have *different* file stems (blurry `1P0A0917` <-> sharp `1P0A0916`); pair them by sorted order and
+rename the targets to the blurry stems before using `run_model`/`evaluate`. Needs `rawpy`.
+
 ## Efficiency notes
 
 - `--gpus all`: one process per GPU over a size-balanced shard of images; no inter-GPU sync.

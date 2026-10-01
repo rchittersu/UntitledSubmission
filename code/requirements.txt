@@ -10,3 +10,4 @@ easydict        # IFAN config
 safetensors     # IFAN weights mirror
 pyiqa           # lpips, dists, musiq, maniqa, clipiqa (optional for other metrics)
 pytest
+rawpy            # develop_raw.py, estimate_gt_mtf.py (CR2 -> linear RGB / raw Bayer)
