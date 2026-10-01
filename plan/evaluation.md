@@ -1,13 +1,30 @@
 # Evaluation plan — main comparisons and metrics
 
-Status: **draft v1 (2026-10-01)**, outside env. Secure env: comment/amend via patch (edit this file or answer in the report).
+Status: **v2 (2026-10-02)** — updated with the first secure-env results (`handoff/from_secure/2026-10-01_p1-eval.md`) and outside checks on the official 1680×1120 data. Outside env. Secure env: comment/amend via patch (edit this file or answer in the report).
 Legend: **[D]** decision needed from user, **[V]** fact to verify, **[P1..P4]** priority.
+
+---
+
+## Status and decisions (2026-10-02)
+
+**Findings so far** (secure P1 partial: 4 models, 37 indoor native scenes; outside: official 1680×1120 test/val):
+- **Resolution gap confirmed** (all 4 models): 1/4 → native with 512 tiles costs 1.4–1.7 dB PSNR and 0.11–0.16 LPIPS; high-band error goes from −1.8…−3.2 dB to +1.0…+3.1 dB.
+- **Fidelity vs. perception split at native res**: Restormer ×4 + bicubic beats native patch-wise Restormer in PSNR (26.12 vs 25.19) but is far worse in LPIPS (0.449 vs 0.253). Neither existing route is good — this is the paper's gap; candidate teaser numbers.
+- **Tile context is not the bottleneck**: 512 vs 1024 tiles change fidelity by < 0.06 dB for every model. The dominant cause of the gap is out-of-distribution blur size (CoC ×4), not missing context. Seams are a secondary effect (see grid-shift metric). → Intro should lead with blur-size OOD; do not sell Stage 2 mainly on seam removal.
+
+**Decisions** (protocol v2, eval tag `dpdd2` in `code/experiments/dpdd_p1.yaml`):
+1. **Registration = euclidean** (was homography). On the official 1680×1120 test pairs, translation/euclidean ECC give median 0.41/0.58 px (max 3.8/4.3 px); affine/homography give median 1.3/2.1 px, max 18/30 px for a negligible correlation gain (e.g. `1P0A2513`: 0.5 vs 19.5 px, ECC 0.953 vs 0.962). The 25–79 px native shifts in P1 were homography overfitting to the f/4–f/22 blur difference, not motion. Native targets must be re-registered.
+2. **Seam metric = grid-shift consistency** (`gridshift`: same model on a second tile grid offset by half a stride; `gs_psnr`, `gs_mad`, `gs_seam_ratio`). The old `seam_ratio` has a content-driven floor of 1.19 (median 0.99, p10–p90 0.62–1.76) on *untiled* images, so P1's 1.09–1.42 values carry no signal. On real DPDD (DRBNet, 1680×1120, 512 tiles), `gs_seam_ratio` = 2.9 vs old `seam_ratio` = 1.06.
+3. **PSF matching**: `pm` (Airy only) stays primary; `pmg` (Airy + Gaussian σ = 0.8 px native) as sensitivity. Reason: the measured extra target blur (σ ≈ 0.7–0.8 px) includes OLPF/pixel blur that the f/4 input shares; the relevant quantity is f/22 relative to in-focus f/4. Outside check at 1680×1120: even on the f/4 focal plane (DP disparity ≈ 0) the f/22 target is ~2× sharper in Laplacian energy (log gap 0.70 vs 1.99 off-plane), so the target is not "too blurry" relative to in-focus f/4 at that scale. Native answer pending: `estimate_gt_mtf.py --focus-dir`.
+4. **Blur-level stratification from DP views** (`dp_maps.py`, metric `blurbins`): bins on smoothed |DP disparity| at 1680×1120: [0,0.4) focal plane, [0.4,1.5), [1.5,3.5), [3.5,∞) DP px (≈ quartiles on the test set). Validated: per-image Spearman(|disparity|, log sharpness gap target/input) median 0.76. Per-bin PSNR is content-confounded (blurry input: 25.7 / 23.6 / 23.3 / 26.0 dB — strongly defocused regions are often smooth), so report per-bin **gains over the blurry input** (`summarize.py --ref`).
+5. **Statistics**: per-image paired differences with 95 % bootstrap CIs (`summarize.py --ci --ref`) for every claim; n = 37 (→ 76 with outdoor raw).
+6. **Native test set**: the only full-resolution DPDD data is raw CR2 (indoor 29.5 GB, outdoor 30.4 GB). The authors' processed release (`dd_dp_dataset_canon.zip`, 15.8 GB) is 1680×1120 — the same files as the Hugging Face copy used in P1 (identical layout and sizes). So the native set must be developed from raw (D3); absolute numbers are not comparable to published DPDD numbers, comparisons within our protocol are.
 
 ---
 
 ## 0. Key facts that shape the protocol
 
-- **DPDD full resolution is released**: 500 scenes, Canon EOS 5D Mark IV, 6720×4480 (30 MP), 16-bit PNG + raw CR2, split 70/15/15 → test = 76 scenes. The standard benchmark resolution 1680×1120 is **exactly 1/4 of native** → Stage 1 at 4× down = the standard DPDD protocol, so every published pretrained model is a valid anchor out of the box. (f/4 blurry, f/22 sharp — verified in the paper)
+- **DPDD full resolution exists only as raw CR2** (correction 2026-10-02; the processed 16-bit PNG release is 1680×1120): 500 scenes, Canon EOS 5D Mark IV, 6720×4480 (30 MP), split 70/15/15 → test = 76 scenes. The standard benchmark resolution 1680×1120 is **exactly 1/4 of native** → Stage 1 at 4× down = the standard DPDD protocol, so every published pretrained model is a valid anchor out of the box. (f/4 blurry, f/22 sharp — verified in the paper)
 - **How DPDD 1680×1120 was made is not documented.** The paper only says images are downscaled to 1680×1120 before training. The official DPDNet code (`DPDNet/data.py`, test mode) applies `cv2.resize(img, (1680, 1120))` = cv2 default **INTER_LINEAR, no antialiasing** (aliases fine detail; if the release was made this way the standard benchmark itself contains aliasing). Verified facts from the paper: blurry f/4, sharp f/22, tripod + remote trigger, same focus distance/focal length, 16-bit sRGB PNG processed from CR2. Metrics in their code: PSNR/SSIM on float [0,1] 16-bit, `compare_ssim(..., multichannel=True)` → our `fidelity.ssim` matches it. Resolve empirically: `prepare_scales.py --reference` compares all filters against the official release (>~60 dB = identical pipeline). If none matches (e.g. resized during raw export in Canon DPP), use our own `area` downscaling for all resolution-gap experiments (grid-consistent with native) and the official files only for reproducing published numbers.
 - **Ground truth is diffraction-limited at native res.** Airy disk diameter ≈ 2.44·λ·N = 2.44·0.55µm·22 ≈ 30µm; 5D IV pixel pitch ≈ 5.36µm → **~5–6 px blur in the "sharp" GT** at native res (≈1.4 px at 1/4 res, hence invisible in the standard protocol). A sharper-than-GT output is penalized by PSNR/SSIM. Must be handled explicitly (§3.1).
 - **Misalignment** between the two captures scales ×4 at native res (a ~1 px error at 1680×1120 becomes ~4 px). Needs registration (§3.2).

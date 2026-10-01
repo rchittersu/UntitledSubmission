@@ -17,10 +17,13 @@ run:                     # run_model.py defaults, overridable per step
   precision: fp32
 
 eval:
-  tag: dpdd
-  metrics: psnr,ssim,mae,pm,hb,lpips,dists,drift,seam,stats
+  tag: dpdd2             # v2 (2026-10-02): euclidean-registered targets, gridshift/pmg/blurbins; v1 tag was "dpdd"
+  metrics: psnr,ssim,mae,pm,pmg,hb,lpips,dists,drift,seam,stats,gridshift,blurbins
   crop_native: 64        # border crop at native res (divided by the evaluated scale)
-  table_cols: psnr,pm_psnr,ssim,pm_ssim,lpips,dists,hb_nmse_db,lf_drift,seam_ratio,sharp_lr_std,pipeline_time_s,peak_mem_gb
+  options:
+    dp_maps: "${UHDD_DATA}/dpdd_native/dp_maps"   # dp_maps.py on the official test_l/test_r views (1680x1120)
+    pm_sigma: 0.8                                   # extra Gaussian (native px) for pmg
+  table_cols: psnr,pm_psnr,pmg_psnr,ssim,lpips,dists,hb_nmse_db,lf_drift,gs_psnr,gs_seam_ratio,psnr_b0,psnr_b3,pipeline_time_s,peak_mem_gb
 
 pipelines:
   # Table 1 -- resolution gap: same model, same tile size, at 1/4, 1/2 and native resolution
