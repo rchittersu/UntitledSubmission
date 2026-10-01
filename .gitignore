@@ -15,3 +15,6 @@ Template/main.pdf
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# Local datasets (never commit data; repo is public)
+dataset/
