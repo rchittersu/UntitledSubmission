@@ -13,7 +13,13 @@ Legend: **[D]** decision needed from user, **[V]** fact to verify, **[P1..P4]** 
 - **Tile context is not the bottleneck**: 512 vs 1024 tiles change fidelity by < 0.06 dB for every model. The dominant cause of the gap is out-of-distribution blur size (CoC ×4), not missing context. Seams are a secondary effect (see grid-shift metric). → Intro should lead with blur-size OOD; do not sell Stage 2 mainly on seam removal.
 
 **Decisions** (protocol v2, eval tag `dpdd2` in `code/experiments/dpdd_p1.yaml`):
-1. **Registration = euclidean** (was homography). On the official 1680×1120 test pairs, translation/euclidean ECC give median 0.41/0.58 px (max 3.8/4.3 px); affine/homography give median 1.3/2.1 px, max 18/30 px for a negligible correlation gain (e.g. `1P0A2513`: 0.5 vs 19.5 px, ECC 0.953 vs 0.962). The 25–79 px native shifts in P1 were homography overfitting to the f/4–f/22 blur difference, not motion. Native targets must be re-registered.
+1. **Registration = translation** (was homography). Official 1680×1120 test pairs: translation/euclidean
+   ECC median 0.41/0.58 px (max 3.8/4.3); affine/homography median 1.3/2.1 px, max 18/30 px for a
+   negligible correlation gain (e.g. `1P0A2513`: 0.5 vs 19.5 px, ECC 0.953 vs 0.962). **Native, on the raws of
+   the 37 indoor test pairs** (outside, plain libraw development): translation median 1.5 px, max 6.6,
+   none > 10 px; euclidean median 2.1, max 11.9; homography median 6.8, max 114, **12/37 > 10 px** (=
+   the secure P1 count) — with identical ECC. The 25–79 px P1 shifts were homography overfitting the
+   f/4–f/22 blur difference, not motion. Native targets must be re-registered.
 2. **Seam metric = grid-shift consistency** (`gridshift`: same model on a second tile grid offset by half a stride; `gs_psnr`, `gs_mad`, `gs_seam_ratio`). The old `seam_ratio` has a content-driven floor of 1.19 (median 0.99, p10–p90 0.62–1.76) on *untiled* images, so P1's 1.09–1.42 values carry no signal. On real DPDD (DRBNet, 1680×1120, 512 tiles), `gs_seam_ratio` = 2.9 vs old `seam_ratio` = 1.06.
 3. **PSF matching is not used as primary — plain PSNR/SSIM are.** Measured outside on the raw
    CR2s of the 37 indoor test pairs (`code/scripts/paired_edge_mtf.py`): on the *same* 336 focal-plane

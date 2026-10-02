@@ -5,8 +5,8 @@ report `handoff/from_secure/2026-10-01_p1-eval.md` (applied outside, thank you �
 Read `plan/evaluation.md` → "Status and decisions (2026-10-02)" first: it explains *why* each step below exists.
 
 Summary of what changed outside (all CPU-tested, 42 tests; `git pull` to get them):
-- registration default **euclidean** (homography overfits the f/4–f/22 blur difference: your 25–79 px
-  shifts are ~0.4 px on the official 1680×1120 pairs with translation/euclidean);
+- registration default **translation** (homography overfits the f/4–f/22 blur difference: on the same
+  37 indoor raws outside, translation gives median 1.5 / max 6.6 native px vs homography 6.8 / 114);
 - new metric **`gridshift`** (content-free seams / tiling sensitivity; the old `seam_ratio` is noise);
 - **DP defocus maps** (`code/scripts/dp_maps.py`) → metric **`blurbins`** and `estimate_gt_mtf.py --focus-dir`;
 - PSF matching dropped as primary (your MTF finding, followed up outside with a paired focal-plane
@@ -47,18 +47,18 @@ python code/scripts/dp_maps.py --left <test_l/source> --right <test_r/source> --
 Map names are the **blurry-input stems**, matching the native set. Report the printed focal-plane
 fraction line. (Outside on all 76 test images: median 0.129, min 0.007, max 0.721.)
 
-## 3. Re-register the native targets (euclidean)
+## 3. Re-register the native targets (translation)
 
 ```bash
 D=$UHDD_DATA/dpdd_native
 mv $D/x1 $D/x1_homography                     # keep v1 for the comparison below
-python code/scripts/register_pairs.py --inputs $D/inputs --targets $D/targets --out $D/x1 --motion euclidean --procs 8
+python code/scripts/register_pairs.py --inputs $D/inputs --targets $D/targets --out $D/x1 --motion translation --procs 8
 python code/scripts/prepare_scales.py --inputs $D/inputs --targets $D/x1/targets --masks $D/x1/masks \
     --out $D --factors 2 4 --filter area --overwrite
 ```
 Report: the summary line, and a per-image table for the 12 images that had > 10 px with homography:
-`name | homography shift (v1) | euclidean shift (v2) | ECC v1 | ECC v2`.
-Expected (from the official 1680×1120 pairs): euclidean shifts of a few native px at most. If any
+`name | homography shift (v1) | translation shift (v2) | ECC v1 | ECC v2`.
+Expected (outside, same raws, plain development): median 1.5 px, max 6.6 px (`1P0A2350`, ECC 0.85). If any
 image still has > 20 px, flag it and describe what you see (do not drop it).
 
 **Before/after check (one model)**: evaluate the *existing* `x1__restormer_dpdd@t512o64` outputs

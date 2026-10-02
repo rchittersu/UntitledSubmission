@@ -9,11 +9,12 @@ influence of the defocus difference between the two images. The target is warped
 estimated motion moves any image corner by more than `min_shift` pixels, to avoid adding
 interpolation blur to already aligned pairs.
 
-Motion model: euclidean (shift + rotation) by default. On the official DPDD 1680x1120 test pairs
-(76) translation/euclidean ECC give corner shifts of median 0.41/0.58 px, max 3.8/4.3 px, while
-affine/homography report median 1.3/2.1 px, max 18/30 px for a negligible gain in correlation
-(e.g. 1P0A2513: 0.5 px vs 19.5 px, ECC 0.953 vs 0.962): the extra degrees of freedom fit the
-blur difference between the f/4 and f/22 captures, not real motion (tripod, fixed focus/zoom).
+Motion model: translation by default. On the official DPDD 1680x1120 test pairs (76),
+translation/euclidean ECC give corner shifts of median 0.41/0.58 px (max 3.8/4.3), affine/homography
+median 1.3/2.1 px (max 18/30). At native resolution on the raws of the 37 indoor test pairs:
+translation median 1.5 px (max 6.6, none > 10 px), euclidean 2.1 (max 11.9), homography 6.8 (max
+114, 12 images > 10 px) with identical ECC correlation to 3-4 decimals. Extra degrees of freedom fit
+the blur difference between the f/4 and f/22 captures (tripod, fixed focus/zoom), not motion.
 """
 from __future__ import annotations
 
@@ -28,7 +29,7 @@ MOTION = {"translation": cv2.MOTION_TRANSLATION, "euclidean": cv2.MOTION_EUCLIDE
 
 @dataclass
 class RegConfig:
-    motion: str = "euclidean"  # see note below
+    motion: str = "translation"  # see note below
     levels: tuple[int, ...] = (16, 8, 4, 2)   # downsampling factors, coarse to fine
     iters: int = 100
     eps: float = 1e-6
