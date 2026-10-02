@@ -6,7 +6,11 @@
 Experiment file (see experiments/dpdd_p1.yaml):
   data:     inputs/targets/masks folder per scale factor (1 = native, 4 = 1/4 resolution)
   results:  output root
-  run:      default run_model.py options (tile, overlap, tile_batch, blend, precision, ...)
+  run:      default run_model.py options (tile, overlap, tile_batch, blend, precision, ...).
+            Without `tile` (in run or step), or with tile: paper, each step uses its model's paper inference
+            setup (uhdd.tiling.default_tiling: registry paper_input / paper_tile) at that step's input size;
+            without `overlap`, overlap = tile * run.overlap_ratio (default 1/8). Resolved values are part of the
+            cache key, so changing a default creates new step folders.
   eval:     metrics, native border crop (divided by the evaluated scale), extra options
   pipelines: list of {group, name, for, steps}; `for` is a grid of template variables that
              are substituted into name/steps with str.format, e.g.
@@ -72,10 +76,38 @@ def step_tag(step: dict, run: dict) -> str:
     return re.sub(r"[^A-Za-z0-9_.@+-]", "_", tag)
 
 
+def native_hw(exp: dict) -> tuple[int, int]:
+    """(H, W) of the native inputs: data.native_hw if given, else the first native input's header."""
+    if "native_hw" in exp["data"]:
+        return tuple(exp["data"]["native_hw"])
+    from PIL import Image
+    first = next(iter(sorted(list_images(exp["data"]["inputs"][1]).values())))
+    with Image.open(first) as im:
+        return im.size[1], im.size[0]
+
+
+def resolve_tiling(st: dict, run: dict, spec: dict, hw: tuple[int, int]) -> dict:
+    """Fill tile / overlap of a step: explicit values win; else the model's paper setup; overlap = tile * ratio."""
+    from uhdd.tiling import OVERLAP_RATIO, default_tiling
+    st = dict(st)
+    ratio = float(run.get("overlap_ratio", OVERLAP_RATIO))
+    tile = st.get("tile", run.get("tile"))
+    if tile is None or tile == "paper":
+        t, o = default_tiling(spec, hw, ratio)
+        st["tile"] = t
+        st.setdefault("overlap", run.get("overlap", o))
+    else:
+        st["tile"] = int(tile)
+        if st.get("overlap", run.get("overlap")) is None:
+            st["overlap"] = int(round(st["tile"] * ratio / 2)) * 2
+    return st
+
+
 def plan(exp: dict, model_cfg: dict) -> list[dict]:
     """Resolve each pipeline into concrete steps with input/output folders and scales."""
     root = Path(exp["results"])
     run = exp.get("run", {})
+    hw1 = native_hw(exp)
     jobs = []
     for p in expand_pipelines(exp["pipelines"]):
         scale = int(p["steps"][0]["scale"])
@@ -85,6 +117,7 @@ def plan(exp: dict, model_cfg: dict) -> list[dict]:
         for st in p["steps"]:
             if st["model"] not in model_cfg:
                 raise KeyError(f"pipeline {p['name']}: unknown model {st['model']}")
+            st = resolve_tiling(st, run, model_cfg[st["model"]], (hw1[0] // scale, hw1[1] // scale))
             key += "__" + step_tag(st, run)
             out = root / "steps" / key
             opts = {k: st.get(k, run.get(k)) for k in RUN_KEYS if st.get(k, run.get(k)) is not None}
@@ -120,7 +153,7 @@ def main():
     a = ap.parse_args()
 
     exp = _expand(yaml.safe_load(Path(a.experiment).read_text()))
-    exp["data"] = {k: {int(s): v for s, v in d.items()} for k, d in exp["data"].items()}
+    exp["data"] = {k: ({int(s): v for s, v in d.items()} if isinstance(d, dict) else d) for k, d in exp["data"].items()}
     model_cfg = load_config(a.config)
     jobs = plan(exp, model_cfg)
     if a.only:

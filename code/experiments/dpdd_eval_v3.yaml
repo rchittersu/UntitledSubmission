@@ -11,13 +11,15 @@ data:
   inputs:  {1: "${UHDD_DATA}/dpdd_native_v2/inputs", 2: "${UHDD_DATA}/dpdd_native_v2/x2/inputs", 4: "${UHDD_DATA}/dpdd_native_v2/x4/inputs"}
   targets: {1: "${UHDD_DATA}/dpdd_native_v2/x1/targets", 2: "${UHDD_DATA}/dpdd_native_v2/x2/targets", 4: "${UHDD_DATA}/dpdd_native_v2/x4/targets"}
   masks:   {1: "${UHDD_DATA}/dpdd_native_v2/x1/masks", 2: "${UHDD_DATA}/dpdd_native_v2/x2/masks", 4: "${UHDD_DATA}/dpdd_native_v2/x4/masks"}
+  native_hw: [4480, 6720]
 
 results: "${UHDD_RESULTS}/dpdd_v2"
 
+# Tiling: no global tile -> every step uses its model's paper inference setup (registry paper_input / paper_tile,
+# docs/evaluation.md "Tiling"): DPDD deblurrers whole at x4, 1120-px tiles at x2/x1; SwinIR 400, HAT 512,
+# OSEDiff 128 LR px; bicubic whole. Overlap = tile / 8 for everyone. Batch: registry tile_batch, else 2 / 4.
 run:
-  tile: 512
-  overlap: 64
-  tile_batch: 8
+  overlap_ratio: 0.125
   blend: linear
   precision: fp32
 
@@ -36,36 +38,41 @@ pipelines:
       - {model: identity, scale: 1, tile: 0}
 
   - group: g1_native_patchwise
-    name: "{m} native t{t}"
-    for: {m: [restormer_dpdd, lakdnet_dpdd_l, drbnet_single, ifan, bokehlicious_deblur], t: [512]}
+    name: "{m} native (paper tiling)"
+    for: {m: [restormer_dpdd, lakdnet_dpdd_l, drbnet_single, ifan, bokehlicious_deblur]}
     steps:
-      - {model: "{m}", scale: 1, tile: "{t}", tile_batch: 2}
+      - {model: "{m}", scale: 1}
+
+  - group: g1_tile_ablation           # 512 tiles = P1 setting (supplementary: tile size does not matter)
+    name: "{m} native t512"
+    for: {m: [restormer_dpdd, drbnet_single]}
+    steps:
+      - {model: "{m}", scale: 1, tile: 512, tile_batch: 2}
 
   # A. retrained-at-native rows are added here once P2b produces the checkpoints (docs/baselines.md A1-A3)
 
   - group: a4_tlc
-    name: "restormer_dpdd_tlc native t{t}"
-    for: {t: [512, 1024]}
+    name: "restormer_dpdd_tlc native (paper tiling)"
     steps:
-      - {model: restormer_dpdd_tlc, scale: 1, tile: "{t}", tile_batch: 2}
+      - {model: restormer_dpdd_tlc, scale: 1}
 
   - group: g2_lowres_upsample
     name: "{m} @x4 + {up}"
     for: {m: [restormer_dpdd, drbnet_single], up: [bicubic_x4, swinir_x4_real, hat_l_x4, hat_x4_real]}
     steps:
-      - {model: "{m}", scale: 4, tile: 0}
-      - {model: "{up}", tile: 256, overlap: 32}
+      - {model: "{m}", scale: 4}
+      - {model: "{up}"}
 
   - group: g2_lowres_upsample_diffusion
     name: "{m} @x4 + {up}"
     for: {m: [restormer_dpdd, drbnet_single], up: [osediff_x4]}
     steps:
-      - {model: "{m}", scale: 4, tile: 0}
-      - {model: "{up}", tile: 128, overlap: 32, tile_batch: 1, precision: fp32}
+      - {model: "{m}", scale: 4}
+      - {model: "{up}", tile_batch: 1}
 
   - group: g2_x2_upsample
-    name: "{m} @x2 t1024 + {up}"
+    name: "{m} @x2 + {up}"
     for: {m: [restormer_dpdd, drbnet_single], up: [bicubic_x2, swinir_x2_real]}
     steps:
-      - {model: "{m}", scale: 2, tile: 1024, tile_batch: 2}
-      - {model: "{up}", tile: 256, overlap: 32}
+      - {model: "{m}", scale: 2}
+      - {model: "{up}"}

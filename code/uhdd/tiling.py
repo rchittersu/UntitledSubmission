@@ -129,3 +129,31 @@ def run_tiled(fn: Callable[[torch.Tensor], torch.Tensor], x: torch.Tensor, spec:
     info = {**asdict(spec), "mode": "tiled", "tile": T, "overlap": O, "ys": ys, "xs": xs,
             "padded": [Hp, Wp], "scale": scale, "n_tiles": len(coords)}
     return crop(out, (H, W), scale), info
+
+
+OVERLAP_RATIO = 0.125      # standard overlap = tile / 8 for every method (P1: 512 / 64)
+
+
+def default_tiling(spec: dict, hw: tuple[int, int], overlap_ratio: float | None = None) -> tuple[int, int]:
+    """Per-method default (tile, overlap) in input px, from the inference setup of the method's paper/code.
+
+    Registry fields (configs/models.yaml):
+      paper_input: [H, W]  the method was evaluated on whole images of this size -> whole image if the input fits
+                           (either orientation), else square tiles of the short side (rounded down to `multiple`),
+                           i.e. never more pixels per pass than in the paper's own evaluation;
+      paper_tile: T        the authors' code tiles with T px (LR px for SR) -> tiles of T, whole if the input fits.
+    Neither (builtins such as bicubic) -> whole image. Overlap = round(tile * ratio) (even), ratio from the spec's
+    `overlap_ratio`, else `overlap_ratio`, else OVERLAP_RATIO. Returns (0, 0) for whole-image inference.
+    """
+    m = max(int(spec.get("multiple", 1)), 1)
+    h, w = sorted(int(v) for v in hw)
+    if spec.get("paper_tile"):
+        t = int(spec["paper_tile"]) // m * m
+        tile = 0 if w <= t else t
+    elif spec.get("paper_input"):
+        ph, pw = sorted(int(v) for v in spec["paper_input"])
+        tile = 0 if (h <= ph and w <= pw) else ph // m * m
+    else:
+        tile = 0
+    r = spec.get("overlap_ratio", overlap_ratio if overlap_ratio is not None else OVERLAP_RATIO)
+    return tile, (0 if tile == 0 else int(round(tile * r / 2)) * 2)

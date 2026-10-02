@@ -7,8 +7,8 @@ M=${1:-drbnet_single}
 D=$UHDD_DATA/dpdd_native_v2; DP=$UHDD_DATA/dpdd_native/dp_maps
 S=$UHDD_RESULTS/dpdd_v2/steps; O=$UHDD_RESULTS/dpdd_v2/baselines_bd
 A4=$S/x4__${M}@whole                                   # 1/4-res deblur (anchor)
-UP4=$S/x4__${M}@whole__bicubic_x4@t256o32              # anchor + bicubic x4
-UP2=$S/x2__${M}@t1024o64__bicubic_x2@t256o32           # x2 deblur + bicubic x2
+UP4=$S/x4__${M}@whole__bicubic_x4@whole              # anchor + bicubic x4
+UP2=$S/x2__${M}@t1120o140__bicubic_x2@whole           # x2 deblur + bicubic x2
 PARAMS=${PARAMS:-$UHDD_RESULTS/dpdd_v2/fusion_params}  # tuned on val (see docs/baselines.md B, "tuning")
 EV="--targets $D/x1/targets --masks $D/x1/masks --inputs $D/inputs --dp-maps $DP --crop 64 --tag dpdd3 --gpus all \
     --metrics psnr,ssim,hb,lpips,dists,blurbins,percbins,noharm,apsnr,msres"

@@ -4,6 +4,8 @@
   run_model.py --model restormer_dpdd --inputs IN --out OUT --gpus all \
       [--tile 512 --overlap 64 --tile-batch 8 --blend linear] [--precision fp32]
 
+Tiling defaults to each method's own inference setup (registry `paper_input` / `paper_tile`, see
+uhdd.tiling.default_tiling), decided per image; overlap defaults to tile * --overlap-ratio (1/8).
 Whole-image mode (--tile 0) pads to the model's required multiple and crops back; tiled mode
 uses tiles that are multiples of it. Outputs are 16-bit PNGs (default) + OUT/meta.json with
 per-image timing, peak memory and tile grid (used by the seam metric).
@@ -29,7 +31,7 @@ import torch  # noqa: E402
 from uhdd import models  # noqa: E402
 from uhdd.io import ImageDataset, list_images, to_numpy, to_tensor, write_image  # noqa: E402
 from uhdd.parallel import AsyncWriter, launch, loader, parse_gpus, shard  # noqa: E402
-from uhdd.tiling import TileSpec, run_tiled  # noqa: E402
+from uhdd.tiling import TileSpec, default_tiling, run_tiled  # noqa: E402
 
 DEFAULT_CONFIG = Path(__file__).resolve().parents[1] / "configs" / "models.yaml"
 PRECISION = {"fp32": None, "fp16": torch.float16, "bf16": torch.bfloat16}
@@ -38,7 +40,6 @@ PRECISION = {"fp32": None, "fp16": torch.float16, "bf16": torch.bfloat16}
 def worker(rank: int, world: int, device: torch.device, a: argparse.Namespace, todo: list) -> None:
     items = shard(todo, rank, world, key=lambda r: r["input"].stat().st_size)
     model = models.build(a.model, a.config, device, channels_last=a.channels_last, compile=a.compile)
-    spec = TileSpec(a.tile, a.overlap, a.tile_batch, a.blend, a.grid_offset)
     amp = PRECISION[a.precision]
     in_bits = a.input_bits if a.input_bits is not None else model.spec.get("input_bits")
     out_dtype = np.uint16 if a.save_bits == 16 else np.uint8
@@ -53,6 +54,13 @@ def worker(rank: int, world: int, device: torch.device, a: argparse.Namespace, t
         if cuda:
             torch.cuda.reset_peak_memory_stats(device)
             torch.cuda.synchronize(device)
+        tile, overlap = default_tiling(model.spec, x.shape[-2:], a.overlap_ratio)
+        if a.tile is not None:
+            tile, overlap = a.tile, round(a.tile * a.overlap_ratio / 2) * 2
+        if a.overlap is not None:
+            overlap = a.overlap
+        batch = a.tile_batch or int(model.spec.get("tile_batch", 2 if tile >= 1024 or tile == 0 else 4))
+        spec = TileSpec(tile, overlap, batch, a.blend, a.grid_offset)
         t0 = time.perf_counter()
         with torch.autocast(device.type, dtype=amp, enabled=amp is not None):
             y, info = run_tiled(model, x, spec, model.multiple, model.scale)
@@ -81,9 +89,11 @@ def main():
     ap.add_argument("--inputs", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--gpus", default="all", help="'all', 'cpu', or e.g. '0,1,3'")
-    ap.add_argument("--tile", type=int, default=0, help="tile size (input px); 0 = whole image")
-    ap.add_argument("--overlap", type=int, default=64)
-    ap.add_argument("--tile-batch", type=int, default=4)
+    ap.add_argument("--tile", type=int, default=None,
+                    help="tile size (input px); 0 = whole image; default: the method's paper setup (registry)")
+    ap.add_argument("--overlap", type=int, default=None, help="default: tile * --overlap-ratio")
+    ap.add_argument("--overlap-ratio", type=float, default=0.125, help="standard overlap as a fraction of the tile")
+    ap.add_argument("--tile-batch", type=int, default=None, help="default: registry tile_batch, else 2 (tile >= 1024) / 4")
     ap.add_argument("--blend", default="linear", choices=["linear", "gaussian", "hard", "mean"])
     ap.add_argument("--grid-offset", type=int, default=0, help="shift the tile grid (grid-shift consistency runs)")
     ap.add_argument("--precision", default="fp32", choices=list(PRECISION))

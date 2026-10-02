@@ -26,6 +26,7 @@ models:
     scale: 2
 
   restormer_dpdd:      # Restormer, single-image defocus deblurring (DPDD), CVPR 2022
+    paper_input: [1120, 1680]   # tiling default: paper tests whole DPDD images (1680x1120); larger inputs -> 1120 tiles [Restormer test_single_image_defocus_deblur.py: whole image]
     repo: ${UHDD_REPOS}/Restormer
     import: basicsr/models/archs/restormer_arch.py:Restormer   # file import: skips basicsr/__init__
     kwargs:
@@ -50,6 +51,7 @@ models:
     # Published DPDD single-image (combined): PSNR 25.98, SSIM 0.811, MAE 0.038, LPIPS 0.178 [V]
 
   bokehlicious_deblur: # Bokehlicious, RealDefocus defocus-deblurring variant (ICCV 2025 / arXiv 2607.21078)
+    paper_input: [1500, 2000]   # tiling default: evaluate.py runs whole RealBokeh_3MP images (2000x1500) [V: RealDefocus test size]
     repo: ${UHDD_REPOS}/Bokehlicious
     factory: uhdd.adapters.bokehlicious:build
     adapter: uhdd.adapters.bokehlicious:wrap
@@ -60,6 +62,7 @@ models:
     # Trained on RealDefocus (not DPDD) -> cross-dataset baseline on DPDD. Needs `timm`.
 
   restormer_dpdd_tlc:  # Restormer DPDD + TLC local attention statistics at test time (baseline A4, docs/baselines.md)
+    paper_input: [1120, 1680]   # tiling default: paper tests whole DPDD images (1680x1120); larger inputs -> 1120 tiles
     repo: ${UHDD_REPOS}/Restormer
     import: basicsr/models/archs/restormer_arch.py:Restormer
     adapter: uhdd.adapters.tlc:wrap
@@ -72,6 +75,7 @@ models:
     input_bits: 8
 
   lakdnet_dpdd_l:      # LaKDNet large, single-view, trained on DPDD (arXiv 2302.02234)
+    paper_input: [1120, 1680]   # tiling default: paper tests whole DPDD images (1680x1120); larger inputs -> 1120 tiles [LaKDNet run.py: whole image]
     repo: ${UHDD_REPOS}/LaKDNet
     import: models/LaKDNet.py:LaKDNet
     kwargs: {inp_channels: 3, out_channels: 3, dim: 48, num_blocks: [8, 12, 12, 16], mix_kernel_size: [9, 9, 9, 9]}
@@ -81,6 +85,7 @@ models:
     # README (DPDD): PSNR 26.25, SSIM 0.813
 
   lakdnet_dpdd_s:      # LaKDNet small
+    paper_input: [1120, 1680]   # tiling default: paper tests whole DPDD images (1680x1120); larger inputs -> 1120 tiles
     repo: ${UHDD_REPOS}/LaKDNet
     import: models/LaKDNet.py:LaKDNet
     kwargs: {inp_channels: 3, out_channels: 3, dim: 32, num_blocks: [8, 12, 12, 16], mix_kernel_size: [9, 9, 9, 9]}
@@ -90,6 +95,7 @@ models:
     # README (DPDD): PSNR 26.15, SSIM 0.810
 
   drbnet_single:       # DRBNet single-image (CVPR 2022), trained on LFDOF + DPDD
+    paper_input: [1120, 1680]   # tiling default: paper tests whole DPDD images (1680x1120); larger inputs -> 1120 tiles [DRBNet run.py: whole image]
     repo: ${UHDD_REPOS}/DRBNet
     import: models/DRBNet.py:DRBNet_single
     weights: ${UHDD_WEIGHTS}/drbnet/ckpts/single/single_image_defocus_deblurring.pth  # download_ckpts.py (gdrive)
@@ -99,6 +105,7 @@ models:
     # Needs torchvision (imported by the model file).
 
   ifan:                # IFAN (CVPR 2021), trained on DPDD
+    paper_input: [1120, 1680]   # tiling default: paper tests whole DPDD images (1680x1120); larger inputs -> 1120 tiles [IFAN eval.py: whole image]
     repo: ${UHDD_REPOS}/IFAN
     factory: uhdd.adapters.ifan:build
     adapter: uhdd.adapters.ifan:wrap
@@ -110,6 +117,7 @@ models:
     # Needs easydict.
 
   swinir_x4:           # SwinIR-M classical x4 SR (bicubic degradation), regression upsampler for G2
+    paper_tile: 400             # tiling default (LR px): SwinIR README/main_test_swinir.py --tile 400 for large inputs
     repo: ${UHDD_REPOS}/SwinIR
     import: models/network_swinir.py:SwinIR
     kwargs: {upscale: 4, in_chans: 3, img_size: 64, window_size: 8, img_range: 1.0, depths: [6, 6, 6, 6, 6, 6],
@@ -120,6 +128,7 @@ models:
     multiple: 8        # window size
 
   swinir_x4_real:      # SwinIR-M real-world x4 (BSRGAN degradations, GAN), perceptual upsampler for G2
+    paper_tile: 400             # tiling default (LR px): SwinIR README, real-world SR: --tile 400
     repo: ${UHDD_REPOS}/SwinIR
     import: models/network_swinir.py:SwinIR
     kwargs: {upscale: 4, in_chans: 3, img_size: 64, window_size: 8, img_range: 1.0, depths: [6, 6, 6, 6, 6, 6],
@@ -130,6 +139,7 @@ models:
     multiple: 8
 
   swinir_x2:           # SwinIR-M classical x2 SR (bicubic degradation)
+    paper_tile: 400
     repo: ${UHDD_REPOS}/SwinIR
     import: models/network_swinir.py:SwinIR
     kwargs: {upscale: 2, in_chans: 3, img_size: 64, window_size: 8, img_range: 1.0, depths: [6, 6, 6, 6, 6, 6],
@@ -140,6 +150,7 @@ models:
     multiple: 8
 
   swinir_x2_real:      # SwinIR-M real-world x2 (BSRGAN degradations, GAN)
+    paper_tile: 400
     repo: ${UHDD_REPOS}/SwinIR
     import: models/network_swinir.py:SwinIR
     kwargs: {upscale: 2, in_chans: 3, img_size: 64, window_size: 8, img_range: 1.0, depths: [6, 6, 6, 6, 6, 6],
@@ -150,7 +161,8 @@ models:
     multiple: 8
 
   # ---- stronger x4 upsamplers after the 1/4-res deblur (docs/baselines.md, group C) ----
-  hat_l_x4:            # HAT-L classical x4 (ImageNet pretrain + DF2K), fidelity upsampler. LR tiles 256, overlap 32
+  hat_l_x4:            # HAT-L classical x4 (ImageNet pretrain + DF2K), fidelity upsampler
+    paper_tile: 512             # tiling default (LR px): HAT test configs tile_size 512 (HAT_SRx4_ImageNet-LR.yml)
     repo: ${UHDD_REPOS}/HAT
     factory: uhdd.adapters.hat:build
     kwargs: {upscale: 4, in_chans: 3, img_size: 64, window_size: 16, compress_ratio: 3, squeeze_factor: 30,
@@ -163,6 +175,7 @@ models:
     multiple: 16
 
   hat_x4_real:         # Real-HAT-GAN x4 (real-world degradations, GAN), perceptual upsampler
+    paper_tile: 512             # HAT_GAN_Real_SRx4.yml tile_size 512
     repo: ${UHDD_REPOS}/HAT
     factory: uhdd.adapters.hat:build
     kwargs: {upscale: 4, in_chans: 3, img_size: 64, window_size: 16, compress_ratio: 3, squeeze_factor: 30,
@@ -173,7 +186,8 @@ models:
     scale: 4
     multiple: 16
 
-  osediff_x4:          # OSEDiff one-step diffusion SR (SD2.1-base + LoRA). CUDA only. LR tiles 128 (HR 512), overlap 32
+  osediff_x4:          # OSEDiff one-step diffusion SR (SD2.1-base + LoRA). CUDA only
+    paper_tile: 128             # tiling default (LR px): OSEDiff tests at process_size 512 HR (= 128 LR)
     repo: ${UHDD_REPOS}/OSEDiff
     factory: uhdd.adapters.osediff:build
     adapter: uhdd.adapters.osediff:wrap

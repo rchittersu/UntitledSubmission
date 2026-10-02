@@ -33,8 +33,9 @@ Fairness rules (all groups):
    the only difference.
 2. **Free parameters tuned on the native val split** (never on test); defaults documented below are only used before
    tuning and are marked "provisional" in any table.
-3. Same tile size / overlap per model family as their training resolution suggests (listed per baseline), same GPU
-   type for timing, same border crop and masks (`evaluation.md` §2).
+3. **Tiling from each method's paper** (`evaluation.md` §2.7: whole image up to the paper's test size, else tiles of
+   its short side; SR models use their code's tile size), **overlap = tile / 8** for all; same GPU type for timing,
+   same border crop and masks (`evaluation.md` §2).
 4. Pretrained baselines use the authors' released weights (checksums in the runbooks), no retraining except group A.
 
 ---
@@ -50,8 +51,8 @@ uses. Model selection on the native val set (74).
 
 | ID | model | init | crops | schedule (proposal) | test |
 |---|---|---|---|---|---|
-| A1 | Restormer (26 M) | DPDD weights | 512 native, batch 8 | AdamW 3e-4 → cosine, 60k it, L1 | tiled 512/1024 at native |
-| A2 | DRBNet | DPDD weights | 512 native, batch 16 | as A1, 60k it | tiled 1024 |
+| A1 | Restormer (26 M) | DPDD weights | 512 native, batch 8 | AdamW 3e-4 → cosine, 60k it, L1 | default tiling (1120 / 140) |
+| A2 | DRBNet | DPDD weights | 512 native, batch 16 | as A1, 60k it | default tiling (1120 / 140) |
 | A3 | Restormer | DPDD weights | mixed ×1 / ×2 / ×4 crops (p = 0.5 / 0.25 / 0.25) | as A1 | tiled at native |
 | A4 | Restormer + TLC (no training) | DPDD weights | — | — | native patch-wise |
 
@@ -62,7 +63,7 @@ Notes:
   statistics differ from training crops (128–384). TLC (Chu et al., ECCV 2022) computes them over local windows:
   `uhdd/adapters/tlc.py` patches every MDTA module to run on overlapping windows of 576 input px (1.5 × the largest
   training crop, scaled to each layer's resolution; stride ½ window; outputs averaged), as the official TLC "grids"
-  implementation. Registry `restormer_dpdd_tlc`; matrix group `a4_tlc` (tiles 512, 1024) in `dpdd_eval_v3.yaml`.
+  implementation. Registry `restormer_dpdd_tlc`; matrix group `a4_tlc` (default tiling) in `dpdd_eval_v3.yaml`.
   No training needed.
 - Report A rows in the main table (best of A1–A3) and all in the supplementary.
 
@@ -106,14 +107,14 @@ See §B-results at the end of this file (filled from `dataset/results/local/*/me
 Pipeline: anchor model at ×4 (whole image, = standard DPDD protocol) → upsampler ×4 to native (tiled). ×2 variants:
 anchor at ×2 (1024 tiles) → ×2 upsampler.
 
-| ID | upsampler | registry | weights | tiles (LR) | status |
+| ID | upsampler | registry | weights | default tile / overlap (LR px) | status |
 |---|---|---|---|---|---|
-| C0 | bicubic ×4 / ×2 | `bicubic_x4`, `bicubic_x2` | — | 256 / 32 | ✅ |
-| C1 | SwinIR-M classical ×4 / ×2 | `swinir_x4`, `swinir_x2` | SwinIR GitHub release | 256 / 32 | ✅ [S] (classical ×4), [O] |
-| C1 | SwinIR-M real-world (BSRGAN, GAN) ×4 / ×2 | `swinir_x4_real`, `swinir_x2_real` | SwinIR GitHub release | 256 / 32 | ✅ [O] 8 images |
-| C2 | HAT-L classical ×4 | `hat_l_x4` | official: Google Drive (HAT README); mirror `huggingface.co/anchuang/HAT-L_SRx4_ImageNet-pretrain` | 256 / 32 | ✅ code; 🔶 [S] |
-| C2 | Real-HAT-GAN ×4 | `hat_x4_real` | official: Google Drive `Real_HAT_GAN_SRx4.pth` (HF mirror has only the "sharper" variant) | 256 / 32 | ✅ code; 🔶 [S] |
-| C3 | OSEDiff ×4 | `osediff_x4` | LoRA + DAPE in the repo (`preset/models`); SD2.1-base (HF); RAM swin-L (HF) | 128 / 32 (HR 512) | ✅ code; 🔶 [S] (CUDA only) |
+| C0 | bicubic ×4 / ×2 | `bicubic_x4`, `bicubic_x2` | — | whole image | ✅ |
+| C1 | SwinIR-M classical ×4 / ×2 | `swinir_x4`, `swinir_x2` | SwinIR GitHub release | 400 / 50 | ✅ [S] (classical ×4), [O] |
+| C1 | SwinIR-M real-world (BSRGAN, GAN) ×4 / ×2 | `swinir_x4_real`, `swinir_x2_real` | SwinIR GitHub release | 400 / 50 | ✅ [O] 8 images |
+| C2 | HAT-L classical ×4 | `hat_l_x4` | official: Google Drive (HAT README); mirror `huggingface.co/anchuang/HAT-L_SRx4_ImageNet-pretrain` | 512 / 64 | ✅ code; 🔶 [S] |
+| C2 | Real-HAT-GAN ×4 | `hat_x4_real` | official: Google Drive `Real_HAT_GAN_SRx4.pth` (HF mirror has only the "sharper" variant) | 512 / 64 | ✅ code; 🔶 [S] |
+| C3 | OSEDiff ×4 | `osediff_x4` | LoRA + DAPE in the repo (`preset/models`); SD2.1-base (HF); RAM swin-L (HF) | 128 / 16 (HR 512) | ✅ code; 🔶 [S] (CUDA only) |
 | C4 | SUPIR / SeeSR | — | SDXL + SUPIR ckpts / SD2-base + SeeSR | their own tiled samplers | ⏳ [S] |
 
 Implementation notes:
@@ -152,7 +153,8 @@ four with weights on GitHub releases (`restoration_mse.pth`, `restoration_gan.pt
 - **Setup without mmcv** (`code/uhdd/adapters/datsr.py`): DATSR needs `mmcv.ops.modulated_deform_conv2d` (DCNv2);
   a shim maps it to `torchvision.ops.deform_conv2d` (same offset layout, runs on CPU/CUDA/MPS), and the package
   `__init__` files are bypassed. ImageNet VGG16/VGG19 weights are downloaded by torchvision on first use.
-- **How it is applied** (`code/scripts/refsr_baseline.py`): LR = the ×4 anchor, tiles of 128 LR px (HR 512), overlap 16.
+- **How it is applied** (`code/scripts/refsr_baseline.py`): LR = the ×4 anchor, tiles of 128 LR px (HR 512), overlap 16
+  (= tile / 8, the standard).
   DATSR requires a reference of the same size as the HR tile, so per tile:
   - `colocated`: the blurry native input at the tile's own location (in-focus tiles: exact sharp content).
   - `mosaic` (main): 2×2 mosaic of 256-px native crops = the co-located crop + the 3 in-focus crops of the whole image
@@ -172,13 +174,13 @@ be competitive with ours.
 
 ## E. Existing defocus deblurring models at native resolution (G1)
 
-| model | weights | native tiles | status / numbers [S, P1, 37 indoor, v1 renderings] |
+| model | weights | default native tile / overlap (§2.7) | status / numbers [S, P1, 37 indoor, v1 renderings, 512 tiles] |
 |---|---|---|---|
-| Restormer (DPDD single) | official | 512 / 1024 | ✅ 25.19 dB / LPIPS 0.253 (t512) |
-| LaKDNet-L (DPDD) | official | 512 / 1024 | ✅ 24.90 / 0.291 |
-| DRBNet | official | 512 / 1024 | ✅ 24.96 / 0.272; [O, v2] 1024 tiles: 25.32 vs input 25.28 (≈ identity) |
-| Bokehlicious (RealDefocus) | official | 512 / 1024 | ✅ 24.64 / 0.251 (cross-dataset) |
-| IFAN | GitHub mirror `jacobsparts/ifan-rs` (bit-identical) | 512 / 1024 | 🔶 P1b |
+| Restormer (DPDD single) | official | 1120 / 140 | ✅ 25.19 dB / LPIPS 0.253 (t512) |
+| LaKDNet-L (DPDD) | official | 1120 / 140 | ✅ 24.90 / 0.291 |
+| DRBNet | official | 1120 / 140 | ✅ 24.96 / 0.272; [O, v2] 1024 tiles: 25.32 vs input 25.28 (≈ identity) |
+| Bokehlicious (RealDefocus) | official | 1500 / 188 | ✅ 24.64 / 0.251 (cross-dataset) |
+| IFAN | GitHub mirror `jacobsparts/ifan-rs` (bit-identical) | 1120 / 140 | 🔶 P1b |
 | NRKNet, GKMNet | [V] | — | ⏳ |
 | UHD restoration (e.g. UHDformer) | [V: defocus checkpoint] | — | ⏳ |
 | DPDNet-dual (uses DP views) | official | — | ⏳ only in the DP-oracle comparison |

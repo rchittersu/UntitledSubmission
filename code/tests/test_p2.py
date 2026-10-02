@@ -158,3 +158,21 @@ def test_tlc_local_attention_matches_global_when_small_and_windows_when_large():
     net[0]._tlc_ref[:] = [32, 64]
     y = net[0](big)                                          # windows of 32 px, stride 16 over the width
     assert torch.allclose(y[..., :16], torch.zeros(1, 1, 32, 16))   # left window sees only zeros
+
+
+# --- per-method default tiling (uhdd.tiling.default_tiling) --------------------------------------------
+from uhdd.tiling import default_tiling  # noqa: E402
+
+
+def test_default_tiling_paper_setups():
+    dpdd = {"paper_input": [1120, 1680], "multiple": 16}
+    assert default_tiling(dpdd, (1120, 1680)) == (0, 0)            # x4 = paper protocol: whole image
+    assert default_tiling(dpdd, (1680, 1120)) == (0, 0)            # either orientation
+    assert default_tiling(dpdd, (4480, 6720)) == (1120, 140)       # native: tiles of the paper's short side
+    assert default_tiling({"paper_input": [1500, 2000], "multiple": 4}, (2240, 3360)) == (1500, 188)
+    sr = {"paper_tile": 400, "multiple": 8}
+    assert default_tiling(sr, (1120, 1680)) == (400, 50)
+    assert default_tiling(sr, (300, 400)) == (0, 0)                # fits in one tile -> whole
+    assert default_tiling({"paper_tile": 130, "multiple": 16}, (1000, 1000))[0] == 128   # rounded to multiple
+    assert default_tiling({}, (4480, 6720)) == (0, 0)              # builtins: whole image
+    assert default_tiling(dpdd, (4480, 6720), overlap_ratio=0.25) == (1120, 280)

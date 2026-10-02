@@ -125,6 +125,33 @@ it *runs* at; it is always **scored at native resolution** unless stated (`msres
 - The DP map is an **oracle** for the method (DP exists only on DP sensors); the method proper uses a predicted map
   (`plan/method_plan.md` §2.2). For evaluation the DP map is fine: it only defines regions.
 
+### 2.7 Tiling standard (per method, from its paper)
+- **Rule** (`uhdd/tiling.py:default_tiling`, used by `run_model.py` and `run_matrix.py` whenever no tile is given):
+  a method never processes more pixels per pass than in its own paper's evaluation.
+  - `paper_input: [H, W]` (method evaluated on whole images of that size): whole image if the input fits (either
+    orientation), else **square tiles of the short side** (rounded down to the model's `multiple`).
+  - `paper_tile: T` (the authors' code tiles): tiles of T px (LR px for SR), whole image if the input fits.
+  - neither (bicubic, identity): whole image.
+- **Overlap = tile / 8** for every method (`--overlap-ratio 0.125`; P1 used 512/64), linear border-aware blending.
+- Tile batch: registry `tile_batch`, else 2 for tiles ≥ 1024 px, 4 otherwise.
+- Resolved values are in the step cache key (`<model>@t1120o140`) and in each output's `meta.json` (`tiling`).
+
+| method | paper / code inference | default at ×4 (1680×1120) | default at ×2 / ×1 | source |
+|---|---|---|---|---|
+| Restormer, Restormer+TLC | whole DPDD image 1680×1120 | whole | 1120 / overlap 140 | `test_single_image_defocus_deblur.py` |
+| LaKDNet-L/S | whole DPDD image | whole | 1120 / 140 | `run.py` |
+| DRBNet | whole DPDD image (cropped to /16) | whole | 1120 / 140 | `run.py` |
+| IFAN | whole DPDD image | whole | 1120 / 140 | `eval.py` |
+| Bokehlicious (deblur) | whole RealBokeh_3MP image 2000×1500 [V: RealDefocus test size] | whole | 1500 / 188 | `evaluate.py` |
+| SwinIR (classical, real) ×4/×2 | `--tile 400` recommended for large inputs | 400 LR / 50 | — | README, `main_test_swinir.py` |
+| HAT-L, Real-HAT ×4 | tile mode `tile_size 512` | 512 LR / 64 | — | `options/test/HAT_SRx4_ImageNet-LR.yml` |
+| OSEDiff ×4 | `process_size 512` HR | 128 LR / 16 | — | `test_osediff.py` |
+| DATSR (script) | CUFED5 whole images (~500×330 HR) | 128 LR / 16 | — | `refsr_baseline.py --tile 128 --overlap 16` |
+| bicubic, identity | — | whole | whole | — |
+
+- Supplementary ablation: the P1 512-px tiles for Restormer and DRBNet (`g1_tile_ablation`); P1 showed 512 vs 1024
+  changes fidelity by < 0.06 dB.
+
 ### 2.5 Ground truth limits (📝)
 - Paired focal-plane MTF (`code/scripts/paired_edge_mtf.py`, 336 focal-plane edges on the same 37 raws):
   MTF(f/22)/MTF(f/4) = 1.05 / 1.24 / 0.99 / 0.64 at 0.1 / 0.2 / 0.3 / 0.4 c/px; Gaussian fit σ ≈ 0 (95 % CI 0–0.31 px).
@@ -270,7 +297,7 @@ native patch-wise}; crops sampled stratified by blur bin (half b2/b3), position 
 ```bash
 export UHDD_DATA=...  UHDD_RESULTS=...  UHDD_REPOS=...  UHDD_WEIGHTS=...    # never hard-code paths
 pip install -r code/requirements.txt
-pytest -q code/tests                                                       # 56 tests, CPU
+pytest -q code/tests                                                       # 57 tests, CPU
 ```
 
 ### 5.2 Data (once) [S]
@@ -405,3 +432,4 @@ a latent model cannot reproduce in-focus native texture; variant B needs the pix
 | 2026-10-03 | add no-harm, aligned PSNR, resolution sweep, runtime to the protocol (v3, tag `dpdd3`) | user decision |
 | 2026-10-03 | all free parameters tuned on val only | user decision |
 | 2026-10-03 | hallucination/OCR → supplementary + discussion; consistency metric, human study, second camera → todo | user decision |
+| 2026-10-03 | per-method default tiling from each paper's inference setup; overlap = tile / 8 for all | user decision; §2.7 |
