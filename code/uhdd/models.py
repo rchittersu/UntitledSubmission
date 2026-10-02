@@ -86,7 +86,7 @@ def _load_state_dict(model: torch.nn.Module, spec: dict) -> None:
     except Exception:  # older checkpoints pickle extra objects; only load trusted weights
         ckpt = torch.load(spec["weights"], map_location="cpu", weights_only=False)
     key = spec.get("state_key")
-    sd = ckpt[key] if key else ckpt
+    sd = ckpt[key] if key and key in ckpt else ckpt   # like SwinIR's loader: fall back to a plain state dict
     sd = {k[7:] if k.startswith("module.") else k: v for k, v in sd.items()}
     missing, unexpected = model.load_state_dict(sd, strict=spec.get("strict", True))
     if missing or unexpected:
