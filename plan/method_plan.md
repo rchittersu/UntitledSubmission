@@ -97,7 +97,7 @@ synthetic-anchor mix is the mitigation; fallback: 2-fold retraining of one Stage
 
 ## 4. Variant B — one-step DiT prior
 
-- Backbone choice by **VAE ceiling** (runbook step 6): reconstruct native DPDD targets through each
+- Backbone choice by **VAE ceiling** (deferred; not in handoff 2): reconstruct native DPDD targets through each
   candidate VAE and keep the one that preserves in-focus texture best. Candidates: SD3.5-Medium (MMDiT,
   16-ch f8 VAE), FLUX.1-schnell VAE (16-ch f8), PixArt-Σ (SDXL 4-ch f8), Sana / Sana-Sprint (DC-AE f32,
   one-step natively, likely too lossy). Licences to check before use.

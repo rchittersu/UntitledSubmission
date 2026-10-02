@@ -17,7 +17,7 @@ Rules as always: record every step's outcome; deviations in a table; no internal
 names in the report (`$UHDD_*` variables); hand off early if blocked (a partial patch is better than none).
 
 **Priority if time is short**: 0 → 3 (test + val only) → 4 (test 76) → 7 (references, G1, G2 bicubic/HAT) →
-8 (composite, multiscale, DATSR mosaic) → 5 → 6 → 4 (train) → rest. CPU-heavy steps (3, 4) and GPU steps (5, 7, 8)
+8 (composite, multiscale, DATSR mosaic) → 5 → 4 (train) → rest. CPU-heavy steps (3, 4) and GPU steps (5, 7, 8)
 can run in parallel.
 
 ---
@@ -25,13 +25,12 @@ can run in parallel.
 ## 0. Update and test
 ```bash
 git pull && git checkout -b handoff/h2          # base = origin/main
-pip install -r code/requirements.txt            # adds safetensors, diffusers
+pip install -r code/requirements.txt            # adds safetensors (diffusers: only for the deferred VAE step)
 pytest -q code/tests                            # expect 57 passed
 ```
 
 ## 1. Resources (report)
-GPU count / type / memory, max job wall time, free storage under `$UHDD_DATA`, CPU cores; whether the SD3.5-Medium
-licence may be accepted here (step 6). These size the P2b training runs.
+GPU count / type / memory, max job wall time, free storage under `$UHDD_DATA`, CPU cores. These size the P2b training runs.
 
 ## 2. Weights and repos
 ```bash
@@ -93,16 +92,8 @@ done
 (`run_model.py` uses each model's paper tiling = whole image at ×4.) Report: rows = models + input, columns =
 PSNR/SSIM on train / val / test and the gain over the input per split. Keep the outputs (P2b training inputs).
 
-## 6. VAE ceiling (backbone of method variant B)
-```bash
-python code/scripts/vae_ceiling.py --targets $UHDD_DATA/dpdd_native_v2/x1/targets --dp-maps $UHDD_DATA/dpdd_native/dp_maps \
-    --per-region 2 --dtype fp32 --out vae_ceiling.csv \
-    --vae sdxl=madebyollin/sdxl-vae-fp16-fix --vae flux=black-forest-labs/FLUX.1-schnell:vae \
-    --vae dcae=mit-han-lab/dc-ae-f32c32-sana-1.0-diffusers \
-    --vae sd35=stabilityai/stable-diffusion-3.5-medium:vae        # only if licence/weights allowed (step 1)
-```
-Gated VAEs are skipped with a message. Paste the printed table. (Outside, SDXL, 29 crops: focus 29.5 dB / LPIPS
-0.116, defocus 32.8 / 0.082.)
+## 6. (deferred) VAE ceiling
+Not in this handoff — skip. (Variant B backbone choice is deferred; `vae_ceiling.py` stays in the repo.)
 
 ## 7. Evaluation protocol v3 — registry pipelines
 ```bash

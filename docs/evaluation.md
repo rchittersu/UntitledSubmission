@@ -422,10 +422,10 @@ See [`baselines.md`](baselines.md) §B — filled from `dataset/results/local/fu
 ### 7.5 VAE ceiling (variant B backbone) [O, partial]
 SDXL VAE on 1024-px native target crops (29 crops): in-focus 29.5 dB / LPIPS 0.116, defocused 32.8 dB / 0.082 →
 a latent model cannot reproduce in-focus native texture; variant B needs the pixel-space copy path. Full comparison
-(SDXL, FLUX, SD3.5, DC-AE) in [S] (`plan/secure_runbook.md` step 6).
+(SDXL, FLUX, SD3.5, DC-AE): **deferred** (not in handoff 2).
 
 ## 8. Open items (owner)
-- [S] `plan/secure_runbook.md` (76 pairs, val/train native sets, anchors, VAE ceiling, v3 evaluation, baselines B/D).
+- [S] `plan/secure_runbook.md` (76 pairs, val/train native sets, anchors, v3 evaluation, baselines B/D; VAE ceiling deferred).
 - [S] v3 evaluation of all registry baselines + group B/D scripts.
 - [O] consistency metric (3.12) implementation once method outputs exist.
 - [O] human-study tooling (crop sampler + 2AFC page).
