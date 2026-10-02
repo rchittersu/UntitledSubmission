@@ -85,8 +85,16 @@ def main():
     print(f"{len(crops)} crops from {len(imgs)} images", flush=True)
 
     rows, agg = [], defaultdict(list)
+    fields = ["vae", "name", "region", "y", "x", "psnr", "lpips", "hb_nmse_db"]
+    f = open(a.out, "w", newline="")
+    w = csv.DictWriter(f, fieldnames=fields)
+    w.writeheader()
     for spec in a.vae:
-        vname, vae = load_vae(spec, device, dtype)
+        try:
+            vname, vae = load_vae(spec, device, dtype)
+        except Exception as e:                       # gated / missing weights: report and go on
+            print(f"skip {spec}: {type(e).__name__}: {str(e).splitlines()[0]}", flush=True)
+            continue
         for name, region, y, x, c in crops:
             gt = to_tensor(c, device)
             rec = reconstruct(vae, gt)
@@ -95,12 +103,12 @@ def main():
                  "hb_nmse_db": optics.highband_nmse_db(rec, gt)}
             rows.append(r)
             agg[(vname, region)].append(r)
+            w.writerow(r)
+            f.flush()
+        print(f"{vname}: done", flush=True)
         del vae
         torch.cuda.empty_cache() if device.type == "cuda" else None
-    with open(a.out, "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=list(rows[0]))
-        w.writeheader()
-        w.writerows(rows)
+    f.close()
     print("| VAE | region | n | PSNR ↑ | LPIPS ↓ | HB-NMSE dB ↓ |\n|---|---|---|---|---|---|")
     for (v, reg), rs in agg.items():
         m = lambda k: np.mean([r[k] for r in rs])
