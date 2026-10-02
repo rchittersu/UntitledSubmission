@@ -30,13 +30,13 @@ import torch.nn.functional as F
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from uhdd.dualpixel import load_blur_map  # noqa: E402
+from uhdd.exemplar import C, cells, high_band, lowres_desc, luma, nn_match, overlap_add, patches  # noqa: E402,F401
 from uhdd.metrics import fidelity, iqa  # noqa: E402
 
 D = os.environ.get("NATIVE", "dataset/dpdd_native")
 R = os.environ.get("RESULTS", "dataset/results/local")
 DP = os.environ.get("DPMAPS", "dataset/dpdd_1680/test/dp_maps")
 T0, T1 = 0.4, 1.2          # composite weight ramp (DP px), as dp_composite.py
-C, S, CTX = 32, 16, 16     # cell (native px), stride, descriptor size (1/4-res px)
 EDGES = (0.4, 1.5, 3.5)
 
 
@@ -46,60 +46,6 @@ def rd(p):
 
 def f32(img):
     return img[:, :, ::-1].astype(np.float32) / 65535
-
-
-def luma(x):
-    return x @ np.array([0.299, 0.587, 0.114], np.float32)
-
-
-def high_band(y):
-    h, w = y.shape
-    lo = cv2.resize(cv2.resize(y, (w // 4, h // 4), interpolation=cv2.INTER_AREA), (w, h), interpolation=cv2.INTER_CUBIC)
-    return y - lo
-
-
-def cells(h, w):
-    ys, xs = np.arange(0, h - C + 1, S), np.arange(0, w - C + 1, S)
-    return np.stack(np.meshgrid(ys, xs, indexing="ij"), -1).reshape(-1, 2)
-
-
-def lowres_desc(y4, pos):
-    """Zero-mean unit-norm CTXxCTX windows of a 1/4-res luma image centred on native cells; and their std."""
-    p = CTX // 2
-    yp = np.pad(y4, p, mode="reflect")
-    c = (pos + C // 2) // 4 + p                                   # cell centre in padded 1/4 coords
-    idx_y = c[:, :1] - p + np.arange(CTX)[None]
-    idx_x = c[:, 1:] - p + np.arange(CTX)[None]
-    win = yp[idx_y[:, :, None], idx_x[:, None, :]].reshape(len(pos), -1)
-    win = win - win.mean(1, keepdims=True)
-    sd = win.std(1)
-    return win / (np.linalg.norm(win, axis=1, keepdims=True) + 1e-6), sd
-
-
-def patches(img, pos):
-    iy = pos[:, :1] + np.arange(C)[None]
-    ix = pos[:, 1:] + np.arange(C)[None]
-    return img[iy[:, :, None], ix[:, None, :]]                    # N x C x C
-
-
-def nn_match(q, k, device, chunk=2048):
-    kt = torch.from_numpy(k).to(device)
-    best, sim = [], []
-    for i in range(0, len(q), chunk):
-        s = torch.from_numpy(q[i:i + chunk]).to(device) @ kt.T
-        v, j = s.max(1)
-        best.append(j.cpu().numpy())
-        sim.append(v.cpu().numpy())
-    return np.concatenate(best), np.concatenate(sim)
-
-
-def overlap_add(shape, pos, pats):
-    win = np.outer(np.hanning(C + 2)[1:-1], np.hanning(C + 2)[1:-1]).astype(np.float32)
-    acc, wsum = np.zeros(shape, np.float32), np.zeros(shape, np.float32)
-    for (y, x), p in zip(pos, pats):
-        acc[y:y + C, x:x + C] += win * p
-        wsum[y:y + C, x:x + C] += win
-    return acc / np.maximum(wsum, 1e-6)
 
 
 def tensor(x, device):

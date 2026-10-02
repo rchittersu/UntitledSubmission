@@ -59,6 +59,18 @@ models:
     av: 4.0            # f-number of the blurry input (DPDD: f/4) -> attention range; RealDefocus uses EXIF
     # Trained on RealDefocus (not DPDD) -> cross-dataset baseline on DPDD. Needs `timm`.
 
+  restormer_dpdd_tlc:  # Restormer DPDD + TLC local attention statistics at test time (baseline A4, docs/baselines.md)
+    repo: ${UHDD_REPOS}/Restormer
+    import: basicsr/models/archs/restormer_arch.py:Restormer
+    adapter: uhdd.adapters.tlc:wrap
+    tlc_base: 576      # 1.5 x the largest training crop (384), as recommended by TLC
+    kwargs: {inp_channels: 3, out_channels: 3, dim: 48, num_blocks: [4, 6, 6, 8], num_refinement_blocks: 4,
+             heads: [1, 2, 4, 8], ffn_expansion_factor: 2.66, bias: false, LayerNorm_type: WithBias, dual_pixel_task: false}
+    weights: ${UHDD_WEIGHTS}/restormer/single_image_defocus_deblurring.pth
+    state_key: params
+    multiple: 8
+    input_bits: 8
+
   lakdnet_dpdd_l:      # LaKDNet large, single-view, trained on DPDD (arXiv 2302.02234)
     repo: ${UHDD_REPOS}/LaKDNet
     import: models/LaKDNet.py:LaKDNet
@@ -135,4 +147,43 @@ models:
     weights: ${UHDD_WEIGHTS}/swinir/003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x2_GAN.pth
     state_key: params_ema
     scale: 2
+    multiple: 8
+
+  # ---- stronger x4 upsamplers after the 1/4-res deblur (docs/baselines.md, group C) ----
+  hat_l_x4:            # HAT-L classical x4 (ImageNet pretrain + DF2K), fidelity upsampler. LR tiles 256, overlap 32
+    repo: ${UHDD_REPOS}/HAT
+    factory: uhdd.adapters.hat:build
+    kwargs: {upscale: 4, in_chans: 3, img_size: 64, window_size: 16, compress_ratio: 3, squeeze_factor: 30,
+             conv_scale: 0.01, overlap_ratio: 0.5, img_range: 1.0, depths: [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6],
+             embed_dim: 180, num_heads: [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6], mlp_ratio: 2,
+             upsampler: pixelshuffle, resi_connection: 1conv}
+    weights: ${UHDD_WEIGHTS}/hat/HAT-L_SRx4_ImageNet-pretrain.pth   # official: Google Drive (HAT README)
+    state_key: params_ema
+    scale: 4
+    multiple: 16
+
+  hat_x4_real:         # Real-HAT-GAN x4 (real-world degradations, GAN), perceptual upsampler
+    repo: ${UHDD_REPOS}/HAT
+    factory: uhdd.adapters.hat:build
+    kwargs: {upscale: 4, in_chans: 3, img_size: 64, window_size: 16, compress_ratio: 3, squeeze_factor: 30,
+             conv_scale: 0.01, overlap_ratio: 0.5, img_range: 1.0, depths: [6, 6, 6, 6, 6, 6],
+             embed_dim: 180, num_heads: [6, 6, 6, 6, 6, 6], mlp_ratio: 2, upsampler: pixelshuffle, resi_connection: 1conv}
+    weights: ${UHDD_WEIGHTS}/hat/Real_HAT_GAN_SRx4.pth
+    state_key: params_ema
+    scale: 4
+    multiple: 16
+
+  osediff_x4:          # OSEDiff one-step diffusion SR (SD2.1-base + LoRA). CUDA only. LR tiles 128 (HR 512), overlap 32
+    repo: ${UHDD_REPOS}/OSEDiff
+    factory: uhdd.adapters.osediff:build
+    adapter: uhdd.adapters.osediff:wrap
+    weights_in_factory: true
+    weights: ${UHDD_REPOS}/OSEDiff/preset/models/osediff.pkl          # shipped in the repo
+    sd_path: ${UHDD_WEIGHTS}/sd21_base                                # HF snapshot of stable-diffusion-2-1-base
+    ram_path: ${UHDD_WEIGHTS}/ram/ram_swin_large_14m.pth
+    dape_path: ${UHDD_REPOS}/OSEDiff/preset/models/DAPE.pth           # shipped in the repo
+    prompt: dape         # dape | empty
+    color_fix: adain     # official default
+    precision: fp16
+    scale: 4
     multiple: 8

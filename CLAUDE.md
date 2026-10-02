@@ -15,6 +15,7 @@ Research project: **ultra-high-resolution (native sensor resolution, ~30 MP+) si
   - `notes.txt` — informal research notes (inconsistency taxonomy for tiled inference, papers to read, open directions).
   - Build artifacts (`*.aux`, `*.log`, `main.pdf`, …) are git-ignored.
 - `code/` — evaluation harness (`uhdd` package + scripts, see `code/README.md`). Written outside, run in the secure env; outside can only test on CPU (`pytest code/tests`).
+- `docs/` — **canonical evaluation and baseline documentation**: `docs/evaluation.md` (protocol, every metric with definition + code, how to run, results, done / priority / todo) and `docs/baselines.md` (every baseline: purpose, setup, weights, commands, status, results). Keep them current when results arrive (both envs may edit them in patches).
 - `plan/` — research plans shared by both envs. `plan/evaluation.md`: test sets, baselines, protocol, metrics. `plan/secure_runbook_p1.md`: initial setup + P1 runs (done). `plan/method_plan.md`: **the method plan (decided 2026-10-02)** — variants A (feed-forward) and B (one-step DiT), in-focus exemplar memory, timeline. **Current secure tasks: `plan/secure_runbook_p1b.md`** (protocol v2, complete P1 tables) **then `plan/secure_runbook_p2a.md`** (native train/val sets, anchors, VAE ceiling).
 - Build: `cd Template && latexmk -pdf main.tex`.
 
@@ -56,12 +57,12 @@ git checkout -b handoff/<topic>
 handoff/make_patch.sh                      # -> ../handoff_<date>.patch
 ```
 
-`make_patch.sh` works from **any origin branch**: the base is the current branch's `origin/*` upstream, else the `origin/*` branch HEAD is closest to, or explicitly `BASE=<branch>` (e.g. `BASE=paper-v2` = `origin/paper-v2`). The patch covers all commits since the fork point from that branch (`git format-patch --stdout --base=<fork-point>`), so the base branch moving on later is harmless. It refuses to write the patch if it touches paths outside `Template/`, `plan/`, `code/`, `handoff/from_secure/`, `CLAUDE.md`, `.gitignore`, contains binary files, or has no report in `handoff/from_secure/`, and warns about uncommitted changes. The report's `Context` section should name the base branch. The user copies the printed file out verbatim.
+`make_patch.sh` works from **any origin branch**: the base is the current branch's `origin/*` upstream, else the `origin/*` branch HEAD is closest to, or explicitly `BASE=<branch>` (e.g. `BASE=paper-v2` = `origin/paper-v2`). The patch covers all commits since the fork point from that branch (`git format-patch --stdout --base=<fork-point>`), so the base branch moving on later is harmless. It refuses to write the patch if it touches paths outside `Template/`, `plan/`, `docs/`, `code/`, `handoff/from_secure/`, `CLAUDE.md`, `.gitignore`, contains binary files, or has no report in `handoff/from_secure/`, and warns about uncommitted changes. The report's `Context` section should name the base branch. The user copies the printed file out verbatim.
 
 Applying it here: `git am -3 <file>.patch` (fallback: `git apply --3way`, or manual edit if the base diverged).
 
 Patch rules:
-- **Only paths of this repo** (`handoff/from_secure/`, `Template/`, `plan/`, `code/`, `CLAUDE.md`). Changes to `code/` (fixes, new metrics/baselines) are welcome; other secure-only code, data, logs and configs never leave. Keep code free of internal paths (use the `UHDD_*` env vars).
+- **Only paths of this repo** (`handoff/from_secure/`, `Template/`, `plan/`, `docs/`, `code/`, `CLAUDE.md`). Changes to `code/` (fixes, new metrics/baselines) are welcome; other secure-only code, data, logs and configs never leave. Keep code free of internal paths (use the `UHDD_*` env vars).
 - **Text only**: no binary files (`make_patch.sh` checks this). Figures travel as plot data (CSV/table in the report or a `.dat`/pgfplots/TikZ file), not images.
 - **No sensitive content**: no credentials, internal hostnames/paths, proprietary dataset names or internal identifiers unless the user explicitly says they are cleared to leave. Describe them generically (e.g. "internal 50 MP smartphone test set, N=120 images").
 - Keep paper diffs minimal (no whitespace-only reflow of paragraphs) so they apply cleanly.

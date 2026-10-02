@@ -40,3 +40,121 @@ def test_load_blur_map(tmp_path):
     k = load_blur_map(tmp_path, "a", (80, 120), win=5)
     assert k.shape == (80, 120) and np.allclose(k, 2.5, atol=1e-3)
     assert load_blur_map(tmp_path, "missing") is None
+
+
+# --- protocol metrics (uhdd.metrics.binned) ---------------------------------------------------------
+import torch  # noqa: E402
+
+from uhdd.metrics import binned  # noqa: E402
+
+
+def _img(h=128, w=128, seed=0):
+    g = torch.Generator().manual_seed(seed)
+    x = torch.rand(1, 3, h, w, generator=g)
+    return torch.nn.functional.avg_pool2d(x, 3, 1, 1)          # some spatial correlation
+
+
+def test_aligned_psnr_recovers_shift():
+    gt = _img(200, 200)
+    pred = torch.roll(gt, shifts=(1, -2), dims=(2, 3))
+    r = binned.aligned_psnr(pred, gt, None, {"align_tile": 64, "align_radius": 2})
+    assert r["apsnr"] > 80 and r["apsnr_shift"] == 3
+    r1 = binned.aligned_psnr(pred, gt, None, {"align_tile": 64, "align_radius": 0})
+    assert r1["apsnr"] < 40
+
+
+def test_no_harm():
+    gt, inp = _img(seed=1), _img(seed=2)
+    blur = torch.zeros(1, 1, 128, 128)
+    blur[..., 64:] = 2.0                                         # left half in focus
+    pred = inp.clone()
+    pred[..., 64:] = gt[..., 64:]                                # fixes only the defocused half
+    r = binned.no_harm(pred, gt, inp, None, blur, {})
+    assert r["keep_psnr_b0"] == float("inf") and abs(r["dpsnr_b0"]) < 1e-9
+    r2 = binned.no_harm(gt, gt, inp, None, blur, {})
+    assert r2["dpsnr_b0"] > 0
+
+
+def test_perceptual_bins_assignment():
+    gt = _img(128, 256, seed=3)
+    blur = torch.zeros(1, 1, 128, 256)
+    blur[..., 128:] = 5.0                                        # right tiles -> bin 3
+    r = binned.perceptual_bins(gt, gt, None, blur, {"bin_tile": 64}, names=())
+    assert (r["ntile_b0"], r["ntile_b1"], r["ntile_b3"]) == (4.0, 0.0, 4.0)
+
+
+def test_resolution_sweep_psnr_only(monkeypatch):
+    monkeypatch.setattr(binned.iqa, "full_reference", lambda *a, **k: 0.0)
+    gt = _img(64, 64, seed=4)
+    r = binned.resolution_sweep(gt + 0.01, gt, torch.ones(1, 1, 64, 64, dtype=torch.bool), {"eval_scales": (2, 4)})
+    assert abs(r["psnr_s2"] - 40.0) < 1e-3 and abs(r["psnr_s4"] - 40.0) < 1e-3
+
+
+# --- training-free fusion baselines (scripts/fuse_baselines.py) --------------------------------------
+from fuse_baselines import fuse, guided_filter, ramp  # noqa: E402
+
+
+def test_multiscale_weights_partition():
+    b = np.linspace(0, 5, 101, dtype=np.float32)[None].repeat(4, 0)
+    x, u2, u4 = (np.full((4, 101, 3), v, np.float32) for v in (0.0, 0.5, 1.0))
+    y, info = fuse("multiscale", {"t0": 0.4, "t1": 1.2, "m0": 1.5, "m1": 2.5}, x, u4, u2, b)
+    v = y[0, :, 0]
+    assert v[b[0] < 0.4].max() == 0.0                     # input in focus
+    assert np.allclose(v[(b[0] > 1.2) & (b[0] < 1.5)], 0.5)  # x2 in the middle
+    assert v[b[0] > 2.5].min() == 1.0                      # x4 for strong blur
+    assert np.all(np.diff(v) >= -1e-6)
+
+
+def test_guided_filter_identity_and_flat():
+    g = _img(64, 64).numpy()[0].transpose(1, 2, 0)
+    assert np.allclose(guided_filter(g, g, 4, 1e-6), g, atol=1e-3)     # src == guide -> unchanged
+    flat = np.full_like(g, 0.3)
+    assert np.allclose(guided_filter(g, flat, 4, 1e-3), 0.3, atol=1e-5)  # flat src stays flat
+
+
+def test_ramp():
+    assert ramp(np.array([0.0, 0.8, 2.0]), 0.4, 1.2).tolist() == [1.0, 0.5, 0.0]
+
+
+# --- reference-based SR baseline (scripts/refsr_baseline.py) ------------------------------------------
+from refsr_baseline import RefBuilder  # noqa: E402
+
+
+def test_ref_builder_shapes_and_colocation():
+    rng = np.random.default_rng(0)
+    x = rng.random((512, 768, 3), dtype=np.float32)                 # native
+    a4 = cv2.resize(x, (192, 128), interpolation=cv2.INTER_AREA)    # anchor at 1/4
+    blur4 = np.zeros((128, 192), np.float32)
+    blur4[:, 96:] = 5.0                                              # right half defocused
+    col = RefBuilder(x, a4, blur4, 32, "colocated")((16, 40, 32, 32))
+    assert col.shape == (128, 128, 3) and np.array_equal(col, x[64:192, 160:288])
+    rb = RefBuilder(x, a4, blur4, 32, "mosaic")
+    assert rb.cands and all(c[1] + 64 <= 96 * 4 for c in rb.cands)   # candidates only in the in-focus half
+    m = rb((100, 170, 32, 32))                                       # box partly outside the image
+    assert m.shape == (128, 128, 3)
+
+
+# --- TLC adapter (uhdd/adapters/tlc.py) ---------------------------------------------------------------
+def test_tlc_local_attention_matches_global_when_small_and_windows_when_large():
+    import types as _t
+    from uhdd.adapters import tlc
+
+    class Attention(torch.nn.Module):                        # same name/attribute as Restormer's MDTA
+        def __init__(self):
+            super().__init__()
+            self.temperature = torch.nn.Parameter(torch.ones(1))
+
+        def forward(self, x):                                # global statistic: depends on the whole map
+            return x - x.mean(dim=(-2, -1), keepdim=True)
+
+    net = torch.nn.Sequential(Attention())
+    fn = tlc.wrap(net, {"tlc_base": 32, "clamp": False})
+    assert fn.n_patched == 1
+    x = torch.rand(1, 1, 32, 32)
+    assert torch.allclose(fn(x), x - x.mean())               # fits in one window -> unchanged
+    big = torch.zeros(1, 1, 32, 64)
+    big[..., 32:] = 1.0
+    fn(torch.zeros(1, 1, 8, 8))                              # reference size is per call
+    net[0]._tlc_ref[:] = [32, 64]
+    y = net[0](big)                                          # windows of 32 px, stride 16 over the width
+    assert torch.allclose(y[..., :16], torch.zeros(1, 1, 32, 16))   # left window sees only zeros

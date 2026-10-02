@@ -170,6 +170,8 @@ def main():
                 cmd += ["--masks", exp["data"]["masks"][sc]]
             if shift is not None:
                 cmd += ["--pred-shift", shift["out"]]
+            if "noharm" in ev["metrics"].split(","):        # in-focus preservation needs the input at this scale
+                cmd += ["--inputs", exp["data"]["inputs"][sc]]
             for k, v in ev.get("options", {}).items():
                 cmd += [f"--{k.replace('_', '-')}", v]
             sh(cmd, a.dry_run)

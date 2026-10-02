@@ -61,6 +61,9 @@ python code/scripts/build_native_set.py --raw <cr2 dir or zip> --official-inputs
 ```
 Report the summary line and the 5 worst rows of `build_report.csv` (calibration PSNR, shift). Use
 `dpdd_native_v2` in `code/experiments/dpdd_p1.yaml` (change the data paths) and rerun step 5 on it.
+**Correction (2026-10-03):** also change `results:` to a new directory (e.g. `${UHDD_RESULTS}/dpdd_v2`):
+the step cache is keyed by pipeline, not by dataset, so the old results dir would silently reuse P1 outputs
+computed on the v1 renderings. (`code/experiments/dpdd_eval_v3.yaml` already uses `dpdd_v2`.)
 Do the outdoor raws the same way when they arrive (step 7).
 
 ### 3b. (only if 3 is not possible) Re-register the existing native targets (translation)

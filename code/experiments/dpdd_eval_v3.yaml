@@ -1,0 +1,71 @@
+# Evaluation protocol v3 (docs/evaluation.md): the P1 pipelines + group-C upsamplers, re-scored with the
+# blur-stratified perceptual metrics, no-harm, aligned PSNR and the resolution sweep.
+# Results dir is separate from dpdd_p1 (the step cache is keyed by pipeline, not by dataset: P1 outputs were
+# computed on the v1 renderings and must not be reused for dpdd_native_v2). If P1b already ran on
+# dpdd_native_v2 into another results dir, point `results` there to reuse its inference.
+# Run: python code/scripts/run_matrix.py code/experiments/dpdd_eval_v3.yaml --gpus all [--dry-run]
+# Training-free baselines (group B) and reference-based SR (group D) are scripts, not registry models:
+# see code/experiments/run_baselines_bd.sh.
+
+data:
+  inputs:  {1: "${UHDD_DATA}/dpdd_native_v2/inputs", 2: "${UHDD_DATA}/dpdd_native_v2/x2/inputs", 4: "${UHDD_DATA}/dpdd_native_v2/x4/inputs"}
+  targets: {1: "${UHDD_DATA}/dpdd_native_v2/x1/targets", 2: "${UHDD_DATA}/dpdd_native_v2/x2/targets", 4: "${UHDD_DATA}/dpdd_native_v2/x4/targets"}
+  masks:   {1: "${UHDD_DATA}/dpdd_native_v2/x1/masks", 2: "${UHDD_DATA}/dpdd_native_v2/x2/masks", 4: "${UHDD_DATA}/dpdd_native_v2/x4/masks"}
+
+results: "${UHDD_RESULTS}/dpdd_v2"
+
+run:
+  tile: 512
+  overlap: 64
+  tile_batch: 8
+  blend: linear
+  precision: fp32
+
+eval:
+  tag: dpdd3
+  metrics: psnr,ssim,hb,lpips,dists,blurbins,percbins,noharm,apsnr,msres,gridshift,pm
+  crop_native: 64
+  options:
+    dp_maps: "${UHDD_DATA}/dpdd_native/dp_maps"
+  table_cols: psnr,ssim,apsnr,dists,lpips_b0,lpips_b2,lpips_b3,dists_b3,dpsnr_b0,psnr_s4,lpips_s2,gs_psnr,pipeline_time_s,peak_mem_gb
+
+pipelines:
+  - group: references
+    name: "input (blurry)"
+    steps:
+      - {model: identity, scale: 1, tile: 0}
+
+  - group: g1_native_patchwise
+    name: "{m} native t{t}"
+    for: {m: [restormer_dpdd, lakdnet_dpdd_l, drbnet_single, ifan, bokehlicious_deblur], t: [512]}
+    steps:
+      - {model: "{m}", scale: 1, tile: "{t}", tile_batch: 2}
+
+  # A. retrained-at-native rows are added here once P2b produces the checkpoints (docs/baselines.md A1-A3)
+
+  - group: a4_tlc
+    name: "restormer_dpdd_tlc native t{t}"
+    for: {t: [512, 1024]}
+    steps:
+      - {model: restormer_dpdd_tlc, scale: 1, tile: "{t}", tile_batch: 2}
+
+  - group: g2_lowres_upsample
+    name: "{m} @x4 + {up}"
+    for: {m: [restormer_dpdd, drbnet_single], up: [bicubic_x4, swinir_x4_real, hat_l_x4, hat_x4_real]}
+    steps:
+      - {model: "{m}", scale: 4, tile: 0}
+      - {model: "{up}", tile: 256, overlap: 32}
+
+  - group: g2_lowres_upsample_diffusion
+    name: "{m} @x4 + {up}"
+    for: {m: [restormer_dpdd, drbnet_single], up: [osediff_x4]}
+    steps:
+      - {model: "{m}", scale: 4, tile: 0}
+      - {model: "{up}", tile: 128, overlap: 32, tile_batch: 1, precision: fp32}
+
+  - group: g2_x2_upsample
+    name: "{m} @x2 t1024 + {up}"
+    for: {m: [restormer_dpdd, drbnet_single], up: [bicubic_x2, swinir_x2_real]}
+    steps:
+      - {model: "{m}", scale: 2, tile: 1024, tile_batch: 2}
+      - {model: "{up}", tile: 256, overlap: 32}

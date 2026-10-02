@@ -9,7 +9,8 @@ Writes <pred>/metrics[_<tag>].csv (per image) and <pred>/metrics[_<tag>].json (m
 settings, and time/memory from the run's meta.json). `--targets` omitted -> NR metrics only.
 --scale = native / evaluated resolution (1 = native, 4 = 1680x1120 on DPDD); sets the PSF
 pixel pitch. Seam metrics use the tile grid stored in <pred>/meta.json; the 'gridshift' metric
-needs --pred-shift (the same model run with run_model.py --grid-offset).
+needs --pred-shift (the same model run with run_model.py --grid-offset); 'noharm' needs --inputs.
+Metric definitions: docs/evaluation.md.
 """
 from __future__ import annotations
 
@@ -45,7 +46,9 @@ def worker(rank: int, world: int, device: torch.device, a, records: list, infos:
            infos_shift: dict | None = None):
     items = shard(records, rank, world)
     names = a.metrics.split(",")
-    ctx_base = {"scale": a.scale, "fnum": a.fnum, "pm_sigma": a.pm_sigma, "hb_s": a.hb_s, "crop": a.crop,
+    ctx_base = {"bin_tile": a.bin_tile, "align_radius": a.align_radius,
+                "eval_scales": tuple(int(f) for f in a.eval_scales.split(",")),
+                "scale": a.scale, "fnum": a.fnum, "pm_sigma": a.pm_sigma, "hb_s": a.hb_s, "crop": a.crop,
                 "fr_tile": a.fr_tile, "cell": a.cell}
     rows = []
     for rec in loader(ImageDataset(items), a.workers):
@@ -60,6 +63,8 @@ def worker(rank: int, world: int, device: torch.device, a, records: list, infos:
         blur_map = _blur_map(a.dp_maps, rec["name"], pred.shape[-2:], device) if a.dp_maps else None
         pred, gt, mask = _crop(pred, a.crop), _crop(gt, a.crop), _crop(mask, a.crop)
         ctx = {**ctx_base, "info": infos.get(rec["name"], {}).get("tiling"), "blur_map": _crop(blur_map, a.crop)}
+        if rec.get("input") is not None:
+            ctx["input"] = _crop(to_tensor(rec["input"], device), a.crop)
         if rec.get("pred_shift") is not None:
             ctx["pred_shift"] = _crop(to_tensor(rec["pred_shift"], device), a.crop)
             ctx["info_shift"] = (infos_shift or {}).get(rec["name"], {}).get("tiling")
@@ -77,6 +82,10 @@ def main():
     ap.add_argument("--targets")
     ap.add_argument("--masks")
     ap.add_argument("--dp-maps", help="dir of dp_maps.py outputs (<stem>_disp/_conf.png) for 'blurbins'")
+    ap.add_argument("--inputs", help="blurry inputs (same names) for 'noharm'")
+    ap.add_argument("--bin-tile", type=int, default=512, help="tile size of 'percbins'")
+    ap.add_argument("--align-radius", type=int, default=2, help="shift search radius (px) of 'apsnr'")
+    ap.add_argument("--eval-scales", default="2,4", help="downscale factors of 'msres'")
     ap.add_argument("--pred-shift", help="same model run with a shifted tile grid (metric 'gridshift')")
     ap.add_argument("--metrics", default="psnr,ssim,mae,pm,hb,lpips,dists,drift,seam,stats")
     ap.add_argument("--label", help="method label for tables (default: pred folder name)")
@@ -100,8 +109,9 @@ def main():
     if tgts and (missing := sorted(set(preds) - set(tgts))):
         sys.exit(f"{len(missing)} predictions without target: {missing[:10]}")
     shifted = list_images(a.pred_shift) if a.pred_shift else {}
-    records = [{"name": k, "pred": p, "target": tgts.get(k), "mask": msks.get(k), "pred_shift": shifted.get(k)}
-               for k, p in preds.items()]
+    inps = list_images(a.inputs) if a.inputs else {}
+    records = [{"name": k, "pred": p, "target": tgts.get(k), "mask": msks.get(k), "pred_shift": shifted.get(k),
+                "input": inps.get(k)} for k, p in preds.items()]
 
     meta_path = pred_dir / "meta.json"
     meta = json.loads(meta_path.read_text()) if meta_path.exists() else {"images": {}, "summary": {}}

@@ -184,3 +184,14 @@ rename the targets to the blurry stems before using `run_model`/`evaluate`. Need
   blur-level stratification from DP views, synthetic test set (T2).
 - A recent DPDD-trained transformer/Mamba baseline with public weights is still to be added.
 - Diffusion SR upsamplers (StableSR/SUPIR/OSEDiff) are not configured yet (large SD backbones).
+
+## Protocol v3 and script baselines (2026-10-03)
+
+Full description: `docs/evaluation.md` (metrics, how to run) and `docs/baselines.md` (every baseline).
+- New metrics in `evaluate.py`: `percbins` (LPIPS/DISTS per DP blur bin), `noharm` (needs `--inputs`), `apsnr`
+  (tile-aligned PSNR), `msres` (resolution sweep). Matrix: `code/experiments/dpdd_eval_v3.yaml` (tag `dpdd3`).
+- Training-free baselines: `scripts/fuse_baselines.py --method composite|multiscale|guided|detail|exemplar`
+  (`--tune` on val). Reference-based SR: `scripts/refsr_baseline.py` (DATSR, mmcv-free via `uhdd/adapters/datsr.py`).
+  Both: `code/experiments/run_baselines_bd.sh <anchor model>`.
+- New registry models: `hat_l_x4`, `hat_x4_real` (basicsr-free adapter), `osediff_x4` (CUDA only).
+- Helpers: `scripts/pair_official.py` (name-paired official splits), `scripts/vae_ceiling.py` (variant B backbone).

@@ -1,5 +1,8 @@
 # Evaluation plan — main comparisons and metrics
 
+> **Superseded (2026-10-03) by [`docs/evaluation.md`](../docs/evaluation.md) and [`docs/baselines.md`](../docs/baselines.md)**,
+> which are canonical. This file is kept as the dated planning and local-results log.
+
 Status: **v2 (2026-10-02)** — updated with the first secure-env results (`handoff/from_secure/2026-10-01_p1-eval.md`) and outside checks on the official 1680×1120 data. Outside env. Secure env: comment/amend via patch (edit this file or answer in the report).
 Legend: **[D]** decision needed from user, **[V]** fact to verify, **[P1..P4]** priority.
 

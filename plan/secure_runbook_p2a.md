@@ -93,7 +93,20 @@ python code/scripts/vae_ceiling.py --targets $UHDD_DATA/dpdd_native_v2/x1/target
 Report the printed table verbatim (outside is running the same on the M4 for sdxl/flux/dcae; the numbers
 should match to ~0.01 dB — a cross-check of both setups).
 
-## 6. Handoff
+## 6. (if GPUs are free while training data builds) Evaluation protocol v3 + new baselines
+
+New since the last pull (details: `docs/evaluation.md`, `docs/baselines.md`): metrics `percbins`, `noharm`,
+`apsnr`, `msres`; baselines HAT-L / Real-HAT (registry), OSEDiff (registry, CUDA), training-free fusion
+(`fuse_baselines.py`), DATSR reference-based SR (`refsr_baseline.py`, no mmcv needed).
+1. Weights: HAT (Google Drive per HAT README, or the HF mirrors named in `docs/baselines.md` C2), OSEDiff setup
+   commands in `docs/baselines.md` C3, DATSR `gh release download` from caojiezhang/DATSR into `$UHDD_WEIGHTS/datsr`.
+2. `python code/scripts/run_matrix.py code/experiments/dpdd_eval_v3.yaml --gpus all` (new results dir `dpdd_v2`).
+3. Tune B1–B4 on the native **val** set (`docs/baselines.md` B, "Tuning"), then
+   `code/experiments/run_baselines_bd.sh drbnet_single` and `... restormer_dpdd`.
+4. Report: `summarize.py --ci --ref "drbnet_single fuse:composite"` with the main-table columns of
+   `docs/evaluation.md` §5.5, the tuned parameters, and runtimes. Update the status lists in `docs/` in the patch.
+
+## 7. Handoff
 
 Report `handoff/from_secure/<date>_p2a.md` (+ the P1b report if done in the same patch) with steps 0–5,
 deviations, the tables. `handoff/make_patch.sh`.

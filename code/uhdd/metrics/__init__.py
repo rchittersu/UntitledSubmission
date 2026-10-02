@@ -13,6 +13,12 @@ Names (comma-separated on the CLI):
   blurbins                 PSNR per DP-defocus bin (psnr_b0..b3, frac_b0..b3), bins on smoothed
                            |disparity| [0,0.4), [0.4,1.5), [1.5,3.5), [3.5,inf) DP px; b0 = focal plane
                                                                        (needs gt, ctx["blur_map"])
+  percbins                 LPIPS/DISTS per blur bin on 512-px tiles (lpips_b0..3, dists_b0..3, ntile_b*)
+                                                                       (needs gt, ctx["blur_map"])
+  noharm                   in-focus preservation: keep_psnr_b0 (vs input), dpsnr_b0 (vs input's psnr_b0)
+                                                                       (needs ctx["input"], ctx["blur_map"])
+  apsnr                    tile-aligned PSNR (integer shift search +-ctx["align_radius"] px per tile)
+  msres                    resolution sweep: psnr/lpips/dists at area-downscaled x2, x4 (psnr_s2, ...)
   gridshift                gs_mad, gs_psnr, gs_seam_step, gs_seam_ratio: difference to the same
                            model run on a shifted tile grid           (needs ctx["pred_shift"])
 
@@ -24,11 +30,12 @@ from __future__ import annotations
 
 import torch
 
-from . import consistency, fidelity, iqa, optics
+from . import binned, consistency, fidelity, iqa, optics
 
-NEEDS_GT = {"psnr", "ssim", "mae", "pm", "pmg", "hb", "blurbins", "lpips", "dists", "drift", "stats"}
+NEEDS_GT = {"psnr", "ssim", "mae", "pm", "pmg", "hb", "blurbins", "percbins", "apsnr", "msres", "lpips", "dists",
+            "drift", "stats"}
 ALL = ["psnr", "ssim", "mae", "pm", "pmg", "hb", "lpips", "dists", "musiq", "maniqa", "clipiqa",
-       "drift", "seam", "stats", "gridshift", "blurbins"]
+       "drift", "seam", "stats", "gridshift", "blurbins", "percbins", "noharm", "apsnr", "msres"]
 BLUR_EDGES = (0.4, 1.5, 3.5)
 # direction for summaries: +1 higher is better, -1 lower is better
 DIRECTION = {"psnr": 1, "ssim": 1, "pm_psnr": 1, "pm_ssim": 1, "pmg_psnr": 1, "pmg_ssim": 1, "mae": -1, "hb_nmse_db": -1,
@@ -36,6 +43,9 @@ DIRECTION = {"psnr": 1, "ssim": 1, "pm_psnr": 1, "pm_ssim": 1, "pmg_psnr": 1, "p
              "seam_step": -1, "seam_ratio": -1, "sharp_lr_abs": -1, "sharp_lr_std": -1,
              "noise_lr_abs": -1, "noise_lr_std": -1, "slope_err_abs": -1, "slope_err_std": -1,
              "psnr_b0": 1, "psnr_b1": 1, "psnr_b2": 1, "psnr_b3": 1, "gs_mad": -1, "gs_psnr": 1, "gs_seam_step": -1, "gs_seam_ratio": -1,
+             **{f"{m}_b{k}": -1 for m in ("lpips", "dists") for k in range(4)},
+             "keep_psnr_b0": 1, "dpsnr_b0": 1, "apsnr": 1, "apsnr_shift": -1,
+             **{f"{m}_s{f}": d for f in (2, 4) for m, d in (("psnr", 1), ("lpips", -1), ("dists", -1))},
              "time_s": -1, "pipeline_time_s": -1, "peak_mem_gb": -1}
 
 
@@ -81,6 +91,16 @@ def compute(names: list[str], pred: torch.Tensor, gt: torch.Tensor | None,
                         m = m & mask
                     out[f"frac_b{k}"] = m.float().mean().item()
                     out[f"psnr_b{k}"] = fidelity.psnr(pred, gt, m) if m.any() else float("nan")
+        elif n == "percbins":
+            if ctx.get("blur_map") is not None:
+                out.update(binned.perceptual_bins(pred, gt, mask, ctx["blur_map"], ctx))
+        elif n == "noharm":
+            if ctx.get("blur_map") is not None and ctx.get("input") is not None:
+                out.update(binned.no_harm(pred, gt, ctx["input"], mask, ctx["blur_map"], ctx))
+        elif n == "apsnr":
+            out.update(binned.aligned_psnr(pred, gt, mask, ctx))
+        elif n == "msres":
+            out.update(binned.resolution_sweep(pred, gt, mask, ctx))
         elif n == "gridshift":
             if ctx.get("pred_shift") is not None and ctx.get("info") and ctx.get("info_shift"):
                 out.update(consistency.grid_shift_metrics(pred, ctx["pred_shift"], ctx["info"],

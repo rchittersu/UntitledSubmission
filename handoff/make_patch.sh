@@ -19,7 +19,7 @@ BASE="${BASE:-}"
 OUT="${1:-../handoff_$(date +%Y-%m-%d).patch}"
 
 # Paths the patch may touch (regex on repo-relative paths).
-ALLOWED='^(Template/|plan/|code/|handoff/from_secure/|CLAUDE\.md$|\.gitignore$)'
+ALLOWED='^(Template/|plan/|docs/|code/|handoff/from_secure/|CLAUDE\.md$|\.gitignore$)'
 
 fail() { echo "ERROR: $*" >&2; exit 1; }
 warn() { echo "WARNING: $*" >&2; }
@@ -63,7 +63,7 @@ changed=$(git diff --name-only "$BASE_COMMIT..HEAD")
 bad=$(printf '%s\n' "$changed" | grep -Ev "$ALLOWED" || true)
 [ -z "$bad" ] || fail "patch touches paths outside the allowed set:
 $bad
-(allowed: Template/, plan/, code/, handoff/from_secure/, CLAUDE.md, .gitignore)"
+(allowed: Template/, plan/, docs/, code/, handoff/from_secure/, CLAUDE.md, .gitignore)"
 
 binary=$(git diff --numstat "$BASE_COMMIT..HEAD" | awk -F'\t' '$1=="-" && $2=="-" {print $3}')
 [ -z "$binary" ] || fail "binary files are not allowed (send plot data as text instead):
