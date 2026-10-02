@@ -32,7 +32,15 @@ Legend: **[D]** decision needed from user, **[V]** fact to verify, **[P1..P4]** 
    their 0.130 c/px — the extra blur is shared with the f/4 input.)
 4. **Blur-level stratification from DP views** (`dp_maps.py`, metric `blurbins`): bins on smoothed |DP disparity| at 1680×1120: [0,0.4) focal plane, [0.4,1.5), [1.5,3.5), [3.5,∞) DP px (≈ quartiles on the test set). Validated: per-image Spearman(|disparity|, log sharpness gap target/input) median 0.76. Per-bin PSNR is content-confounded (blurry input: 25.7 / 23.6 / 23.3 / 26.0 dB — strongly defocused regions are often smooth), so report per-bin **gains over the blurry input** (`summarize.py --ref`).
 5. **Statistics**: per-image paired differences with 95 % bootstrap CIs (`summarize.py --ci --ref`) for every claim; n = 37 (→ 76 with outdoor raw).
-6. **Native test set**: the only full-resolution DPDD data is raw CR2 (indoor 29.5 GB, outdoor 30.4 GB). The authors' processed release (`dd_dp_dataset_canon.zip`, 15.8 GB) is 1680×1120 — the same files as the Hugging Face copy used in P1 (identical layout and sizes). So the native set must be developed from raw (D3); absolute numbers are not comparable to published DPDD numbers, comparisons within our protocol are.
+6. **Native test set v2 = `code/scripts/build_native_set.py`** (built outside on the 37 indoor test pairs,
+   identical recipe for the secure side and the outdoor raws): per-capture calibration to the official
+   1680×1120 rendering — verified crop (12,12) (sub-pixel residual 0.07 px), polynomial colour/tone,
+   fitted unsharp mask (the converter's sharpening: 28/37 targets), smooth local-tone field —, translation
+   registration, area x2/x4. Agreement with official at 1/4: 38.8 / 39.0 dB (inputs / targets, median;
+   P1 global map: 28.7 dB). **The x4 level reproduces the standard benchmark**: blurry-vs-sharp PSNR
+   26.74 vs 26.41 dB official (paired +0.33, sd 0.59), so x4 numbers are now comparable to published
+   DPDD numbers up to that offset. Official downscale filter still undetermined (area vs bilinear, < 1 dB).
+   Background: the only full-resolution DPDD data is raw CR2 (indoor 29.5 GB, outdoor 30.4 GB). The authors' processed release (`dd_dp_dataset_canon.zip`, 15.8 GB) is 1680×1120 — the same files as the Hugging Face copy used in P1 (identical layout and sizes). So the native set must be developed from raw (D3); absolute numbers are not comparable to published DPDD numbers, comparisons within our protocol are.
 
 ---
 

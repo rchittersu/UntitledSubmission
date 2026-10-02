@@ -142,7 +142,20 @@ python code/scripts/run_model.py --model bicubic_x4 --inputs $R/x4/restormer_t51
 
 Paste `summarize.py` tables (and `register_pairs.py` shift statistics) into the handoff report.
 
-## Native test set from raw and optics checks
+## Native test set: `build_native_set.py` (preferred)
+
+Builds x1/x2/x4 (+ masks, `build_report.csv`) from raw CR2, calibrated per capture to the official
+1680×1120 rendering (crop (12,12) verified; polynomial colour/tone + fitted unsharp mask + smooth
+local-tone field; translation registration; area downscaling). On the 37 indoor test pairs: 38.8 / 39.0 dB
+agreement with the official images (inputs / targets, median), and the x4 level reproduces the standard
+benchmark's blurry-vs-sharp PSNR within +0.33 dB. See the script docstring for all numbers.
+
+```bash
+python code/scripts/build_native_set.py --raw <cr2 dir or zip> --official-inputs <1680 inputs> \
+    --official-targets <1680 targets named by input stem> [--pairs pairs.csv] --out $UHDD_DATA/dpdd_native_v2
+```
+
+## Native test set from raw (older global map) and optics checks
 
 ```bash
 # CR2 -> native 16-bit PNG matching the official release's look: fit once on train scenes, apply to any scenes

@@ -53,3 +53,14 @@ def test_paired_ratio_sigma_fit():
     for s in (0.0, 0.5, 0.9):
         r = np.exp(-2 * math.pi ** 2 * s ** 2 * f ** 2)
         assert abs(pm.fit_sigma(f, r) - s) < 0.02
+
+
+def test_build_native_calibrate_recovers_rendering():
+    import cv2
+    import build_native_set as b
+    rng = np.random.default_rng(0)
+    lin = cv2.GaussianBlur(rng.random((256, 384, 3)).astype(np.float32), (0, 0), 3)
+    lin = (lin - lin.min()) / (lin.max() - lin.min())
+    official = cv2.resize(lin, (96, 64), interpolation=cv2.INTER_AREA) ** (1 / 2.2)   # 1/4 res, gamma "rendering"
+    nat, psnr, params = b.calibrate(lin, official)
+    assert nat.shape == lin.shape and psnr > 40

@@ -47,7 +47,23 @@ python code/scripts/dp_maps.py --left <test_l/source> --right <test_r/source> --
 Map names are the **blurry-input stems**, matching the native set. Report the printed focal-plane
 fraction line. (Outside on all 76 test images: median 0.129, min 0.007, max 0.721.)
 
-## 3. Re-register the native targets (translation)
+## 3. Rebuild the native set with tight calibration + translation registration
+
+**Preferred (replaces develop_raw.py's global map):** `code/scripts/build_native_set.py` develops each CR2,
+calibrates it *per capture* to the official 1680×1120 rendering (polynomial + smooth local-tone field;
+held-out agreement ~37–38 dB at 1/4 vs 28.7 dB for the global map), registers targets with translation,
+and writes x1/x2/x4 + masks + `build_report.csv`. Built outside on the 37 indoor pairs with the same
+script, so both sides have identical data. Official dirs must be name-paired (targets named by the input
+stem; target CR2 stems from symlinks or `--pairs input,target` CSV):
+```bash
+python code/scripts/build_native_set.py --raw <cr2 dir or zip> --official-inputs <1680 inputs> \
+    --official-targets <1680 targets, renamed to input stems> --pairs pairs.csv --out $UHDD_DATA/dpdd_native_v2 --procs 8
+```
+Report the summary line and the 5 worst rows of `build_report.csv` (calibration PSNR, shift). Use
+`dpdd_native_v2` in `code/experiments/dpdd_p1.yaml` (change the data paths) and rerun step 5 on it.
+Do the outdoor raws the same way when they arrive (step 7).
+
+### 3b. (only if 3 is not possible) Re-register the existing native targets (translation)
 
 ```bash
 D=$UHDD_DATA/dpdd_native
