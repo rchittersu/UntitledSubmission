@@ -45,3 +45,11 @@ def test_in_focus_mapping():
     mask[100, 200] = True
     assert m.in_focus(mask, 100 * 4 + 12, 200 * 4 + 12)
     assert not m.in_focus(mask, 500 * 4 + 12, 200 * 4 + 12)
+
+
+def test_paired_ratio_sigma_fit():
+    import paired_edge_mtf as pm
+    f = m.FREQS
+    for s in (0.0, 0.5, 0.9):
+        r = np.exp(-2 * math.pi ** 2 * s ** 2 * f ** 2)
+        assert abs(pm.fit_sigma(f, r) - s) < 0.02

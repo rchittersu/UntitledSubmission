@@ -39,6 +39,8 @@ upsamplers, IFAN, re-registered targets, CIs). Line numbers refer to `sec/1_intr
 
 ## Open
 
-- Whether to claim diffraction-aware PSNR as primary depends on the focal-plane MTF result (runbook P1b §4).
+- Diffraction-aware PSNR: **not** primary (paired focal-plane MTF: f/22 target as sharp as in-focus f/4
+  below 0.3 c/px). The intro's "diffraction-limited at native resolution" (l. 197–198) must be softened:
+  the target is diffraction-limited only near Nyquist; relative to the f/4 input it is not blurrier.
 - Teaser panel choice: needs a scene where (a) patch-wise leaves strong blur and (b) bicubic is soft,
   ideally with repeated texture for the consistency point. Ask the secure side for 2–3 candidates by name.

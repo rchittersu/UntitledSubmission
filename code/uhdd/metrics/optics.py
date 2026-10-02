@@ -5,10 +5,13 @@
    A prediction sharper than the target is penalized by PSNR/SSIM. We therefore blur the
    prediction with the target's diffraction PSF before comparing ("pm_" metrics), which removes
    the penalty for detail beyond the target's own optical cutoff.
-   Measured (secure env, slanted edges on raw): the f/22 targets are blurrier than Airy x pixel
-   aperture, extra Gaussian sigma ~0.7-0.8 px at native resolution. Part of that (optical
-   low-pass filter, pixel aperture) is shared by the f/4 input, so the right extra blur is
-   undecided: `pm` = Airy only (primary), `pmg` = Airy + Gaussian(extra_sigma) (sensitivity).
+   Measured (2026-10-02, slanted edges on raw green photosites, `scripts/paired_edge_mtf.py`):
+   on the SAME focal-plane edges (DP focus mask) of 21 indoor test pairs (336 edges), the ratio
+   MTF(f/22)/MTF(f/4) is 1.05 / 1.24 / 0.99 / 0.64 at 0.1 / 0.2 / 0.3 / 0.4 c/px vs. Airy-theory
+   0.75 / 0.50 / 0.25 / 0.05: the f/22 target is as sharp as in-focus f/4 up to 0.3 c/px (f/4
+   aberrations + residual defocus offset diffraction); Gaussian fit sigma ~0 px (95% CI 0-0.31)
+   vs. 0.91 px for Airy-only. Hence PSF matching over-corrects: plain PSNR/SSIM are primary,
+   `pm` (Airy) is a sensitivity check only, `pmg` (Airy + extra Gaussian) is not recommended.
 
 2. High-band error. Native-resolution detail is exactly what a 1/s-resolution anchor cannot
    contain. H(x) = x - U(D(x)) keeps frequencies above the 1/s Nyquist limit (D = s x s box

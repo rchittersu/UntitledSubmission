@@ -9,7 +9,8 @@ Summary of what changed outside (all CPU-tested, 42 tests; `git pull` to get the
   shifts are ~0.4 px on the official 1680×1120 pairs with translation/euclidean);
 - new metric **`gridshift`** (content-free seams / tiling sensitivity; the old `seam_ratio` is noise);
 - **DP defocus maps** (`code/scripts/dp_maps.py`) → metric **`blurbins`** and `estimate_gt_mtf.py --focus-dir`;
-- metric **`pmg`** (Airy + Gaussian σ, sensitivity for your MTF finding);
+- PSF matching dropped as primary (your MTF finding, followed up outside with a paired focal-plane
+  measurement: see `plan/evaluation.md` decision 3); `pm` kept as a sensitivity column;
 - **`summarize.py --ci --ref`** (bootstrap CIs, paired per-image differences);
 - IFAN weights from a public GitHub mirror (`IFAN.safetensors`, bit-identical to the official net);
 - `code/experiments/dpdd_p1.yaml` eval tag **`dpdd2`** with the new metrics.
@@ -64,17 +65,16 @@ image still has > 20 px, flag it and describe what you see (do not drop it).
 against v1 and v2 targets (`evaluate.py --metrics psnr,ssim,lpips --tag reg_v1/reg_v2`) and report
 both rows: this isolates the registration effect on the numbers.
 
-## 4. Focal-plane MTF (is the f/22 target blurrier than in-focus f/4 at native resolution?)
+## 4. Focal-plane MTF — answered outside, optional
 
+Done outside on the indoor raws (see `plan/evaluation.md` decision 3): on the same focal-plane edges
+the f/22 target is as sharp as in-focus f/4 below 0.3 c/px, so PSF matching is dropped as primary.
+Only if time permits, repeat on the outdoor raws once available:
 ```bash
-python code/scripts/estimate_gt_mtf.py --zip cr2.zip --names <f4 stems> --focus-dir $D/dp_maps --out f4_focus.json
-python code/scripts/estimate_gt_mtf.py --zip cr2.zip --names <f22 stems> --focus-of <f4 stems> --focus-dir $D/dp_maps --out f22_focus.json
+python code/scripts/paired_edge_mtf.py --raw <outdoor cr2 zip or dir> --inputs <f4 stems> --targets <f22 stems> \
+    --focus-dir $D/dp_maps --out paired_focus_outdoor.json
 ```
-(`--names` for the f/22 run = the CR2 stems of the targets, `--focus-of` = their paired f/4 stems in the
-same order.) Report the same table as in your P1 report for both, plus edges/image. The question:
-on the **same focal-plane regions**, is MTF(f/22) below MTF(f/4)? If yes, fit the Gaussian σ of the
-*ratio* (that σ, not 0.8, would go into `pmg`). If MTF(f/4) is lower, say so: then PM blurring is not
-justified at all and `psnr` stays primary.
+and report the printed ratio table and sigma.
 
 ## 5. Complete P1 with protocol v2
 
@@ -93,7 +93,7 @@ python code/scripts/run_matrix.py code/experiments/dpdd_p1.yaml --gpus all
 For every group (`t1_resolution_gap`, `g1_native_patchwise`, `g2_lowres_upsample`, `references`):
 ```bash
 python code/scripts/summarize.py $UHDD_RESULTS/dpdd_p1/pipelines/*__dpdd2.json --ci \
-    --cols psnr,pm_psnr,pmg_psnr,ssim,lpips,dists,hb_nmse_db,gs_psnr,gs_seam_ratio,pipeline_time_s
+    --cols psnr,ssim,lpips,dists,pm_psnr,hb_nmse_db,gs_psnr,gs_seam_ratio,pipeline_time_s
 ```
 And these paired comparisons at native resolution (all on the same images):
 ```bash

@@ -197,10 +197,13 @@ def analyse_cr2(path, k=150, roi=96, focus=None):
 
 def _job(args):
     zf, stem, k, focus_dir, focus_stem = args
+    focus = load_focus(focus_dir, focus_stem or stem)
+    if os.path.isdir(zf):                                  # --zip may also be a folder of extracted CR2s
+        return stem, analyse_cr2(os.path.join(zf, f"{stem}.CR2"), k, focus=focus)
     with tempfile.TemporaryDirectory() as tmp:
         with zipfile.ZipFile(zf) as z:
             p = z.extract(f"CR2/{stem}.CR2", tmp)
-        return stem, analyse_cr2(p, k, focus=load_focus(focus_dir, focus_stem or stem))
+        return stem, analyse_cr2(p, k, focus=focus)
 
 
 def summarize(edges_per_image, top_frac=0.15):
@@ -218,7 +221,7 @@ def summarize(edges_per_image, top_frac=0.15):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--zip", required=True)
+    ap.add_argument("--zip", required=True, help="CR2 zip (members CR2/<stem>.CR2) or a folder of <stem>.CR2")
     ap.add_argument("--names", required=True, help="comma-separated CR2 stems")
     ap.add_argument("--out", required=True)
     ap.add_argument("--k", type=int, default=150, help="max candidate edges per image")
