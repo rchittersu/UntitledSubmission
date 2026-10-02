@@ -3,8 +3,8 @@
 Canonical description of **how we evaluate**: test data, protocol, every metric (concept + exact
 definition + code), how to run it, what is done (with numbers), what is priority, what is todo.
 Baselines are in [`baselines.md`](baselines.md). The method is in [`../plan/method_plan.md`](../plan/method_plan.md).
-History of decisions (dated) is in [§9](#9-decision-log); the older planning file `plan/evaluation.md` is kept
-for its dated local-results log.
+History of decisions (dated) is in [§9](#9-decision-log). The current secure-env task is
+[`../plan/secure_runbook.md`](../plan/secure_runbook.md).
 
 Legend: ✅ done · 🔶 priority (next 1–2 weeks) · ⏳ todo (later / after phase 1) · 📝 note only ·
 **[S]** runs in the secure env (data + GPUs) · **[O]** outside (code, local M4 checks).
@@ -30,7 +30,7 @@ Legend: ✅ done · 🔶 priority (next 1–2 weeks) · ⏳ todo (later / after 
 ### 🔶 Priority
 | Item | Where | Status |
 |---|---|---|
-| Native test set to **76 pairs** (outdoor raws) and val/train native sets | [S] | runbook P1b §7, P2a §3 |
+| Native test set to **76 pairs** (outdoor raws) and val/train native sets | [S] | `plan/secure_runbook.md` steps 3–4 |
 | **Tune every free parameter on val, never on test** (composite/multiscale/guided thresholds, exemplar settings) | [S] | `fuse_baselines.py --tune`; §5.4 |
 | Headline perceptual metric = **per-bin LPIPS/DISTS** (`percbins`) | [S] runs | code ✅ |
 | **No-harm** (in-focus preservation) column in the main table | [S] runs | code ✅ |
@@ -366,7 +366,7 @@ indoor vs outdoor split, all anchors.
 
 ## 7. Results so far
 
-### 7.1 Resolution gap [S, 2026-10-01, 37 indoor, v1 renderings — rerun on v2 in P1b]
+### 7.1 Resolution gap [S, 2026-10-01, 37 indoor, v1 renderings — rerun on v2: runbook step 7]
 Same model run at ×4 / ×2 / ×1 (512 tiles), each scored at **its own resolution** against the target at that
 resolution (excerpt of the secure P1 report):
 
@@ -391,7 +391,20 @@ model → tile context is not the bottleneck; out-of-distribution blur size is.
 | DRBNet @×2 (1024 tiles) + bicubic | 26.17 | 0.675 | 0.394 | +0.46 |
 | DP composite (input in focus, ×4+bicubic elsewhere) | 26.89 | 0.693 | 0.476 | +0.28 |
 
-8-image subset (adds SwinIR-real): ×4 + SwinIR-real vs ×4 + bicubic: PSNR −0.88 dB (8/8 images), LPIPS −0.085,
+Same 8-image subset (`dataset/results/local/subset8.txt`), adds real-world SwinIR (512-px LR tiles):
+
+| pipeline | PSNR ↑ | SSIM ↑ | LPIPS ↓ | HB-NMSE dB ↓ |
+|---|---|---|---|---|
+| blurry input | 26.44 | 0.658 | **0.278** | +1.33 |
+| DRBNet native, 1024 tiles | 26.29 | 0.651 | 0.280 | +1.59 |
+| DRBNet @×4 + bicubic | **27.82** | **0.721** | 0.524 | **−0.07** |
+| DRBNet @×4 + SwinIR-real | 26.94 | 0.700 | 0.439 | +1.01 |
+| DRBNet @×2 (1024 tiles) + bicubic | 27.14 | 0.707 | 0.357 | +0.19 |
+| DRBNet @×2 (1024 tiles) + SwinIR-real ×2 | 26.60 | 0.701 | 0.425 | +1.13 |
+| DP composite: input / ×4+bicubic | **27.83** | 0.716 | 0.437 | +0.19 |
+| DP composite: input / ×4+SwinIR-real | 27.32 | 0.706 | 0.385 | +0.75 |
+
+Paired on these 8: ×4 + SwinIR-real vs ×4 + bicubic: PSNR −0.88 dB (8/8 images), LPIPS −0.085,
 in-focus bin −0.85 dB; ×2 + SwinIR-real is worse than ×2 + bicubic on both PSNR (−0.54) and LPIPS (+0.068).
 Findings: native patch-wise ≈ identity (+0.04 dB [−0.16, +0.22]); generative SR hallucinates (text → scribbles,
 fabric → painterly strokes) and damages in-focus detail; no tile seams; the region "deblurred **and** native
@@ -409,10 +422,10 @@ See [`baselines.md`](baselines.md) §B — filled from `dataset/results/local/fu
 ### 7.5 VAE ceiling (variant B backbone) [O, partial]
 SDXL VAE on 1024-px native target crops (29 crops): in-focus 29.5 dB / LPIPS 0.116, defocused 32.8 dB / 0.082 →
 a latent model cannot reproduce in-focus native texture; variant B needs the pixel-space copy path. Full comparison
-(SDXL, FLUX, SD3.5, DC-AE) in [S] (runbook P2a §5).
+(SDXL, FLUX, SD3.5, DC-AE) in [S] (`plan/secure_runbook.md` step 6).
 
 ## 8. Open items (owner)
-- [S] P1b + P2a runbooks (76 pairs, val/train native sets, anchors, VAE ceiling).
+- [S] `plan/secure_runbook.md` (76 pairs, val/train native sets, anchors, VAE ceiling, v3 evaluation, baselines B/D).
 - [S] v3 evaluation of all registry baselines + group B/D scripts.
 - [O] consistency metric (3.12) implementation once method outputs exist.
 - [O] human-study tooling (crop sampler + 2AFC page).

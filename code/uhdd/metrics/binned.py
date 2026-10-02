@@ -1,4 +1,4 @@
-"""Blur-stratified and alignment-tolerant metrics (docs/evaluation.md, sections M4-M7).
+"""Blur-stratified and alignment-tolerant metrics (docs/evaluation.md, sections 3.4-3.7).
 
 percbins  LPIPS / DISTS per DP blur bin. Perceptual networks need whole tiles, so the image is cut into
           non-overlapping `tile`-px tiles; a tile counts if >= 90 % of it is valid (mask) and is assigned

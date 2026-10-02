@@ -1,8 +1,8 @@
 # Evaluation protocol v3 (docs/evaluation.md): the P1 pipelines + group-C upsamplers, re-scored with the
 # blur-stratified perceptual metrics, no-harm, aligned PSNR and the resolution sweep.
 # Results dir is separate from dpdd_p1 (the step cache is keyed by pipeline, not by dataset: P1 outputs were
-# computed on the v1 renderings and must not be reused for dpdd_native_v2). If P1b already ran on
-# dpdd_native_v2 into another results dir, point `results` there to reuse its inference.
+# computed on the v1 renderings and must not be reused for dpdd_native_v2). If an earlier run on
+# dpdd_native_v2 went into another results dir, point `results` there to reuse its inference.
 # Run: python code/scripts/run_matrix.py code/experiments/dpdd_eval_v3.yaml --gpus all [--dry-run]
 # Training-free baselines (group B) and reference-based SR (group D) are scripts, not registry models:
 # see code/experiments/run_baselines_bd.sh.

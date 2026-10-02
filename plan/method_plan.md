@@ -1,6 +1,6 @@
 # Method plan — native-resolution guided upsampler (2026-10-02)
 
-Decided with the user on 2026-10-02 after the local study (`plan/evaluation.md` → "Local results"):
+Decided with the user on 2026-10-02 after the local study (`docs/evaluation.md` §7.2):
 - **Deadline**: CVPR 2027, mid-November 2026 (exact date + paper-registration deadline to verify when
   announced). About 6 weeks from today.
 - **Two variants, both in the paper**: **A** a strong feed-forward model; **B** a one-step DiT prior.
@@ -84,7 +84,7 @@ Training anchors from {Restormer, DRBNet, IFAN, LaKDNet, Bokehlicious} at 1/4, p
 (target↓4 degraded by residual blur ∝ blur map, noise, mild ringing). One model held out at test time
 for the plug-in claim.
 **Risk**: those deblurrers were trained on DPDD train at 1680×1120 = exactly our ×4 level, so train-set
-anchors are better than test-set anchors. Measure anchor PSNR train vs test (runbook P2a step 4); the
+anchors are better than test-set anchors. Measure anchor PSNR train vs test (runbook step 5); the
 synthetic-anchor mix is the mitigation; fallback: 2-fold retraining of one Stage-1 model.
 
 ## 3. Variant A — feed-forward
@@ -97,7 +97,7 @@ synthetic-anchor mix is the mitigation; fallback: 2-fold retraining of one Stage
 
 ## 4. Variant B — one-step DiT prior
 
-- Backbone choice by **VAE ceiling** (runbook P2a step 5): reconstruct native DPDD targets through each
+- Backbone choice by **VAE ceiling** (runbook step 6): reconstruct native DPDD targets through each
   candidate VAE and keep the one that preserves in-focus texture best. Candidates: SD3.5-Medium (MMDiT,
   16-ch f8 VAE), FLUX.1-schnell VAE (16-ch f8), PixArt-Σ (SDXL 4-ch f8), Sana / Sana-Sprint (DC-AE f32,
   one-step natively, likely too lossy). Licences to check before use.
@@ -136,7 +136,7 @@ Human study: 2AFC, ≈ 15 raters × 40 crop pairs, ours vs {composite, SwinIR, n
 
 | Week | Outside (code + paper) | Secure (data + GPUs) |
 |---|---|---|
-| 1 (Oct 2–9) | exemplar pilot; training code A (data cache, memory, model, DDP trainer) + CPU tests; this plan | P1b; **P2a**: native train/val sets, DP maps, anchors, anchor gap, VAE ceiling |
+| 1 (Oct 2–9) | exemplar pilot; training code A (data cache, memory, model, DDP trainer) + CPU tests; this plan | **handoff 2** (`plan/secure_runbook.md`): native train/val sets, DP maps, anchors, anchor gap, VAE ceiling |
 | 2 (Oct 9–16) | B code (backbone per VAE ceiling); intro reframing | A v0 training + ablations |
 | 3 (Oct 16–23) | analysis of A; related work + bib | B training; A plug-in anchors; outdoor test raws |
 | 4 (Oct 23–30) | figures; method section | B tuning; full evaluation on 76; human-study crops |

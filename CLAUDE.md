@@ -16,7 +16,7 @@ Research project: **ultra-high-resolution (native sensor resolution, ~30 MP+) si
   - Build artifacts (`*.aux`, `*.log`, `main.pdf`, …) are git-ignored.
 - `code/` — evaluation harness (`uhdd` package + scripts, see `code/README.md`). Written outside, run in the secure env; outside can only test on CPU (`pytest code/tests`).
 - `docs/` — **canonical evaluation and baseline documentation**: `docs/evaluation.md` (protocol, every metric with definition + code, how to run, results, done / priority / todo) and `docs/baselines.md` (every baseline: purpose, setup, weights, commands, status, results). Keep them current when results arrive (both envs may edit them in patches).
-- `plan/` — research plans shared by both envs. `plan/evaluation.md`: test sets, baselines, protocol, metrics. `plan/secure_runbook_p1.md`: initial setup + P1 runs (done). `plan/method_plan.md`: **the method plan (decided 2026-10-02)** — variants A (feed-forward) and B (one-step DiT), in-focus exemplar memory, timeline. **Current secure tasks: `plan/secure_runbook_p1b.md`** (protocol v2, complete P1 tables) **then `plan/secure_runbook_p2a.md`** (native train/val sets, anchors, VAE ceiling).
+- `plan/` — research plans shared by both envs: `plan/method_plan.md` (the method, variants A/B, timeline), `plan/intro_notes.md` (pending intro reframing). **`plan/secure_runbook.md` is the single runbook for the current handoff** — one runbook per handoff, replaced by outside after the secure patch is applied (older runbooks live in git history).
 - Build: `cd Template && latexmk -pdf main.tex`.
 
 ## Core idea (summary of `sec/1_intro.tex`)
@@ -114,7 +114,8 @@ Literature checks, writing help, citations to verify, decisions needed.
 
 1. Save it, apply with `git am -3`, resolve conflicts, check LaTeX still builds.
 2. Read the report; update claims/`\todo{}`s the results resolve; flag claims the results contradict.
-3. Add a line to `handoff/LOG.md` (date, direction, file, one-line summary, status) and commit, so the next pull brings the secure env up to date.
+3. Replace `plan/secure_runbook.md` with the next handoff's runbook (one runbook per handoff; do not keep finished ones).
+4. Add a line to `handoff/LOG.md` (date, direction, file, one-line summary, status) and commit, so the next pull brings the secure env up to date.
 
 ## Code conventions (`code/`)
 

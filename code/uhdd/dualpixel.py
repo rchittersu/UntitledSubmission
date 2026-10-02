@@ -8,7 +8,7 @@ focal plane. DPDD provides both views of the blurry f/4 capture (`*_l`, `*_r`, 1
 band-passed luminance (robust to the brightness difference of the two views), sub-pixel by a
 parabola fit, plus a confidence from the cost curvature and local texture. Uses:
   - focal-plane mask (|disparity| small, confident): where the f/4 input is in focus;
-  - |disparity| as a per-pixel blur level for stratified metrics (plan/evaluation.md 3.3).
+  - |disparity| as a per-pixel blur level for stratified metrics (docs/evaluation.md 2.4).
 """
 from __future__ import annotations
 

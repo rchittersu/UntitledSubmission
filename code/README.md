@@ -1,6 +1,6 @@
 # uhdd — native-resolution defocus deblurring evaluation
 
-Evaluation harness for the paper (see `plan/evaluation.md`). Written outside the secure env and
+Evaluation harness for the paper (see `docs/evaluation.md`, `docs/baselines.md`). Written outside the secure env and
 tested there only on CPU (`pytest code/tests`, 34 tests, incl. the multi-process path via
 `--gpus cpu:N`). **GPU paths are untested until run in the secure env**; report any issue in the
 handoff.
@@ -109,7 +109,7 @@ python code/scripts/run_matrix.py code/experiments/dpdd_p1.yaml --only "restorme
 G1 native patch-wise (512 / 1024 tiles), G2 x4 whole-image deblur + {bicubic, SwinIR, SwinIR-real},
 and the blurry input as reference: 41 pipelines / 41 unique steps.
 
-## Pipeline (P1 tasks of plan/evaluation.md)
+## Pipeline (P1 tasks)
 
 ```bash
 D=/data/dpdd_native   # inputs/ targets/ (same file stems)

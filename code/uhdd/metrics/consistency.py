@@ -2,7 +2,7 @@
 
 1. Low-frequency drift: tone/color error that varies across the image.
 2. Seams: step discontinuities of the error along a method's own tile boundaries.
-3. Semantic/texture consistency: TODO (DINOv2-matched patch pairs), see plan/evaluation.md 4.3.
+3. Semantic/texture consistency: TODO (DINOv2-matched patch pairs), see docs/evaluation.md 3.12.
 5. Grid-shift consistency: the same model run with two tile grids offset by ~half a stride.
    The difference of the two outputs contains no image content, only tiling effects, so it
    measures (a) how much the result depends on the arbitrary grid (`gs_mad`, `gs_psnr`) and

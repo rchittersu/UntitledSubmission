@@ -7,7 +7,7 @@ the table says which. Legend: ✅ done · 🔶 priority · ⏳ todo · [S] secur
 
 | ID | Baseline | Reviewer question it answers | Code | Status |
 |---|---|---|---|---|
-| **A1** | Restormer fine-tuned on native crops | "Why not just train at native resolution?" | P2b trainer (shared with ours) | 🔶 [S] after P2a data |
+| **A1** | Restormer fine-tuned on native crops | "Why not just train at native resolution?" | P2b trainer (shared with ours) | 🔶 [S] after the native train set (runbook step 4) data |
 | **A2** | DRBNet fine-tuned on native crops | same, light model | P2b trainer | 🔶 [S] |
 | **A3** | Restormer, scale-augmented training (×1/×2/×4 crops) | "Would multi-scale training fix it?" | P2b trainer | ⏳ [S] |
 | **A4** | TLC (test-time local converter) on Restormer, native patch-wise | "Is it just train/test statistics mismatch?" | registry `restormer_dpdd_tlc` (`uhdd/adapters/tlc.py`) | ✅ code + test, 🔶 [S] run |
@@ -24,7 +24,7 @@ the table says which. Legend: ✅ done · 🔶 priority · ⏳ todo · [S] secur
 | **D1** | Anchor + DATSR (reference-based SR, ref = blurry native input) | closest prior to the exemplar memory | `refsr_baseline.py` | ✅ code + sanity, 🔶 [S] run |
 | **D2** | C2-Matching / MASA-SR / TTSR | other Ref-SR | — | ⏳ (weights on Google Drive, CUDA DCN) |
 | **E1** | Native patch-wise: Restormer, LaKDNet-L, DRBNet, Bokehlicious | existing defocus models at native res | registry | ✅ [S] P1 |
-| **E2** | IFAN native patch-wise | — | registry `ifan` | 🔶 [S] P1b |
+| **E2** | IFAN native patch-wise | — | registry `ifan` | 🔶 [S] runbook step 7 |
 | **E3** | NRKNet, GKMNet, UHD-restoration models (e.g. UHDformer), DPDNet-dual (DP oracle) | completeness | — | ⏳ [V weights] |
 | **E4** | Standard ×4 table (anchors at 1680×1120) | connects Stage 1 to published numbers | registry | ✅ [S] P1 (standardization check) |
 
@@ -36,7 +36,7 @@ Fairness rules (all groups):
 3. **Tiling from each method's paper** (`evaluation.md` §2.7: whole image up to the paper's test size, else tiles of
    its short side; SR models use their code's tile size), **overlap = tile / 8** for all; same GPU type for timing,
    same border crop and masks (`evaluation.md` §2).
-4. Pretrained baselines use the authors' released weights (checksums in the runbooks), no retraining except group A.
+4. Pretrained baselines use the authors' released weights (checksums in the runbook / handoff reports), no retraining except group A.
 
 ---
 
@@ -46,7 +46,7 @@ Fairness rules (all groups):
 ≈ identity at native resolution because native blur is 4× larger than anything they saw. Retraining at native
 resolution is the direct fix; if it worked, the guided upsampler would be unnecessary.
 
-**Data**: the DPDD-native train set (350 pairs) built by `build_native_set.py` (P2a §3) — exactly the data our method
+**Data**: the DPDD-native train set (350 pairs) built by `build_native_set.py` (runbook step 4) — exactly the data our method
 uses. Model selection on the native val set (74).
 
 | ID | model | init | crops | schedule (proposal) | test |
@@ -180,7 +180,7 @@ be competitive with ours.
 | LaKDNet-L (DPDD) | official | 1120 / 140 | ✅ 24.90 / 0.291 |
 | DRBNet | official | 1120 / 140 | ✅ 24.96 / 0.272; [O, v2] 1024 tiles: 25.32 vs input 25.28 (≈ identity) |
 | Bokehlicious (RealDefocus) | official | 1500 / 188 | ✅ 24.64 / 0.251 (cross-dataset) |
-| IFAN | GitHub mirror `jacobsparts/ifan-rs` (bit-identical) | 1120 / 140 | 🔶 P1b |
+| IFAN | GitHub mirror `jacobsparts/ifan-rs` (bit-identical) | 1120 / 140 | 🔶 runbook step 7 |
 | NRKNet, GKMNet | [V] | — | ⏳ |
 | UHD restoration (e.g. UHDformer) | [V: defocus checkpoint] | — | ⏳ |
 | DPDNet-dual (uses DP views) | official | — | ⏳ only in the DP-oracle comparison |

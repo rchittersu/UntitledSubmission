@@ -1,4 +1,4 @@
-# P1 experiments on native-resolution DPDD (plan/evaluation.md, sections 2 and 5).
+# P1 experiments on native-resolution DPDD (protocol v1/v2; superseded by dpdd_eval_v3.yaml, kept for the P1 cache).
 # Run: python code/scripts/run_matrix.py code/experiments/dpdd_p1.yaml --gpus all [--dry-run]
 # Data layout produced by prepare_scales.py / register_pairs.py (see code/README.md).
 

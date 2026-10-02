@@ -1,6 +1,6 @@
 # Intro / framing notes from the first results (2026-10-02)
 
-Not applied to `Template/sec/1_intro.tex` yet — waiting for the complete P1b tables (G2 with all
+Not applied to `Template/sec/1_intro.tex` yet — waiting for the complete handoff-2 tables (`plan/secure_runbook.md`) (G2 with all
 upsamplers, IFAN, re-registered targets, CIs). Line numbers refer to `sec/1_intro.tex` at commit 381e8b0.
 
 ## Supported by data
