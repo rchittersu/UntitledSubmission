@@ -42,6 +42,49 @@ Legend: **[D]** decision needed from user, **[V]** fact to verify, **[P1..P4]** 
    DPDD numbers up to that offset. Official downscale filter still undetermined (area vs bilinear, < 1 dB).
    Background: the only full-resolution DPDD data is raw CR2 (indoor 29.5 GB, outdoor 30.4 GB). The authors' processed release (`dd_dp_dataset_canon.zip`, 15.8 GB) is 1680×1120 — the same files as the Hugging Face copy used in P1 (identical layout and sizes). So the native set must be developed from raw (D3); absolute numbers are not comparable to published DPDD numbers, comparisons within our protocol are.
 
+### Local results on the native set v2 (outside, Apple M4 GPU, 2026-10-02)
+
+37 indoor test pairs from `build_native_set.py`; DRBNet (official weights); scored at native res
+(crop 64, masks); scripts in `code/analysis/`. Real-world SwinIR (x4, 512 LR tiles) on an 8-image subset.
+
+| native res, all 37 | PSNR ↑ | SSIM ↑ | LPIPS ↓ | HB-NMSE dB ↓ |
+|---|---|---|---|---|
+| blurry input | 25.28 | 0.628 | **0.308** | +1.61 |
+| DRBNet native, 1024 tiles | 25.32 | 0.615 | 0.320 | +1.97 |
+| DRBNet @x4 + bicubic | **27.03** | **0.702** | 0.551 | **−0.04** |
+| DRBNet @x2 (1024 tiles) + bicubic | 26.17 | 0.675 | 0.394 | +0.46 |
+| DP composite (input where in focus, x4+bicubic elsewhere) | 26.89 | 0.693 | 0.476 | +0.28 |
+
+| same 8 images | PSNR ↑ | SSIM ↑ | LPIPS ↓ | HB-NMSE dB ↓ |
+|---|---|---|---|---|
+| blurry input | 26.44 | 0.658 | **0.278** | +1.33 |
+| DRBNet native, 1024 tiles | 26.29 | 0.651 | 0.280 | +1.59 |
+| DRBNet @x4 + bicubic | **27.82** | **0.721** | 0.524 | **−0.07** |
+| DRBNet @x4 + SwinIR-real | 26.94 | 0.700 | 0.439 | +1.01 |
+| DP composite: input / x4+bicubic | **27.83** | 0.716 | 0.437 | +0.19 |
+| DP composite: input / x4+SwinIR-real | 27.32 | 0.706 | 0.385 | +0.75 |
+
+Findings:
+- **Native patch-wise DRBNet ≈ identity**: Δ vs input PSNR +0.04 [−0.16, +0.22] dB; SSIM/LPIPS/HB slightly but
+  significantly worse; every blur bin within ±0.1 dB. At 1/4 res the same model gives 28.5 dB (input 26.7).
+- **Deblur at 1/4 + bicubic** beats native patch-wise by +1.71 dB [+1.39, +2.07] PSNR on 100 % of images, most in
+  strongly defocused bins (+2.3 dB), but LPIPS +0.231 worse on 97 %: soft, no native detail.
+- **Real-world SwinIR vs bicubic (paired, 8 images)**: PSNR −0.88 dB (all 8), LPIPS −0.085 (all 8), HB +1.08 dB:
+  trades fidelity for invented texture; **worst where the input is already sharp** (focal-plane bin −0.85 dB).
+  Visual: garbled text ("221" locker label → scribbles), fabric weave → painterly strokes, smooth surfaces →
+  "cracked paint" texture, re-invented wood grain, halos; the in-focus input detail (dial numerals, print grain) is
+  replaced. Bicubic is soft but faithful.
+- **Tile inconsistency of SwinIR**: no visible seams in the inspected crops; per-tile texture statistics are not
+  more tile-dependent than untiled bicubic (η² sharpness 0.39 vs 0.40, noise 0.33 vs 0.44). Content-free
+  grid-shift measurement pending. So far SwinIR's problem is **hallucination / lost fidelity, not seams**.
+- **Necessity of blur-aware copy/generate**: a crude DP-guided composite (copy the input where |DP disparity|
+  < 0.4 px, soft to 1.2 px) keeps bicubic's PSNR (27.83 vs 27.82) and cuts LPIPS 0.524 → 0.437; with SwinIR it
+  improves both PSNR (+0.38) and LPIPS (−0.054). Still, no combination reaches the input's LPIPS (0.278) while
+  keeping ≥ 27.8 dB: **the region "deblurred AND native texture" is empty — that is the gap for the method**.
+- **Metric caveat**: LPIPS (alex, 1024-px tiles) at native res ranks the *blurry input* best of all rows — it is
+  dominated by matching fine texture/grain in the large in-focus/mildly defocused area and does not reward
+  deblurring. Needs per-blur-bin LPIPS / DISTS / NR metrics and a human study before being used as headline.
+
 ---
 
 ## 0. Key facts that shape the protocol
