@@ -417,7 +417,9 @@ random in-focus texture: LPIPS b2 −0.054, PSNR −0.20 dB. Matching beats rand
 Full 37 [O, pending] or as baseline B3 in [S].
 
 ### 7.4 Training-free baselines, local preview [O, 8 images]
-See [`baselines.md`](baselines.md) §B — filled from `dataset/results/local/fuse_*/metrics_local3.json`.
+Full table in [`baselines.md`](baselines.md) §B-results. DP composite 27.83 dB (= ×4 + bicubic 27.82) with no in-focus
+damage; multiscale / exemplar −0.14 dB, guided −0.37, detail −0.30; ×4 + SwinIR-real −0.88 dB and ΔPSNR_b0 −0.76.
+Aligned PSNR is 0.3–0.6 dB higher for every row with the same ranking.
 
 ### 7.5 VAE ceiling (variant B backbone) [O, partial]
 SDXL VAE on 1024-px native target crops (29 crops): in-focus 29.5 dB / LPIPS 0.116, defocused 32.8 dB / 0.082 →

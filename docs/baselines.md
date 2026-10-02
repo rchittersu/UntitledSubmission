@@ -100,7 +100,8 @@ DP blur level `b` (DP px at 1680, `evaluation.md` §2.4). `ramp(b; a, c) = clip(
   exemplar 4.3 s.
 
 ### B — local preview (✅ [O], 8 images, DRBNet anchor, provisional parameters)
-See §B-results at the end of this file (filled from `dataset/results/local/*/metrics_local3.json`).
+See [§B-results](#b-results) at the end of this file: B1 composite is the strongest on fidelity (27.83 dB, = ×4 + bicubic,
+no in-focus damage); B2–B5 lose 0.14–0.37 dB.
 
 ## C. Low-res deblur + upsampler (G2)
 
@@ -211,4 +212,46 @@ All rerun on the v2 renderings under tag `dpdd3` (`dpdd_eval_v3.yaml`, group `g1
 ---
 
 ## B-results
-_(filled below from the local evaluation)_
+
+**Local preview** [O, M4 CPU, 2026-10-03]: 8-image subset of the 37 indoor native pairs
+(`dataset/results/local/subset8.txt`), DRBNet anchor, **provisional (untuned) parameters**, fidelity metrics only
+(`evaluate.py --metrics psnr,ssim,blurbins,noharm,apsnr --tag local3`; perceptual per-bin metrics need GPU → [S]).
+For B3's perceptual effect see the exemplar pilot (`evaluation.md` §7.3: LPIPS_b3 −0.13, DISTS_b3 −0.04 vs B1).
+
+| method | PSNR ↑ | aligned PSNR ↑ | SSIM ↑ | PSNR_b0 ↑ | PSNR_b1 ↑ | PSNR_b2 ↑ | PSNR_b3 ↑ | ΔPSNR_b0 vs input ↑ |
+|---|---|---|---|---|---|---|---|---|
+| blurry input | 26.44 | 26.75 | 0.658 | 27.85 | 27.18 | 25.88 | 28.61 | 0.00 |
+| DRBNet native, 1024 tiles | 26.29 | 26.61 | 0.651 | 27.37 | 27.11 | 26.01 | 28.72 | −0.47 |
+| ×4 + bicubic (C0) | 27.82 | 28.41 | **0.721** | 27.94 | **28.25** | **28.11** | **30.51** | +0.09 |
+| ×2 + bicubic (C0) | 27.14 | 27.59 | 0.707 | **28.01** | 27.71 | 27.11 | 29.52 | **+0.16** |
+| ×4 + SwinIR-real (C1) | 26.94 | 27.54 | 0.700 | 27.09 | 27.53 | 27.40 | 30.12 | −0.76 |
+| ×2 + SwinIR-real (C1) | 26.60 | 27.02 | 0.701 | 27.14 | 27.33 | 26.92 | 29.58 | −0.71 |
+| **B1 composite** | **27.83** | **28.46** | 0.716 | 27.85 | 28.11 | **28.11** | **30.51** | 0.00 |
+| B2 multiscale | 27.69 | 28.26 | 0.713 | 27.85 | 27.71 | 27.90 | **30.51** | 0.00 |
+| B3 exemplar | 27.69 | 28.31 | 0.700 | 27.85 | 28.01 | 27.88 | 30.29 | 0.00 |
+| B4 guided (r 8, ε 1e-3) | 27.46 | 27.87 | 0.713 | 27.67 | 27.85 | 27.73 | 30.50 | −0.18 |
+| B5 detail | 27.53 | 28.15 | 0.676 | 27.56 | 27.82 | 27.67 | 29.75 | −0.29 |
+
+Paired vs B1 composite (mean [95 % bootstrap CI], % of images better; `*` = CI excludes 0):
+
+| method | PSNR | aligned PSNR | PSNR_b2 | PSNR_b3 |
+|---|---|---|---|---|
+| ×4 + bicubic | −0.00 [−0.20, +0.18] | −0.05 [−0.26, +0.13] | 0 | 0 |
+| ×4 + SwinIR-real | −0.88* [−1.27, −0.52] 0 % | −0.93* | −0.71* | −0.39 [−0.78, +0.01] |
+| B2 multiscale | −0.14* [−0.29, −0.02] 12 % | −0.20* | −0.21* | 0 |
+| B3 exemplar | −0.14* [−0.26, −0.05] 0 % | −0.15* | −0.23* | −0.22* |
+| B4 guided | −0.37* [−0.60, −0.12] 25 % | −0.59* | −0.38* | −0.00 |
+| B5 detail | −0.30* [−0.62, −0.02] 25 % | −0.32* | −0.44* | −0.75* |
+
+Observations (preview, n = 8, to be confirmed on 76 with tuned parameters and perceptual metrics):
+- **On fidelity the DP composite is the strongest training-free baseline**; it equals ×4 + bicubic in PSNR while
+  keeping the input in focus (ΔPSNR_b0 = 0 by construction).
+- **B2 multiscale is slightly worse** than B1 with the principled defaults: at native resolution the ×2 deblur is
+  worse than ×4 + bicubic even in mildly defocused regions (b1: 27.71 vs 28.25; b2: 27.11 vs 28.11), i.e. ×2 inputs
+  are already outside what DPDD models handle. Val tuning will likely move m0/m1 down (≈ B1). Supports the paper's
+  claim that only the ×4 anchor is reliable.
+- **B3 exemplar costs 0.14 dB PSNR** (texture with non-aligned phase), the expected price of its perceptual gain.
+- **B4 guided / B5 detail** lose fidelity and harm in-focus regions slightly (input high band re-added on top of the
+  ×4 anchor double-counts mid frequencies).
+- **Aligned PSNR** is 0.3–0.6 dB above PSNR for every row and preserves the ranking → residual misalignment does not
+  drive these conclusions.
