@@ -61,6 +61,8 @@ Legend: **[D]** decision needed from user, **[V]** fact to verify, **[P1..P4]** 
 | DRBNet native, 1024 tiles | 26.29 | 0.651 | 0.280 | +1.59 |
 | DRBNet @x4 + bicubic | **27.82** | **0.721** | 0.524 | **−0.07** |
 | DRBNet @x4 + SwinIR-real | 26.94 | 0.700 | 0.439 | +1.01 |
+| DRBNet @x2 (1024 tiles) + bicubic | 27.14 | 0.707 | 0.357 | +0.19 |
+| DRBNet @x2 (1024 tiles) + SwinIR-real x2 | 26.60 | 0.701 | 0.425 | +1.13 |
 | DP composite: input / x4+bicubic | **27.83** | 0.716 | 0.437 | +0.19 |
 | DP composite: input / x4+SwinIR-real | 27.32 | 0.706 | 0.385 | +0.75 |
 
@@ -74,9 +76,11 @@ Findings:
   Visual: garbled text ("221" locker label → scribbles), fabric weave → painterly strokes, smooth surfaces →
   "cracked paint" texture, re-invented wood grain, halos; the in-focus input detail (dial numerals, print grain) is
   replaced. Bicubic is soft but faithful.
+- **SwinIR-real at x2 is worse than bicubic on both** PSNR (−0.54 dB) and LPIPS (+0.068), on 8/8 images: with
+  half the native detail already present, generative SR only damages it.
 - **Tile inconsistency of SwinIR**: no visible seams in the inspected crops; per-tile texture statistics are not
   more tile-dependent than untiled bicubic (η² sharpness 0.39 vs 0.40, noise 0.33 vs 0.44). Content-free
-  grid-shift measurement pending. So far SwinIR's problem is **hallucination / lost fidelity, not seams**.
+  grid-shift measurement not run (dropped). SwinIR's problem is **hallucination / lost fidelity, not seams**.
 - **Necessity of blur-aware copy/generate**: a crude DP-guided composite (copy the input where |DP disparity|
   < 0.4 px, soft to 1.2 px) keeps bicubic's PSNR (27.83 vs 27.82) and cuts LPIPS 0.524 → 0.437; with SwinIR it
   improves both PSNR (+0.38) and LPIPS (−0.054). Still, no combination reaches the input's LPIPS (0.278) while
