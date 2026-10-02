@@ -28,9 +28,9 @@ upsamplers, IFAN, re-registered targets, CIs). Line numbers refer to `sec/1_intr
   motivate mainly by *consistency of synthesized texture across distant regions* (semantic inconsistency),
   which the planned DINOv2-pair metric measures, not by visible seams. Re-check after `gridshift` numbers
   for Restormer / generative upsamplers (expected larger than DRBNet's).
-- **Evaluation-protocol paragraph** (l. 194–207): now has concrete content: euclidean registration
+- **Evaluation-protocol paragraph** (l. 194–207): now has concrete content: translation-only registration
   (homography overfits blur differences), grid-shift consistency (content-free), DP-based blur-level
-  stratification, diffraction-aware fidelity (pm) with measured target MTF. "introduce metrics that
+  stratification, and a measured target MTF that rules out PSF-matched fidelity as primary. "introduce metrics that
   directly quantify discontinuities along patch boundaries" → "a content-free grid-shift consistency
   measure".
 - **DPDD capture resolution** (l. 40–43, `% VERIFY`): verified — captured 6720×4480, released processed
