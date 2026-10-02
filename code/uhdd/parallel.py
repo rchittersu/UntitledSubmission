@@ -17,10 +17,14 @@ import torch.multiprocessing as mp
 
 def parse_gpus(spec: str) -> list[int]:
     """'all' -> every visible GPU, 'cpu' or '' -> [], '0,2' -> [0, 2],
-    'cpu:N' -> N CPU processes (exercises the multi-process path without GPUs)."""
+    'cpu:N' -> N CPU processes (exercises the multi-process path without GPUs), 'mps' -> Apple GPU."""
     spec = (spec or "").strip().lower()
     if spec in ("", "cpu", "none"):
         return []
+    if spec == "mps":
+        return [-2]
+    if spec == "all" and not torch.cuda.is_available() and torch.backends.mps.is_available():
+        return [-2]
     if spec.startswith("cpu:"):
         return [-1] * int(spec[4:])
     if spec == "all":
@@ -35,6 +39,8 @@ def shard(items: Sequence, rank: int, world: int, key: Callable | None = None) -
 
 
 def _entry(rank: int, gpus: list[int], worker: Callable, args: tuple) -> None:
+    if gpus[rank] == -2:
+        return worker(rank, len(gpus), torch.device("mps"), *args)
     if gpus[rank] < 0:
         torch.set_num_threads(max(1, (os.cpu_count() or 1) // len(gpus)))
         return worker(rank, len(gpus), torch.device("cpu"), *args)
@@ -51,6 +57,8 @@ def launch(worker: Callable, gpus: list[int], *args: Any) -> None:
         worker(0, 1, torch.device("cpu"), *args)
     elif len(gpus) == 1:
         _entry(0, gpus, worker, args)
+    elif -2 in gpus:
+        raise ValueError("mps runs as a single process")
     else:
         mp.spawn(_entry, args=(gpus, worker, args), nprocs=len(gpus), join=True)
 

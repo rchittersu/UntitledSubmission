@@ -84,7 +84,8 @@ def high_band(x: torch.Tensor, s: int) -> torch.Tensor:
 
 
 def highband_nmse_db(pred: torch.Tensor, gt: torch.Tensor, s: int = 4) -> float:
-    hp, hg = high_band(pred.double(), s), high_band(gt.double(), s)
+    to64 = lambda x: (x.cpu() if x.device.type == "mps" else x).double()   # no float64 on MPS
+    hp, hg = high_band(to64(pred), s), high_band(to64(gt), s)
     num = (hp - hg).pow(2).sum().item()
     den = hg.pow(2).sum().item()
     return 10 * math.log10(max(num, 1e-30) / max(den, 1e-30))

@@ -13,6 +13,11 @@ import torch
 import torch.nn.functional as F
 
 
+def _f64(*xs):
+    """float64 copies; MPS has no float64, so those are computed on the CPU (exact, slower)."""
+    return [None if x is None else (x.cpu() if x.device.type == "mps" else x).double() for x in xs]
+
+
 def _masked_mean(x: torch.Tensor, mask: torch.Tensor | None) -> torch.Tensor:
     if mask is None:
         return x.mean()
@@ -21,8 +26,8 @@ def _masked_mean(x: torch.Tensor, mask: torch.Tensor | None) -> torch.Tensor:
 
 
 def mse(pred: torch.Tensor, gt: torch.Tensor, mask: torch.Tensor | None = None) -> float:
-    d = (pred.double() - gt.double()).pow_(2)
-    return _masked_mean(d, mask).item()
+    p, g, m = _f64(pred, gt, mask)
+    return _masked_mean((p - g).pow_(2), m).item()
 
 
 def psnr(pred: torch.Tensor, gt: torch.Tensor, mask: torch.Tensor | None = None) -> float:
@@ -31,12 +36,14 @@ def psnr(pred: torch.Tensor, gt: torch.Tensor, mask: torch.Tensor | None = None)
 
 
 def mae(pred: torch.Tensor, gt: torch.Tensor, mask: torch.Tensor | None = None) -> float:
-    return _masked_mean((pred.double() - gt.double()).abs_(), mask).item()
+    p, g, m = _f64(pred, gt, mask)
+    return _masked_mean((p - g).abs_(), m).item()
 
 
 def ssim(pred: torch.Tensor, gt: torch.Tensor, mask: torch.Tensor | None = None,
          win: int = 7, k1: float = 0.01, k2: float = 0.03) -> float:
     """skimage-compatible SSIM for 1xCxHxW in [0,1]; optional 1x1xHxW validity mask."""
+    pred, gt, mask = _f64(pred, gt, mask)
     c1, c2 = (k1 * 1.0) ** 2, (k2 * 1.0) ** 2
     cov_norm = win * win / (win * win - 1)
     pool = lambda t: F.avg_pool2d(t, win, stride=1)  # 'valid' == skimage's border crop

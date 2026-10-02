@@ -43,7 +43,7 @@ def worker(rank: int, world: int, device: torch.device, a: argparse.Namespace, t
     in_bits = a.input_bits if a.input_bits is not None else model.spec.get("input_bits")
     out_dtype = np.uint16 if a.save_bits == 16 else np.uint8
     writer = AsyncWriter(workers=a.write_threads)
-    meta, cuda = {}, device.type == "cuda"
+    meta, cuda, mps = {}, device.type == "cuda", device.type == "mps"
 
     for rec in loader(ImageDataset(items), a.workers):
         x = to_tensor(rec["input"], device)
@@ -58,11 +58,14 @@ def worker(rank: int, world: int, device: torch.device, a: argparse.Namespace, t
             y, info = run_tiled(model, x, spec, model.multiple, model.scale)
         if cuda:
             torch.cuda.synchronize(device)
+        if mps:
+            torch.mps.synchronize()
         dt = time.perf_counter() - t0
         writer.submit(write_image, Path(a.out) / f"{rec['name']}.png", to_numpy(y, out_dtype))
         meta[rec["name"]] = {
             "time_s": round(dt, 4),
-            "peak_mem_gb": round(torch.cuda.max_memory_allocated(device) / 2**30, 3) if cuda else None,
+            "peak_mem_gb": (round(torch.cuda.max_memory_allocated(device) / 2**30, 3) if cuda else
+                            round(torch.mps.driver_allocated_memory() / 2**30, 3) if mps else None),
             "in_hw": list(x.shape[-2:]), "out_hw": list(y.shape[-2:]), "tiling": info,
         }
         print(f"[rank {rank}] {rec['name']} {dt:.2f}s", flush=True)
@@ -113,7 +116,8 @@ def main():
     for f in sorted(out.glob(".meta_rank*.json")):
         merged.update(json.loads(f.read_text()))
         f.unlink()
-    gpu_name = torch.cuda.get_device_name(gpus[0]) if gpus and gpus[0] >= 0 else "cpu"
+    gpu_name = (torch.cuda.get_device_name(gpus[0]) if gpus and gpus[0] >= 0 else
+                "apple-mps" if gpus and gpus[0] == -2 else "cpu")
     run = {k: v for k, v in vars(a).items() if k not in ("inputs", "out", "config")}
     times = [m["time_s"] for m in merged.values()]
     summary = {"model": a.model, "n": len(merged), "device": gpu_name,

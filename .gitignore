@@ -19,3 +19,4 @@ __pycache__/
 # Local datasets (never commit data; repo is public)
 dataset/
 .venv/
+ext/
