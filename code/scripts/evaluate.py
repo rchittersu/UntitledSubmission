@@ -36,16 +36,9 @@ def _crop(t: torch.Tensor | None, c: int) -> torch.Tensor | None:
 
 def _blur_map(dp_dir: str, name: str, hw, device) -> torch.Tensor | None:
     """Smoothed confidence-weighted |DP disparity| (DP px), resized to the evaluated image."""
-    import cv2
-    import numpy as np
-    p = Path(dp_dir) / f"{name}_disp.png"
-    if not p.exists():
-        return None
-    d = (cv2.imread(str(p), cv2.IMREAD_UNCHANGED).astype(np.float32) - 32768) / 1000
-    c = cv2.imread(str(Path(dp_dir) / f"{name}_conf.png"), cv2.IMREAD_UNCHANGED).astype(np.float32) / 255
-    k = cv2.boxFilter(np.abs(d) * c, -1, (31, 31)) / (cv2.boxFilter(c, -1, (31, 31)) + 1e-6)
-    k = cv2.resize(k, (hw[1], hw[0]), interpolation=cv2.INTER_LINEAR)
-    return torch.from_numpy(k)[None, None].to(device)
+    from uhdd.dualpixel import load_blur_map
+    k = load_blur_map(dp_dir, name, hw)
+    return None if k is None else torch.from_numpy(k)[None, None].to(device)
 
 
 def worker(rank: int, world: int, device: torch.device, a, records: list, infos: dict, out: Path,

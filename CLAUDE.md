@@ -15,7 +15,7 @@ Research project: **ultra-high-resolution (native sensor resolution, ~30 MP+) si
   - `notes.txt` — informal research notes (inconsistency taxonomy for tiled inference, papers to read, open directions).
   - Build artifacts (`*.aux`, `*.log`, `main.pdf`, …) are git-ignored.
 - `code/` — evaluation harness (`uhdd` package + scripts, see `code/README.md`). Written outside, run in the secure env; outside can only test on CPU (`pytest code/tests`).
-- `plan/` — research plans shared by both envs. `plan/evaluation.md`: test sets, baselines, protocol, metrics. `plan/secure_runbook_p1.md`: initial setup + P1 runs (done). **`plan/secure_runbook_p1b.md`: current task for the secure env** (protocol v2, re-registration, complete P1 tables).
+- `plan/` — research plans shared by both envs. `plan/evaluation.md`: test sets, baselines, protocol, metrics. `plan/secure_runbook_p1.md`: initial setup + P1 runs (done). `plan/method_plan.md`: **the method plan (decided 2026-10-02)** — variants A (feed-forward) and B (one-step DiT), in-focus exemplar memory, timeline. **Current secure tasks: `plan/secure_runbook_p1b.md`** (protocol v2, complete P1 tables) **then `plan/secure_runbook_p2a.md`** (native train/val sets, anchors, VAE ceiling).
 - Build: `cd Template && latexmk -pdf main.tex`.
 
 ## Core idea (summary of `sec/1_intro.tex`)

@@ -61,3 +61,19 @@ def focus_mask(disp: torch.Tensor, conf: torch.Tensor, max_abs: float = 0.35, mi
                ) -> torch.Tensor:
     """Boolean 1x1xHxW mask of confidently in-focus pixels (focal plane)."""
     return (disp.abs() <= max_abs) & (conf >= min_conf)
+
+
+def load_blur_map(dp_dir, name: str, hw=None, win: int = 31):
+    """Blur level from dp_maps.py outputs: confidence-weighted |disparity| (DP px at 1680x1120) box-smoothed
+    over `win` px, optionally resized (bilinear) to hw = (H, W). float32 numpy array, or None if missing.
+    Used for the `blurbins` metric and as the oracle blur map of the method."""
+    from pathlib import Path
+    import cv2
+    import numpy as np
+    p = Path(dp_dir) / f"{name}_disp.png"
+    if not p.exists():
+        return None
+    d = (cv2.imread(str(p), cv2.IMREAD_UNCHANGED).astype(np.float32) - 32768) / 1000
+    c = cv2.imread(str(Path(dp_dir) / f"{name}_conf.png"), cv2.IMREAD_UNCHANGED).astype(np.float32) / 255
+    k = cv2.boxFilter(np.abs(d) * c, -1, (win, win)) / (cv2.boxFilter(c, -1, (win, win)) + 1e-6)
+    return k if hw is None else cv2.resize(k, (hw[1], hw[0]), interpolation=cv2.INTER_LINEAR)
