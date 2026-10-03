@@ -31,7 +31,20 @@ def build(spec: dict):
     model = OSEDiff_test(args)
     dape = None
     if spec.get("prompt", "dape") == "dape":
+        from ram.models import ram_lora
         from ram.models.ram_lora import ram
+        if spec.get("bert_path"):
+            # the repo hard-codes a path of the authors' cluster for the BERT tokenizer; use a local copy instead
+            from transformers import BertTokenizer
+
+            def _init_tokenizer():
+                tok = BertTokenizer.from_pretrained(spec["bert_path"], local_files_only=True)
+                tok.add_special_tokens({"bos_token": "[DEC]"})
+                tok.add_special_tokens({"additional_special_tokens": ["[ENC]"]})
+                tok.enc_token_id = tok.additional_special_tokens_ids[0]
+                return tok
+
+            ram_lora.init_tokenizer = _init_tokenizer
         dape = ram(pretrained=spec["ram_path"], pretrained_condition=spec["dape_path"], image_size=384, vit="swin_l")
         dape = dape.eval().to("cuda", dtype=model.weight_dtype)
     return OSEDiffTiles(model, dape, spec.get("color_fix", "adain"))

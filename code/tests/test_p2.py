@@ -176,3 +176,15 @@ def test_default_tiling_paper_setups():
     assert default_tiling({"paper_tile": 130, "multiple": 16}, (1000, 1000))[0] == 128   # rounded to multiple
     assert default_tiling({}, (4480, 6720)) == (0, 0)              # builtins: whole image
     assert default_tiling(dpdd, (4480, 6720), overlap_ratio=0.25) == (1120, 280)
+
+
+def test_blur_stratified_metrics_fail_loudly_without_dp_maps():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("evaluate_script", str(__import__("pathlib").Path(__file__).resolve().parents[1] / "scripts" / "evaluate.py"))
+    ev = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ev)
+    import pytest
+    with pytest.raises(FileNotFoundError):
+        ev.require_blur_map(["psnr", "percbins"], None, "/missing", "img")
+    ev.require_blur_map(["psnr", "ssim"], None, None, "img")          # metrics that do not need a map: fine
+    ev.require_blur_map(["percbins"], object(), "/x", "img")          # map present: fine

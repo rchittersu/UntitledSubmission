@@ -196,6 +196,7 @@ models:
     sd_path: ${UHDD_WEIGHTS}/sd21_base                                # HF snapshot of stable-diffusion-2-1-base
     ram_path: ${UHDD_WEIGHTS}/ram/ram_swin_large_14m.pth
     dape_path: ${UHDD_REPOS}/OSEDiff/preset/models/DAPE.pth           # shipped in the repo
+    bert_path: ${UHDD_WEIGHTS}/bert-base-uncased                      # tokenizer files only (vocab.txt, tokenizer_config.json)
     prompt: dape         # dape | empty
     color_fix: adain     # official default
     precision: fp16

@@ -31,6 +31,16 @@ from uhdd.io import ImageDataset, list_images, to_tensor  # noqa: E402
 from uhdd.parallel import launch, loader, parse_gpus, shard  # noqa: E402
 
 
+NEEDS_BLUR_MAP = {"blurbins", "percbins", "noharm"}
+
+
+def require_blur_map(names, blur_map, dp_dir, name):
+    """Blur-stratified metrics must never be skipped silently (a missing DP-map link once dropped them from a whole run)."""
+    if NEEDS_BLUR_MAP & set(names) and blur_map is None:
+        raise FileNotFoundError(f"metrics {sorted(NEEDS_BLUR_MAP & set(names))} need DP blur maps but none was found for '{name}' "
+                                f"(--dp-maps={dp_dir!r}); create the dp_maps link / pass the right directory")
+
+
 def _crop(t: torch.Tensor | None, c: int) -> torch.Tensor | None:
     return t if t is None or c <= 0 else t[..., c:-c, c:-c]
 
@@ -61,6 +71,7 @@ def worker(rank: int, world: int, device: torch.device, a, records: list, infos:
         if gt is not None and pred.shape != gt.shape:
             raise ValueError(f"{rec['name']}: pred {tuple(pred.shape)} vs target {tuple(gt.shape)}")
         blur_map = _blur_map(a.dp_maps, rec["name"], pred.shape[-2:], device) if a.dp_maps else None
+        require_blur_map(names, blur_map, a.dp_maps, rec["name"])
         pred, gt, mask = _crop(pred, a.crop), _crop(gt, a.crop), _crop(mask, a.crop)
         ctx = {**ctx_base, "info": infos.get(rec["name"], {}).get("tiling"), "blur_map": _crop(blur_map, a.crop)}
         if rec.get("input") is not None:
