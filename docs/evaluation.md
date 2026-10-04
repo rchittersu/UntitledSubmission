@@ -457,8 +457,7 @@ real detail, not only that it does no harm.** Visual set (8 captures × 12 varia
 ## 8. Open items (owner)
 
 ### ⚠ Pending decisions — revisit before writing the handoff-3 runbook (user, 2026-10-04: "hold off")
-1. **Headline perceptual metric**: per-bin DISTS at native rewards grain → score it at ×2/×4 downscale (outside
-   recommendation) or denoise pred and target identically before scoring.
+1. ~~Headline perceptual metric~~ — **decided 2026-10-04: protocol frozen, standard metrics unchanged** (§9).
 2. **Handoff-3 scope**: run DATSR (≈ 75 min for 76 images sharded over 16 GPUs) and start method training (variant A +
    retrained-at-native baseline A1/A2; training code to be written outside first).
 3. **Headline set**: all-76 (outside recommendation, indoor-37 in supp + outdoor calibration report + sensitivity run
@@ -490,3 +489,4 @@ real detail, not only that it does no harm.** Visual set (8 captures × 12 varia
 | 2026-10-03 | all free parameters tuned on val only | user decision |
 | 2026-10-03 | hallucination/OCR → supplementary + discussion; consistency metric, human study, second camera → todo | user decision |
 | 2026-10-03 | per-method default tiling from each paper's inference setup; overlap = tile / 8 for all | user decision; §2.7 |
+| 2026-10-04 | **Protocol frozen before any method result exists.** Headline (main table): out-of-the-box PSNR, SSIM, LPIPS, DISTS at native resolution (pyiqa / skimage defaults, whole image), no-reference MUSIQ + CLIPIQA, runtime; plus PSNR/SSIM at ×4 (the standard DPDD benchmark resolution); human study. Per-blur-bin breakdown, no-harm, aligned PSNR, resolution sweep, hallucination crops = diagnostics (analysis section / supplementary), computed identically for all methods, never used to rank. No custom headline metric (band-limited PSNR, downscaled DISTS, denoise-before-scoring dropped). | user decision: avoid looking like metric tuning |
