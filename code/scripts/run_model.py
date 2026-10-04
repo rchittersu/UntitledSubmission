@@ -80,6 +80,12 @@ def worker(rank: int, world: int, device: torch.device, a: argparse.Namespace, t
     writer.close()
     with open(Path(a.out) / f".meta_rank{rank}.json", "w") as f:
         json.dump(meta, f)
+    if os.environ.get("UHDD_FAST_EXIT") == "1":
+        # all outputs are written and joined: skip the interpreter teardown (OSEDiff's pinned old libraries segfault in it, and
+        # mp.spawn then SIGTERMs the sibling workers mid-write)
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(0)
 
 
 
