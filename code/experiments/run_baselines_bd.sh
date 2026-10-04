@@ -19,11 +19,21 @@ for m in composite multiscale guided detail exemplar; do
       --dp-maps $DP --out $O/${M}_$m $P --procs 8 --device cuda
   $py code/scripts/evaluate.py --pred $O/${M}_$m --label "$M fuse:$m" $EV
 done
-for ref in mosaic colocated; do
-  $py code/scripts/refsr_baseline.py --anchors4 $A4 --inputs $D/inputs --dp-maps $DP --ref $ref \
-      --weights restoration_mse --out $O/${M}_datsr_mse_$ref
-  $py code/scripts/evaluate.py --pred $O/${M}_datsr_mse_$ref --label "$M @x4 + DATSR-mse ($ref)" $EV
-done
-$py code/scripts/refsr_baseline.py --anchors4 $A4 --inputs $D/inputs --dp-maps $DP --ref mosaic \
-    --weights restoration_gan --out $O/${M}_datsr_gan_mosaic
-$py code/scripts/evaluate.py --pred $O/${M}_datsr_gan_mosaic --label "$M @x4 + DATSR-gan (mosaic)" $EV
+# DATSR is slow (>= 15 min per 6720x4480 image on one GPU): shard the images over all GPUs of the node (one process per GPU).
+# Default = the headline variant only (MSE weights, mosaic reference); DATSR_FULL=1 adds colocated and the GAN weights.
+datsr() {  # $1 ref  $2 weights  $3 out dir  $4 label
+  mkdir -p $3
+  names=($(ls $D/inputs | sed 's/\.png$//')); G=${NGPU:-$(nvidia-smi -L | wc -l)}
+  for ((g = 0; g < G; g++)); do
+    sub=""; for ((i = g; i < ${#names[@]}; i += G)); do sub="$sub,${names[$i]}"; done
+    CUDA_VISIBLE_DEVICES=$g $py code/scripts/refsr_baseline.py --anchors4 $A4 --inputs $D/inputs --dp-maps $DP --ref $1 \
+        --weights $2 --out $3 --only ${sub#,} &
+  done
+  wait
+  $py code/scripts/evaluate.py --pred $3 --label "$4" $EV
+}
+datsr mosaic restoration_mse $O/${M}_datsr_mse_mosaic "$M @x4 + DATSR-mse (mosaic)"
+if [ "${DATSR_FULL:-0}" = 1 ]; then
+  datsr colocated restoration_mse $O/${M}_datsr_mse_colocated "$M @x4 + DATSR-mse (colocated)"
+  datsr mosaic restoration_gan $O/${M}_datsr_gan_mosaic "$M @x4 + DATSR-gan (mosaic)"
+fi

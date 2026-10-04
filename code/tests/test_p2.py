@@ -188,3 +188,24 @@ def test_blur_stratified_metrics_fail_loudly_without_dp_maps():
         ev.require_blur_map(["psnr", "percbins"], None, "/missing", "img")
     ev.require_blur_map(["psnr", "ssim"], None, None, "img")          # metrics that do not need a map: fine
     ev.require_blur_map(["percbins"], object(), "/x", "img")          # map present: fine
+
+
+def test_subset_results_recomputes_means(tmp_path):
+    import csv
+    import importlib.util
+    import json
+    spec = importlib.util.spec_from_file_location("subset_results", str(__import__("pathlib").Path(__file__).resolve().parents[1] / "scripts" / "subset_results.py"))
+    sr = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(sr)
+    d = tmp_path / "step"
+    d.mkdir()
+    with open(d / "metrics_x.csv", "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["name", "psnr"])
+        for n, v in (("a", 10.0), ("b", 20.0), ("c", 40.0)):
+            w.writerow([n, v])
+    (d / "metrics_x.json").write_text(json.dumps({"label": "m", "metrics": {"psnr": {"mean": 23.3, "std": 1, "n": 3}, "time_s": 5.0}}))
+    out = sr.subset_one(d / "metrics_x.json", {"a", "c"}, tmp_path / "out")
+    j = json.loads(out.read_text())
+    assert j["metrics"]["psnr"]["mean"] == 25.0 and j["metrics"]["psnr"]["n"] == 2 and j["metrics"]["time_s"] == 5.0
+    assert json.loads((tmp_path / "out" / "step__metrics_x.json").read_text())["n_images"] == 2
