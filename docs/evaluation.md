@@ -426,7 +426,49 @@ SDXL VAE on 1024-px native target crops (29 crops): in-focus 29.5 dB / LPIPS 0.1
 a latent model cannot reproduce in-focus native texture; variant B needs the pixel-space copy path. Full comparison
 (SDXL, FLUX, SD3.5, DC-AE): **deferred** (not in handoff 2).
 
+### 7.6 Handoff 2 — full matrix on 76 native pairs [S, 2026-10-04]
+Full protocol-v3 tables (all 76 and indoor-37, 95 % CIs): `handoff/from_secure/2026-10-04_h2.md`.
+- ×4 deblur + bicubic beats native-resolution inference of every deblurrer by 1.1–1.8 dB (indoor-37: 27.03 vs
+  25.2–25.9; input 25.28); native deblurrers stay within ±0.2 dB of the input (Bokehlicious +0.6). Tile size and
+  TLC change nothing (≤ 0.06 dB). Indoor numbers reproduce the local M4 values to 0.01 dB (GPU/CPU agreement).
+- Generative upsamplers damage in-focus regions: ΔPSNR_b0 vs input OSEDiff −1.1/−1.6 dB, SwinIR-real up to −0.8,
+  Real-HAT up to −0.5 (all 76). **Note: the report calls b0 "the blurriest bin" — b0 is the focal plane (in focus).**
+- Exemplar fusion (tuned on val): DISTS_b3 0.299 → 0.262 (DRBNet), 0.338 → 0.274 (Restormer) vs composite, −0.12…−0.18 dB.
+- Deblur-only at ×4 (indoor-37, addendum): input 26.71, Restormer 28.36, DRBNet 28.48 dB (LPIPS 0.164, DISTS 0.130):
+  the low-res models work; the native failure is about resolution.
+- Not run: DATSR (>15 min/image on one GPU; opt-in), VAE ceiling (deferred).
+
+**Metric issues found in review (pending decision, §8):**
+- Per-bin DISTS/LPIPS at native still reward grain/noise: in b3 the *blurry input* scores DISTS 0.234 vs ×4 + bicubic
+  0.302 (indoor), and "detail" fusion wins perceptual columns by re-adding input grain. At ×4-downscaled scoring the
+  order is sensible (input 0.191 vs 0.137).
+- In focus, ×4 + bicubic is +0.59 dB *above* the input (DRBNet, indoor): the f/22 target is smoother / less noisy, so
+  ΔPSNR_b0 rewards smoothing; report `keep_psnr_b0` alongside.
+- Peak-memory aggregation for chained pipelines is wrong (means outside their CIs); timings came from shared nodes.
+
+**First visual pass [S, 3 of 8 captures, downscaled montages]:** native Restormer ≈ input; ×4 + bicubic visibly
+recovers edges (lock hinges, poster lettering); HAT-L ≈ bicubic; SwinIR-real / Real-HAT add contrast and halos
+(SwinIR-real a mild colour shift); **OSEDiff rewrites caption text into different glyphs, shifts faces and texture,
+and adds horizontal banding in a dark scene**; guided ≈ smooth bicubic, detail visibly grainier. No ×4 pipeline
+recovers the target's fine grain in the dark scene → part of the PSNR/perceptual gap is PSNR rewarding smoothness.
+Limit for the paper: ×4 + bicubic is never sharper than the target's detail level — **the method must show it adds
+real detail, not only that it does no harm.** Visual set (8 captures × 12 variants, crops) is held in [S].
+
 ## 8. Open items (owner)
+
+### ⚠ Pending decisions — revisit before writing the handoff-3 runbook (user, 2026-10-04: "hold off")
+1. **Headline perceptual metric**: per-bin DISTS at native rewards grain → score it at ×2/×4 downscale (outside
+   recommendation) or denoise pred and target identically before scoring.
+2. **Handoff-3 scope**: run DATSR (≈ 75 min for 76 images sharded over 16 GPUs) and start method training (variant A +
+   retrained-at-native baseline A1/A2; training code to be written outside first).
+3. **Headline set**: all-76 (outside recommendation, indoor-37 in supp + outdoor calibration report + sensitivity run
+   without the 3 test captures with > 10 px shift) or indoor-37 only (secure asks).
+4. **Slow SRs for LaKDNet-L / IFAN** (SwinIR-real, Real-HAT, OSEDiff) for completeness (secure asks); the secure side is
+   adding ×4 + {bicubic, HAT-L} for Bokehlicious, LaKDNet-L, IFAN and a two-level table (deblur-only ×4; per-SR at native).
+5. **Report / code fixes** to request: b0 wording, `keep_psnr_b0` next to `dpsnr_b0`, peak-memory aggregation, timings
+   on an idle node.
+6. **Visual review**: montages of the remaining 5 captures and full-res sharp-region crops (secure offers).
+
 - [S] `plan/secure_runbook.md` (76 pairs, val/train native sets, anchors, v3 evaluation, baselines B/D; VAE ceiling deferred).
 - [S] v3 evaluation of all registry baselines + group B/D scripts.
 - [O] consistency metric (3.12) implementation once method outputs exist.
@@ -448,6 +490,3 @@ a latent model cannot reproduce in-focus native texture; variant B needs the pix
 | 2026-10-03 | all free parameters tuned on val only | user decision |
 | 2026-10-03 | hallucination/OCR → supplementary + discussion; consistency metric, human study, second camera → todo | user decision |
 | 2026-10-03 | per-method default tiling from each paper's inference setup; overlap = tile / 8 for all | user decision; §2.7 |
-
-### 7.2 Handoff-2 matrix [S, 2026-10-04]
-Full protocol-v3 tables (all 76 and indoor-37, with 95% CIs) are in `handoff/from_secure/2026-10-04_h2.md`. Summary: x4 low-res deblur + bicubic beats all native baselines by 1.1-1.8 dB PSNR (indoor-37); generative upsamplers lose PSNR; training-free fusion shows a PSNR-vs-DISTS trade-off. Not run: DATSR, GPU-vs-CPU metric agreement check.
