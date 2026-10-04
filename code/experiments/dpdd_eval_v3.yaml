@@ -82,7 +82,7 @@ pipelines:
     for: {m: [bokehlicious_deblur, lakdnet_dpdd_l, ifan], up: [bicubic_x4, hat_l_x4]}
     steps:
       - {model: "{m}", scale: 4}
-      - {model: "{up}"}
+      - {model: "{up}", tile_batch: 1}
 
   - group: g2_lowres_upsample_diffusion
     name: "{m} @x4 + {up}"
