@@ -76,6 +76,33 @@ def step_tag(step: dict, run: dict) -> str:
     return re.sub(r"[^A-Za-z0-9_.@+-]", "_", tag)
 
 
+
+def pipeline_cost(steps: list[dict]) -> dict:
+    """Per-image pipeline cost: time summed over steps, peak memory = max over steps; mean/std/n over images
+    (+ the worst image's memory), consistent with the per-image columns written by pipeline_csv."""
+    import numpy as np
+    names = list(steps[-1])
+    t = np.array([sum(st.get(k, {}).get("time_s") or 0 for st in steps) for k in names], float)
+    m = np.array([max((st.get(k, {}).get("peak_mem_gb") or 0) for st in steps) for k in names], float)
+    return {"pipeline_time_s": {"mean": float(t.mean()), "std": float(t.std()), "n": len(t)},
+            "peak_mem_gb": {"mean": float(m.mean()), "std": float(m.std()), "n": len(m)},
+            "peak_mem_gb_max": {"mean": float(m.max()), "std": 0.0, "n": len(m)}}
+
+
+def pipeline_csv(src: Path, steps: list[dict], dst: Path) -> Path:
+    """Copy of the final step's per-image metrics CSV with pipeline_time_s / peak_mem_gb over all steps."""
+    import csv as _csv
+    rows = list(_csv.DictReader(open(src)))
+    for r in rows:
+        k = r["name"]
+        r["pipeline_time_s"] = sum(st.get(k, {}).get("time_s") or 0 for st in steps)
+        r["peak_mem_gb"] = max((st.get(k, {}).get("peak_mem_gb") or 0) for st in steps)
+    with open(dst, "w", newline="") as f:
+        w = _csv.DictWriter(f, fieldnames=list(dict.fromkeys(c for r in rows for c in r)))
+        w.writeheader()
+        w.writerows(rows)
+    return dst
+
 def native_hw(exp: dict) -> tuple[int, int]:
     """(H, W) of the native inputs: data.native_hw if given, else the first native input's header."""
     if "native_hw" in exp["data"]:
@@ -226,12 +253,10 @@ def main():
                 continue
             r = json.loads(j["result"].read_text())
             steps = [json.loads((s["out"] / "meta.json").read_text())["images"] for s in j["steps"]]
-            per_img = [sum(st[k]["time_s"] for st in steps) for k in steps[-1]]
             r["label"], r["steps"] = j["name"], [str(s["out"].name) for s in j["steps"]]
-            r["csv"] = str(j["result"].with_suffix(".csv"))
-            r["metrics"]["pipeline_time_s"] = {"mean": sum(per_img) / len(per_img), "std": 0.0, "n": len(per_img)}
-            r["metrics"]["peak_mem_gb"] = {"mean": max(v.get("peak_mem_gb") or 0 for st in steps for v in st.values()),
-                                           "std": 0.0, "n": len(per_img)}
+            r["csv"] = str(pipeline_csv(j["result"].with_suffix(".csv"), steps,
+                                        pdir / (re.sub(r"[^A-Za-z0-9_.@+-]", "_", j["name"]) + f"__{tag}.csv")))
+            r["metrics"].update(pipeline_cost(steps))
             f = pdir / (re.sub(r"[^A-Za-z0-9_.@+-]", "_", j["name"]) + f"__{tag}.json")
             f.write_text(json.dumps(r, indent=1))
             files.append(str(f))

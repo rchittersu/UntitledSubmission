@@ -245,3 +245,35 @@ def test_missing_outputs_detects_absent_and_empty_files(tmp_path):
     cv2.imwrite(str(tmp_path / "a.png"), np.zeros((4, 4, 3), np.uint16))
     (tmp_path / "b.png").write_bytes(b"\x89PNG-truncated")
     assert rm.missing_outputs(tmp_path, ["a", "b", "c"]) == ["b", "c"]
+
+
+def test_pipeline_cost_is_per_image_and_consistent(tmp_path):
+    import csv
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("run_matrix_script", str(__import__("pathlib").Path(__file__).resolve().parents[1] / "scripts" / "run_matrix.py"))
+    rm = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(rm)
+    steps = [{"a": {"time_s": 1.0, "peak_mem_gb": 60.0}, "b": {"time_s": 2.0, "peak_mem_gb": 2.0}},
+             {"a": {"time_s": 3.0, "peak_mem_gb": 8.0}, "b": {"time_s": 4.0, "peak_mem_gb": 9.0}}]
+    c = rm.pipeline_cost(steps)
+    assert c["pipeline_time_s"]["mean"] == 5.0 and c["peak_mem_gb"]["mean"] == 34.5 and c["peak_mem_gb_max"]["mean"] == 60.0
+    src = tmp_path / "m.csv"
+    with open(src, "w", newline="") as f:
+        w = csv.writer(f); w.writerow(["name", "psnr", "peak_mem_gb"]); w.writerow(["a", 1, 8.0]); w.writerow(["b", 2, 9.0])
+    rows = list(csv.DictReader(open(rm.pipeline_csv(src, steps, tmp_path / "p.csv"))))
+    assert [float(r["peak_mem_gb"]) for r in rows] == [60.0, 9.0] and [float(r["pipeline_time_s"]) for r in rows] == [4.0, 6.0]
+
+
+def test_ref_builder_mosaic_focus_drops_blurry_colocated():
+    rng = np.random.default_rng(1)
+    x = rng.random((512, 768, 3), dtype=np.float32)
+    a4 = cv2.resize(x, (192, 128), interpolation=cv2.INTER_AREA)
+    blur4 = np.zeros((128, 192), np.float32)
+    blur4[:, 96:] = 5.0
+    box = (40, 140, 32, 32)                                          # tile in the defocused half
+    m = RefBuilder(x, a4, blur4, 32, "mosaic")(box)
+    mf = RefBuilder(x, a4, blur4, 32, "mosaic_focus")(box)
+    col = RefBuilder(x, a4, blur4, 32, "mosaic").crop(4 * 40 + 64 - 32, 4 * 140 + 64 - 32, 64)
+    assert np.array_equal(m[:64, :64], col) and not np.array_equal(mf[:64, :64], col)
+    assert np.array_equal(RefBuilder(x, a4, blur4, 32, "mosaic_focus")((40, 10, 32, 32))[:64, :64],
+                          RefBuilder(x, a4, blur4, 32, "mosaic").crop(4 * 40 + 64 - 32, 4 * 10 + 64 - 32, 64))

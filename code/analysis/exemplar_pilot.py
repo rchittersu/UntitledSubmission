@@ -16,7 +16,7 @@ Scores: whole image (crop 64, masks) PSNR/HB, and LPIPS/DISTS/PSNR on up to 6 ra
 bin (tile's median blur; same tiles for all methods) (b0..b3 edges 0.4/1.5/3.5 DP px).
 
   NATIVE=dataset/dpdd_native RESULTS=dataset/results/local DPMAPS=dataset/dpdd_1680/test/dp_maps \
-      python code/analysis/exemplar_pilot.py [--limit N] [--device mps]
+      [UP4=<anchor+bicubic dir> A4=<anchor x4 dir>] python code/analysis/exemplar_pilot.py [--limit N] [--device cuda]
 """
 import argparse
 import json
@@ -36,6 +36,8 @@ from uhdd.metrics import fidelity, iqa  # noqa: E402
 D = os.environ.get("NATIVE", "dataset/dpdd_native")
 R = os.environ.get("RESULTS", "dataset/results/local")
 DP = os.environ.get("DPMAPS", "dataset/dpdd_1680/test/dp_maps")
+UP4 = os.environ.get("UP4", "drb_x4+bicubic_x4")     # anchor + bicubic x4 (folder under RESULTS)
+A4 = os.environ.get("A4", "drb_x4")                   # anchor at 1/4 (folder under RESULTS)
 T0, T1 = 0.4, 1.2          # composite weight ramp (DP px), as dp_composite.py
 EDGES = (0.4, 1.5, 3.5)
 
@@ -105,7 +107,7 @@ def run(name, device, rng, save=False):
     import time
     t0 = time.time()
     inp, gt = f32(rd(f"{D}/inputs/{name}.png")), f32(rd(f"{D}/x1/targets/{name}.png"))
-    aup, a4 = f32(rd(f"{R}/drb_x4+bicubic_x4/{name}.png")), f32(rd(f"{R}/drb_x4/{name}.png"))
+    aup, a4 = f32(rd(f"{R}/{UP4}/{name}.png")), f32(rd(f"{R}/{A4}/{name}.png"))
     mask = rd(f"{D}/x1/masks/{name}.png") > 127
     H, W = gt.shape[:2]
     bm = load_blur_map(DP, name, (H, W))
@@ -207,7 +209,7 @@ def main():
     if a.summary:
         return summarize(f"{R}/exemplar_pilot.json")
     device = torch.device(a.device)
-    names = sorted(f[:-4] for f in os.listdir(f"{R}/drb_x4") if f.endswith(".png"))[: a.limit or None]
+    names = sorted(f[:-4] for f in os.listdir(f"{R}/{A4}") if f.endswith(".png"))[: a.limit or None]
     rng = np.random.default_rng(0)
     allr = {}
     for n in names:

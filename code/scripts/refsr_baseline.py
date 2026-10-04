@@ -10,7 +10,10 @@ features on the output grid), so per LR tile of `tile` px (HR 4*tile):
   colocated  ref = the blurry native input at the tile's own location (in-focus tiles: the exact sharp content;
              defocused tiles: blurry, so DATSR falls back to SR).
   mosaic     ref = 2x2 mosaic of 2*tile-px native crops: the central co-located crop + the 3 in-focus crops of the
-             whole image most similar to the anchor tile. Candidates: crops on a stride-tile grid whose DP copy
+             whole image most similar to the anchor tile.
+  mosaic_focus  as mosaic, but the co-located crop is included only for tiles that are mostly in focus (mean copy
+             weight >= 0.5); defocused tiles get the 4 most similar in-focus crops (a blurry co-located crop is the
+             best match for the soft upsampled anchor, so DATSR would otherwise copy the blur). Candidates: crops on a stride-tile grid whose DP copy
              weight (ramp 0.4-1.2 DP px, as the composite) averages > 0.8. Similarity: Euclidean distance of
              standardized 15-d statistics at 1/4 res (mean / std RGB, 8-bin magnitude-weighted gradient-orientation
              histogram, log mean gradient magnitude) of the anchor tile vs. the 4x-downscaled candidate.
@@ -51,11 +54,11 @@ def stats_desc(img: np.ndarray) -> np.ndarray:
 class RefBuilder:
     def __init__(self, x: np.ndarray, anchor4: np.ndarray, blur4: np.ndarray, tile: int, mode: str):
         self.x, self.a4, self.mode, self.cr = x, anchor4, mode, 2 * tile            # native crop size
-        if mode != "mosaic":
+        if not mode.startswith("mosaic"):
             return
         H, W = x.shape[:2]
         x4 = cv2.resize(x, (W // 4, H // 4), interpolation=cv2.INTER_AREA)
-        w4 = np.clip((1.2 - blur4) / 0.8, 0, 1)
+        w4 = self.w4 = np.clip((1.2 - blur4) / 0.8, 0, 1)
         c4 = self.cr // 4
         self.cands, descs = [], []
         for y in range(0, x4.shape[0] - c4 + 1, tile // 4):
@@ -81,13 +84,19 @@ class RefBuilder:
             return self.crop(4 * y, 4 * x, 4 * h, 4 * w)
         cr = self.cr
         cy, cx = 4 * y + 2 * h - cr // 2, 4 * x + 2 * w - cr // 2
-        parts = [self.crop(cy, cx, cr)]
+        Ha, Wa = self.a4.shape[:2]
+        ys, xs = slice(max(y, 0), min(y + h, Ha)), slice(max(x, 0), min(x + w, Wa))
+        # mosaic_focus: the co-located crop is used only if the tile itself is mostly in focus; a blurry
+        # co-located crop is the most similar to the soft upsampled anchor and would be copied, blur included
+        colocated = self.mode == "mosaic" or self.w4[ys, xs].mean() >= 0.5
+        parts = [self.crop(cy, cx, cr)] if colocated else []
         if getattr(self, "cands", None):
-            Ha, Wa = self.a4.shape[:2]
-            q = self.a4[max(y, 0):min(y + h, Ha), max(x, 0):min(x + w, Wa)]
+            q = self.a4[ys, xs]
             dq = (stats_desc(q) - self.mu) / self.sd
-            for j in np.argsort(((self.descs - dq) ** 2).sum(1))[:3]:
+            for j in np.argsort(((self.descs - dq) ** 2).sum(1))[:4 - len(parts)]:
                 parts.append(self.crop(*self.cands[j], cr))
+        if not parts:
+            parts = [self.crop(cy, cx, cr)]
         parts += [parts[0]] * (4 - len(parts))
         return np.concatenate([np.concatenate(parts[:2], 1), np.concatenate(parts[2:], 1)], 0)[:4 * h, :4 * w]
 
@@ -98,7 +107,7 @@ def main():
     ap.add_argument("--inputs", required=True)
     ap.add_argument("--dp-maps")
     ap.add_argument("--out", required=True)
-    ap.add_argument("--ref", default="mosaic", choices=["mosaic", "colocated"])
+    ap.add_argument("--ref", default="mosaic", choices=["mosaic", "mosaic_focus", "colocated"])
     ap.add_argument("--weights", default="restoration_mse", choices=["restoration_mse", "restoration_gan"])
     ap.add_argument("--repo", default=os.path.join(os.environ.get("UHDD_REPOS", "ext/repos"), "DATSR"))
     ap.add_argument("--weights-dir", default=os.path.join(os.environ.get("UHDD_WEIGHTS", "ext/weights"), "datsr"))
@@ -108,7 +117,7 @@ def main():
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     ap.add_argument("--only", help="comma-separated names")
     a = ap.parse_args()
-    if a.ref == "mosaic" and not a.dp_maps:
+    if a.ref.startswith("mosaic") and not a.dp_maps:
         sys.exit("--ref mosaic needs --dp-maps")
     device = torch.device(a.device)
     nets = datsr.build(a.repo, f"{a.weights_dir}/{a.weights}.pth", f"{a.weights_dir}/feature_extraction.pth", device)

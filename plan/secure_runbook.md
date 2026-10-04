@@ -1,155 +1,111 @@
-# Secure-env runbook — handoff 2: native data (test 76, val, train), protocol v3, all baselines
+# Secure-env runbook — handoff 3: evaluation only (complete the protocol, perspective experiments, data facts)
 
-**One runbook per handoff.** This file is the only current task for the secure env; it replaces the P1b and P2a
-runbooks (in git history). Outside replaces it after your patch is applied.
+**One runbook per handoff.** This file replaces the handoff-2 runbook (in git history). Your handoff-2 patch and
+addendum notes were applied and reviewed outside — thank you; review notes are in `docs/evaluation.md` §7.6.
 
-Audience: the Claude agent in the secure environment. Read first:
-- [`docs/evaluation.md`](../docs/evaluation.md) — protocol, metrics, tiling standard (§2.7), how to run (§5);
-- [`docs/baselines.md`](../docs/baselines.md) — every baseline, weights, commands;
-- [`plan/method_plan.md`](method_plan.md) — why we need train/val native sets and anchors (the method, P2b next).
+Audience: the Claude agent in the secure environment. Read first: `docs/evaluation.md` (§9 decision log, §7.6),
+`docs/baselines.md`.
 
-What changed since your P1 report (applied outside): translation registration, `gridshift` seams, DP blur bins,
-PSF matching dropped as primary, per-capture calibrated native set (`build_native_set.py`), protocol v3 metrics
-(`percbins`, `noharm`, `apsnr`, `msres`), per-method paper tiling (overlap = tile / 8), new baselines (HAT,
-OSEDiff, Restormer+TLC, training-free fusion, DATSR reference-based SR).
+## Standing rules (new, from the user)
+- **Always work with all 76 test scenes** — every table, analysis, figure and sensitivity check. Indoor/outdoor
+  splits are only an extra breakdown, never the main or only result.
+- **This handoff is evaluation only** — no training of any model.
+- **Protocol is frozen** (2026-10-04, decision log): headline = out-of-the-box PSNR, SSIM, LPIPS, DISTS at native
+  resolution, MUSIQ, CLIPIQA, PSNR/SSIM at ×4, runtime. Per-bin, no-harm, aligned PSNR, sweep = diagnostics only.
+- **Report results; keep interpretation short.** The user will look at the results and the images and form their
+  own view. Facts, tables, CIs, and anything surprising or broken — no long narratives.
+- Visual review is done by the user manually: keep the visual material available in the env (see §6), no written
+  visual review needed.
 
-Rules as always: record every step's outcome; deviations in a table; no internal paths / hostnames / dataset
-names in the report (`$UHDD_*` variables); hand off early if blocked (a partial patch is better than none).
-
-**Priority if time is short**: 0 → 3 (test + val only) → 4 (test 76) → 7 (references, G1, G2 bicubic/HAT) →
-8 (composite, multiscale, DATSR mosaic) → 5 → 4 (train) → rest. CPU-heavy steps (3, 4) and GPU steps (5, 7, 8)
-can run in parallel.
+Same rules as always: outcome of every step; deviations table; no internal paths/hostnames; hand off early if blocked.
 
 ---
 
 ## 0. Update and test
 ```bash
-git pull && git checkout -b handoff/h2          # base = origin/main
-pip install -r code/requirements.txt            # adds safetensors (diffusers: only for the deferred VAE step)
-pytest -q code/tests                            # expect 57 passed
+git pull && git checkout -b handoff/h3        # base = origin/main
+pytest -q code/tests                          # expect 63 passed
 ```
+If you have local commits not in the handoff-2 patch (e.g. the ×4 Bokehlicious / LaKDNet / IFAN + {bicubic,
+HAT-L} group in `dpdd_eval_v3.yaml`), rebase them onto the new main; `dpdd_eval_v3.yaml` changed outside (tag
+`dpdd4`, new `t1_deblur_x4` group) — keep both.
 
-## 1. Resources (report)
-GPU count / type / memory, max job wall time, free storage under `$UHDD_DATA`, CPU cores. These size the P2b training runs.
+What changed outside (for this handoff):
+- `run_matrix.py`: pipeline time / peak memory are now per image (time summed over steps, memory = max over steps),
+  written into a per-pipeline CSV so means and CIs agree (fixes the "mean outside its CI" bug). Also reports
+  `peak_mem_gb_max`.
+- `msres` now includes `ssim_s2/ssim_s4`.
+- `refsr_baseline.py --ref mosaic_focus`: DATSR reference without the blurry co-located crop for defocused tiles.
+- `exemplar_pilot.py`: anchor folders via env `UP4`, `A4`.
+- `dpdd_eval_v3.yaml`: tag **`dpdd4`** with the full frozen headline; group `t1_deblur_x4` (5 deblurrers + input at ×4).
+- Report terminology: bin **b0 = focal plane (in focus)**, b3 = most defocused (the handoff-2 report had it reversed
+  in two places).
 
-## 2. Weights and repos
+## 1. Complete the frozen protocol on all 76
 ```bash
-# IFAN (public mirror, bit-identical to the official net)
-wget -P $UHDD_WEIGHTS/ifan https://github.com/jacobsparts/ifan-rs/releases/download/v0.1.0/IFAN.safetensors
-sha256sum $UHDD_WEIGHTS/ifan/IFAN.safetensors   # baa8ba206149a7e4c0350a9817425cf5e496c2008fcab7e6a92914f5fe96fe82
-python code/scripts/check_against_official.py ifan     # expect max|ours-ref| ~1e-6
-# DATSR (reference-based SR; no mmcv needed)
-git clone https://github.com/caojiezhang/DATSR $UHDD_REPOS/DATSR
-gh release download -R caojiezhang/DATSR -p '*.pth' -D $UHDD_WEIGHTS/datsr
-# HAT (official Google Drive per the HAT README; or the HF mirrors in docs/baselines.md C2)
-git clone https://github.com/XPixelGroup/HAT $UHDD_REPOS/HAT      # weights -> $UHDD_WEIGHTS/hat/
-# OSEDiff (CUDA): commands in docs/baselines.md C3 (repo, SD2.1-base, RAM swin-L)
-git clone https://github.com/swz30/Restormer $UHDD_REPOS/Restormer   # if not present (TLC baseline reuses it)
+python code/scripts/run_matrix.py code/experiments/dpdd_eval_v3.yaml --gpus all      # inference cached; re-evaluates under dpdd4
 ```
-If a download is blocked, report it and continue without that model.
+- Adds whole-image LPIPS, MUSIQ, CLIPIQA, SSIM at ×4 for every row, and Table 1 (deblur-only at ×4 for Restormer,
+  LaKDNet-L, DRBNet, IFAN, Bokehlicious + input, scored at ×4).
+- Re-run `code/experiments/run_baselines_bd.sh drbnet_single` and `... restormer_dpdd` (fusion re-evaluated under
+  `dpdd4`; tuned parameters reused).
+- Slow SR models (SwinIR-real, Real-HAT, OSEDiff) stay on Restormer and DRBNet only (user decision; no need to add
+  them for LaKDNet-L / IFAN). Bicubic and HAT-L for all five anchors if your local group already does it.
 
-## 3. Official pairing + DP maps (test, val, train)
+## 2. DATSR (reference-based SR) on all 76
 ```bash
-for s in test val train; do
-  python code/scripts/pair_official.py --root <dd_dp_dataset_png> --split $s --out $UHDD_DATA/dpdd_1680/$s
-  python code/scripts/dp_maps.py --left $UHDD_DATA/dpdd_1680/$s/inputs_l --right $UHDD_DATA/dpdd_1680/$s/inputs_r \
-      --out $UHDD_DATA/dpdd_1680/$s/dp_maps --procs 16
-done
-ln -sfn $UHDD_DATA/dpdd_1680/test/dp_maps $UHDD_DATA/dpdd_native/dp_maps     # path used by the v3 configs
+DATSR=1 code/experiments/run_baselines_bd.sh drbnet_single     # runs mosaic and mosaic_focus (MSE weights), sharded
 ```
-Expected 76 / 74 / 350 pairs. Report pair counts and each split's focal-plane line (outside, test: median 0.129,
-min 0.007, max 0.721).
+Report both variants. Also report, per variant, the median number of in-focus candidates per image and how many
+tiles had no in-focus candidate. Restormer anchor only if time permits.
 
-## 4. Native sets v2 from raw (test = 76 with outdoor, val, train)
-`build_native_set.py` (docs/evaluation.md §2.1): per-capture calibration to the official rendering, translation
-registration, ×1/×2/×4 + masks. Run once per raw zip/folder (indoor, outdoor); finished pairs are skipped.
+## 3. Timing pass
+On an idle node (or a reserved GPU, nothing else running), one timing run per pipeline on 5 fixed test scenes
+(same 5 for all; list them): `pipeline_time_s` and `peak_mem_gb` from the new aggregation. State the GPU type.
+
+## 4. Perspective experiments (all 76)
+**4a. Upper bounds with a perfect anchor** (how much is lost purely by going through ×4):
 ```bash
-for s in test val train; do OUT=$UHDD_DATA/dpdd_native_v2; [ $s != test ] && OUT=$UHDD_DATA/dpdd_native_$s
-  for z in <indoor raw zip or dir> <outdoor raw zip or dir>; do
-    python code/scripts/build_native_set.py --raw $z --official-inputs $UHDD_DATA/dpdd_1680/$s/inputs \
-        --official-targets $UHDD_DATA/dpdd_1680/$s/targets --pairs $UHDD_DATA/dpdd_1680/$s/pairs.csv --out $OUT --procs 16
-  done
-done
+T4=$UHDD_DATA/dpdd_native_v2/x4/targets; R=$UHDD_RESULTS/dpdd_v2/oracle
+python code/scripts/run_model.py --model bicubic_x4 --inputs $T4 --out $R/gt_x4+bicubic --gpus all
+python code/scripts/run_model.py --model hat_l_x4   --inputs $T4 --out $R/gt_x4+hat_l --gpus all
+python code/scripts/fuse_baselines.py --method composite --inputs $UHDD_DATA/dpdd_native_v2/inputs --x4 $R/gt_x4+bicubic \
+    --dp-maps $UHDD_DATA/dpdd_native/dp_maps --out $R/gt_x4+composite --params $UHDD_RESULTS/dpdd_v2/fusion_params/composite.json
+# evaluate each with the dpdd4 metric list (same EV options as run_baselines_bd.sh)
 ```
-Storage ≈ 0.4 GB per pair (train ≈ 140 GB, val 30 GB, test 30 GB); if short, train last and drop its x2.
-Report per split: pairs built vs expected; the summary line (calibration medians/min, registration shift
-median/max; outside on the 37 indoor test pairs: 38.8 / 39.0 dB, shift median 1.5, max 6.6 px); the 5 worst rows of
-`build_report.csv`; any shift > 20 px (describe, do not drop). Keep indoor/outdoor identifiable (report both).
+**4b. Anchor quality vs final quality**: per image, PSNR of the ×4 anchor (at ×4) vs PSNR of anchor + bicubic and of
+the composite (native), for Restormer and DRBNet — report the Spearman correlation and the per-image CSV
+(name, anchor_psnr_x4, final_psnr, frac_b0..b3).
 
-## 5. Anchors at ×4 (train / val / test) and the train/test anchor gap
-DPDD-trained deblurrers saw DPDD train at 1680×1120 = our ×4 level → train-set anchors are probably too good.
+**4c. Exemplar transfer with its controls**, DRBNet anchor:
 ```bash
-for s in train val v2; do D=$UHDD_DATA/dpdd_native_$s
-  for m in restormer_dpdd drbnet_single ifan lakdnet_dpdd_l bokehlicious_deblur; do
-    python code/scripts/run_model.py --model $m --inputs $D/x4/inputs --out $UHDD_RESULTS/anchors/$s/$m --gpus all
-    python code/scripts/evaluate.py --pred $UHDD_RESULTS/anchors/$s/$m --targets $D/x4/targets --masks $D/x4/masks \
-        --metrics psnr,ssim --scale 4 --crop 16 --gpus all --tag anchor
-  done
-  python code/scripts/evaluate.py --pred $D/x4/inputs --targets $D/x4/targets --masks $D/x4/masks \
-      --metrics psnr,ssim --scale 4 --crop 16 --gpus all --tag anchor        # blurry-input reference
-done
+NATIVE=$UHDD_DATA/dpdd_native_v2 RESULTS=<dir with the anchor folders> DPMAPS=$UHDD_DATA/dpdd_native/dp_maps \
+UP4=<x4 + bicubic folder> A4=<x4 anchor folder> python code/analysis/exemplar_pilot.py --device cuda
+python code/analysis/exemplar_pilot.py --summary
 ```
-(`run_model.py` uses each model's paper tiling = whole image at ×4.) Report: rows = models + input, columns =
-PSNR/SSIM on train / val / test and the gain over the input per split. Keep the outputs (P2b training inputs).
+Paste the summary tables (exemplar / random / oracle vs composite, paired CIs).
 
-## 6. (deferred) VAE ceiling
-Not in this handoff — skip. (Variant B backbone choice is deferred; `vae_ceiling.py` stays in the repo.)
+**4d. Per-image view**: CSV over the 76 scenes for input, native DRBNet, ×4 + bicubic, composite, exemplar,
+OSEDiff: name, indoor/outdoor, frac_b0..b3, psnr, dists, dpsnr_b0. (Plot data for the user; no interpretation.)
 
-## 7. Evaluation protocol v3 — registry pipelines
-```bash
-python code/scripts/run_matrix.py code/experiments/dpdd_eval_v3.yaml --dry-run | less
-python code/scripts/run_matrix.py code/experiments/dpdd_eval_v3.yaml --gpus all
-```
-- Results dir `$UHDD_RESULTS/dpdd_v2` (new: the step cache is keyed by pipeline, not by dataset, so P1 outputs on
-  the v1 renderings are **not** reused). Tag `dpdd3`.
-- Groups: references · G1 native patch-wise (paper tiling: 1120 tiles; Bokehlicious 1500) · 512-tile ablation ·
-  A4 Restormer+TLC · G2 ×4 + {bicubic, SwinIR-real, HAT-L, Real-HAT} · OSEDiff · ×2 + {bicubic, SwinIR-real ×2}.
-- Memory: 1120-px tiles at batch 2 (P1: Restormer 1024 px batch 2 peaked at 27 GB); lower `tile_batch` if needed
-  and say so.
+**4e. Sensitivity**: main-table rows recomputed without the 3 test scenes with > 10 px registration shift
+(`1P0A1526`, `1P0A1696`, `1P0A1772`), as paired Δ vs the full-76 numbers (`subset_results.py`).
 
-## 8. Training-free (B) and reference-based SR (D) baselines
-1. Val anchors for tuning (DRBNet shown; repeat for restormer_dpdd):
-   ```bash
-   V=$UHDD_DATA/dpdd_native_val; R=$UHDD_RESULTS/dpdd_v2/val
-   python code/scripts/run_model.py --model drbnet_single --inputs $V/x4/inputs --out $R/drb_x4 --gpus all
-   python code/scripts/run_model.py --model bicubic_x4 --inputs $R/drb_x4 --out $R/drb_x4+bic --gpus all
-   python code/scripts/run_model.py --model drbnet_single --inputs $V/x2/inputs --out $R/drb_x2 --gpus all
-   python code/scripts/run_model.py --model bicubic_x2 --inputs $R/drb_x2 --out $R/drb_x2+bic --gpus all
-   ```
-2. Tune on val (composite, multiscale, guided; exemplar uses the composite thresholds):
-   ```bash
-   P=$UHDD_RESULTS/dpdd_v2/fusion_params; mkdir -p $P
-   for m in composite multiscale guided; do
-     python code/scripts/fuse_baselines.py --method $m --inputs $V/inputs --x4 $R/drb_x4+bic --x2 $R/drb_x2+bic \
-         --dp-maps $UHDD_DATA/dpdd_1680/val/dp_maps --tune --targets $V/x1/targets --masks $V/x1/masks \
-         --params $P/$m.json --procs 8
-   done
-   cp $P/composite.json $P/exemplar.json
-   ```
-3. Run + evaluate on test: `code/experiments/run_baselines_bd.sh drbnet_single` and `... restormer_dpdd`
-   (needs step 7's anchors; DATSR ≈ 150 tiles of 128 LR px per image).
-Report the tuned parameters (top-5 printout), runtimes, and DATSR's number of in-focus candidates per image.
+**4f. Breakdown** (supplementary only): indoor-37 / outdoor-39 for the main rows.
 
-## 9. Tables for the report
-```bash
-J=$UHDD_RESULTS/dpdd_v2
-# main comparison vs the DP composite (docs/evaluation.md §6 columns)
-python code/scripts/summarize.py $J/pipelines/*__dpdd3.json $J/baselines_bd/*/metrics_dpdd3.json --ci \
-    --ref "drbnet_single fuse:composite" --cols psnr,apsnr,ssim,dists_b3,lpips_b3,psnr_b3,dpsnr_b0,psnr_s4,pipeline_time_s,peak_mem_gb
-# per-bin gains over the input
-python code/scripts/summarize.py <same jsons> --ci --ref "input (blurry)" --cols psnr_b0,psnr_b1,psnr_b2,psnr_b3
-# resolution sweep (figure data)
-python code/scripts/summarize.py <same jsons> --cols psnr_s4,psnr_s2,psnr,dists_s4,dists_s2,dists
-```
-Paste outputs verbatim; indoor-only (37) and all-76 separately.
+## 5. Data facts for later (no training)
+- Train / val native sets: summary lines of `build_report.csv` (calibration medians/min, registration shift
+  median/max), list of pairs > 10 px, indoor/outdoor counts; same for test (outdoor calibration quality).
+- Confirm DP blur maps exist for train and val (counts).
+- **Val proxy for future model selection**: define a cheap subset (e.g. 15 fixed val scenes, stratified by blur
+  fraction) and check it against the full val set on existing pipelines (input, native DRBNet, ×4 + bicubic,
+  composite, exemplar): Spearman of the method ranking and per-method PSNR difference proxy vs full. List the scenes.
 
-## 10. Optional
-- Paired focal-plane MTF on the outdoor raws: `python code/scripts/paired_edge_mtf.py --raw <outdoor> ...
-  --focus-dir $UHDD_DATA/dpdd_native/dp_maps --out paired_focus_outdoor.json` → ratio table and σ.
+## 6. Visual material (for the user's manual review)
+Keep / extend the visual set in the env: add DATSR (both variants) and the composite/exemplar fusions to the 8
+selected captures; same crops as before. Report only where it is (generic description) and what it contains.
 
-## 11. Handoff
-Report `handoff/from_secure/<date>_h2.md` (template in CLAUDE.md) with steps 0–10, deviations, tables, and
-observations in words (where methods fail, by blur bin; visual notes on HAT / OSEDiff / DATSR outputs).
-In the same patch, update the status lists and result sections of `docs/evaluation.md` and `docs/baselines.md`
-(✅/🔶/⏳ and numbers) — `docs/` is allowed in patches. Commit `code/` fixes with a CPU test where possible.
+## 7. Handoff
+Report `handoff/from_secure/<date>_h3.md` (template in CLAUDE.md): steps 0–6, deviations, tables (all 76, CIs),
+CSV blocks for 4b/4d. Update the result numbers in `docs/evaluation.md` §7 and `docs/baselines.md` (status lists).
 `handoff/make_patch.sh`.

@@ -18,7 +18,7 @@ Names (comma-separated on the CLI):
   noharm                   in-focus preservation: keep_psnr_b0 (vs input), dpsnr_b0 (vs input's psnr_b0)
                                                                        (needs ctx["input"], ctx["blur_map"])
   apsnr                    tile-aligned PSNR (integer shift search +-ctx["align_radius"] px per tile)
-  msres                    resolution sweep: psnr/lpips/dists at area-downscaled x2, x4 (psnr_s2, ...)
+  msres                    resolution sweep: psnr/ssim/lpips/dists at area-downscaled x2, x4 (psnr_s2, ...)
   gridshift                gs_mad, gs_psnr, gs_seam_step, gs_seam_ratio: difference to the same
                            model run on a shifted tile grid           (needs ctx["pred_shift"])
 
@@ -45,7 +45,7 @@ DIRECTION = {"psnr": 1, "ssim": 1, "pm_psnr": 1, "pm_ssim": 1, "pmg_psnr": 1, "p
              "psnr_b0": 1, "psnr_b1": 1, "psnr_b2": 1, "psnr_b3": 1, "gs_mad": -1, "gs_psnr": 1, "gs_seam_step": -1, "gs_seam_ratio": -1,
              **{f"{m}_b{k}": -1 for m in ("lpips", "dists") for k in range(4)},
              "keep_psnr_b0": 1, "dpsnr_b0": 1, "apsnr": 1, "apsnr_shift": -1,
-             **{f"{m}_s{f}": d for f in (2, 4) for m, d in (("psnr", 1), ("lpips", -1), ("dists", -1))},
+             **{f"{m}_s{f}": d for f in (2, 4) for m, d in (("psnr", 1), ("ssim", 1), ("lpips", -1), ("dists", -1))},
              "time_s": -1, "pipeline_time_s": -1, "peak_mem_gb": -1}
 
 

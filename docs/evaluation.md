@@ -456,15 +456,10 @@ real detail, not only that it does no harm.** Visual set (8 captures × 12 varia
 
 ## 8. Open items (owner)
 
-### ⚠ Pending decisions — revisit before writing the handoff-3 runbook (user, 2026-10-04: "hold off")
-1. ~~Headline perceptual metric~~ — **decided 2026-10-04: protocol frozen, standard metrics unchanged** (§9).
-2. ~~Handoff-3 scope~~ — **decided: evaluation only** (no training). DATSR in or out still to confirm.
-3. ~~Headline set~~ — **decided: all 76 in all cases.**
-4. **Slow SRs for LaKDNet-L / IFAN** (SwinIR-real, Real-HAT, OSEDiff) for completeness (secure asks); the secure side is
-   adding ×4 + {bicubic, HAT-L} for Bokehlicious, LaKDNet-L, IFAN and a two-level table (deblur-only ×4; per-SR at native).
-5. **Report / code fixes** to request: b0 wording, `keep_psnr_b0` next to `dpsnr_b0`, peak-memory aggregation, timings
-   on an idle node.
-6. **Visual review**: montages of the remaining 5 captures and full-res sharp-region crops (secure offers).
+### Decisions taken 2026-10-04 (were pending)
+Protocol frozen (standard headline metrics); all 76 scenes always; handoff 3 evaluation-only with DATSR (mosaic and
+in-focus-only mosaic); slow SR models stay on Restormer/DRBNet; visual review by the user manually; report fixes
+(b0 wording, per-image cost aggregation) in handoff 3. See §9 and `plan/secure_runbook.md`.
 
 - [S] `plan/secure_runbook.md` (76 pairs, val/train native sets, anchors, v3 evaluation, baselines B/D; VAE ceiling deferred).
 - [S] v3 evaluation of all registry baselines + group B/D scripts.
@@ -490,3 +485,4 @@ real detail, not only that it does no harm.** Visual set (8 captures × 12 varia
 | 2026-10-04 | **Protocol frozen before any method result exists.** Headline (main table): out-of-the-box PSNR, SSIM, LPIPS, DISTS at native resolution (pyiqa / skimage defaults, whole image), no-reference MUSIQ + CLIPIQA, runtime; plus PSNR/SSIM at ×4 (the standard DPDD benchmark resolution); human study. Per-blur-bin breakdown, no-harm, aligned PSNR, resolution sweep, hallucination crops = diagnostics (analysis section / supplementary), computed identically for all methods, never used to rank. No custom headline metric (band-limited PSNR, downscaled DISTS, denoise-before-scoring dropped). | user decision: avoid looking like metric tuning |
 | 2026-10-04 | **All 76 test scenes in all cases** (main tables, analyses, figures); indoor/outdoor splits only as supplementary breakdowns. | user decision |
 | 2026-10-04 | **Handoff 3 stays evaluation-only** (no training): goal is to build a clear picture of the problem before method work. | user decision |
+| 2026-10-04 | DATSR in handoff 3 (mosaic + in-focus-only mosaic); slow SR models not extended to LaKDNet-L / IFAN; visual review done by the user; eval tag `dpdd4` adds MUSIQ, CLIPIQA, SSIM at ×4. | user decision |

@@ -10,13 +10,13 @@ A4=$S/x4__${M}@whole                                   # 1/4-res deblur (anchor)
 UP4=$S/x4__${M}@whole__bicubic_x4@whole              # anchor + bicubic x4
 UP2=$S/x2__${M}@t1120o140__bicubic_x2@whole           # x2 deblur + bicubic x2
 PARAMS=${PARAMS:-$UHDD_RESULTS/dpdd_v2/fusion_params}  # tuned on val (see docs/baselines.md B, "tuning")
-EV="--targets $D/x1/targets --masks $D/x1/masks --inputs $D/inputs --dp-maps $DP --crop 64 --tag dpdd3 --gpus all \
-    --metrics psnr,ssim,hb,lpips,dists,blurbins,percbins,noharm,apsnr,msres"
+EV="--targets $D/x1/targets --masks $D/x1/masks --inputs $D/inputs --dp-maps $DP --crop 64 --tag dpdd4 --gpus all \
+    --metrics psnr,ssim,lpips,dists,musiq,clipiqa,msres,hb,blurbins,percbins,noharm,apsnr"
 py=python
 mkdir -p $O
 for m in composite multiscale guided detail exemplar; do
   # one runner per method: atomic lock, so several nodes can share this script (a stale lock after a crash: rm -r $O/.lock_*)
-  [ -f $O/${M}_$m/metrics_dpdd3.json ] && { echo "skip $m: already evaluated"; continue; }
+  [ -f $O/${M}_$m/metrics_dpdd4.json ] && { echo "skip $m: already evaluated"; continue; }
   mkdir $O/.lock_${M}_$m 2>/dev/null || { echo "skip $m: finished or running elsewhere"; continue; }
   P=""; [ -f $PARAMS/$m.json ] && P="--params $PARAMS/$m.json"
   $py code/scripts/fuse_baselines.py --method $m --inputs $D/inputs --x4 $UP4 --x2 $UP2 --anchor4 $A4 \
@@ -38,6 +38,7 @@ datsr() {  # $1 ref  $2 weights  $3 out dir  $4 label
 }
 if [ "${DATSR:-0}" = 1 ]; then   # opt-in: too slow for the default run (see above)
 datsr mosaic restoration_mse $O/${M}_datsr_mse_mosaic "$M @x4 + DATSR-mse (mosaic)"
+datsr mosaic_focus restoration_mse $O/${M}_datsr_mse_mosaic_focus "$M @x4 + DATSR-mse (in-focus mosaic)"
 fi
 if [ "${DATSR_FULL:-0}" = 1 ]; then
   datsr colocated restoration_mse $O/${M}_datsr_mse_colocated "$M @x4 + DATSR-mse (colocated)"

@@ -10,7 +10,7 @@ apsnr     Tile-aligned PSNR: per valid tile, the integer shift within +-radius p
           is applied before scoring (residual misalignment of the translation-registered target is ~1-2
           native px). Columns apsnr, apsnr_shift (mean |shift| in px over tiles).
 msres     Resolution sweep: pred, gt (area) and mask (min) downscaled by each factor f in ctx["eval_scales"];
-          psnr_s{f}, lpips_s{f}, dists_s{f}. Shows at which resolution a method's gains live.
+          psnr_s{f}, ssim_s{f}, lpips_s{f}, dists_s{f}. Shows at which resolution a method's gains live.
 """
 from __future__ import annotations
 
@@ -113,6 +113,7 @@ def resolution_sweep(pred, gt, mask, ctx: dict) -> dict[str, float]:
         p, g = _down(pred, f), _down(gt, f)
         m = None if mask is None else _down(mask, f) > 0.999          # all source pixels valid
         out[f"psnr_s{f}"] = fidelity.psnr(p, g, m)
+        out[f"ssim_s{f}"] = fidelity.ssim(p, g, m)
         for n in ("lpips", "dists"):
             out[f"{n}_s{f}"] = iqa.full_reference(n, p, g, tile=ctx.get("fr_tile", 1024))
     return out

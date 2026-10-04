@@ -24,14 +24,28 @@ run:
   precision: fp32
 
 eval:
-  tag: dpdd3
-  metrics: psnr,ssim,hb,lpips,dists,blurbins,percbins,noharm,apsnr,msres,gridshift,pm
+  # dpdd4 (2026-10-04): the frozen headline (docs/evaluation.md decision log) + diagnostics. Inference is cached;
+  # only evaluation reruns. dpdd3 = same minus musiq/clipiqa/ssim_s*.
+  tag: dpdd4
+  metrics: psnr,ssim,lpips,dists,musiq,clipiqa,msres,hb,blurbins,percbins,noharm,apsnr,gridshift,pm
   crop_native: 64
   options:
     dp_maps: "${UHDD_DATA}/dpdd_native/dp_maps"
-  table_cols: psnr,ssim,apsnr,dists,lpips_b0,lpips_b2,lpips_b3,dists_b3,dpsnr_b0,psnr_s4,lpips_s2,gs_psnr,pipeline_time_s,peak_mem_gb
+  table_cols: psnr,ssim,lpips,dists,musiq,clipiqa,psnr_s4,ssim_s4,pipeline_time_s,peak_mem_gb
 
 pipelines:
+  # Table 1 -- deblur only, at x4 (= standard DPDD resolution), scored at x4
+  - group: t1_deblur_x4
+    name: "{m} deblur @x4"
+    for: {m: [restormer_dpdd, lakdnet_dpdd_l, drbnet_single, ifan, bokehlicious_deblur]}
+    steps:
+      - {model: "{m}", scale: 4}
+
+  - group: t1_deblur_x4
+    name: "input (blurry) @x4"
+    steps:
+      - {model: identity, scale: 4}
+
   - group: references
     name: "input (blurry)"
     steps:
