@@ -458,7 +458,7 @@ real detail, not only that it does no harm.** Visual set (8 captures × 12 varia
 
 ### Decisions taken 2026-10-04 (were pending)
 Protocol frozen (standard headline metrics); all 76 scenes always; handoff 3 evaluation-only with DATSR (mosaic and
-in-focus-only mosaic); slow SR models stay on Restormer/DRBNet; visual review by the user manually; report fixes
+in-focus-only mosaic); slow SR models stay on Restormer/DRBNet; visual review by the secure agent and the user; no perspective experiments in handoff 3; report fixes
 (b0 wording, per-image cost aggregation) in handoff 3. See §9 and `plan/secure_runbook.md`.
 
 - [S] `plan/secure_runbook.md` (76 pairs, val/train native sets, anchors, v3 evaluation, baselines B/D; VAE ceiling deferred).
@@ -485,4 +485,4 @@ in-focus-only mosaic); slow SR models stay on Restormer/DRBNet; visual review by
 | 2026-10-04 | **Protocol frozen before any method result exists.** Headline (main table): out-of-the-box PSNR, SSIM, LPIPS, DISTS at native resolution (pyiqa / skimage defaults, whole image), no-reference MUSIQ + CLIPIQA, runtime; plus PSNR/SSIM at ×4 (the standard DPDD benchmark resolution); human study. Per-blur-bin breakdown, no-harm, aligned PSNR, resolution sweep, hallucination crops = diagnostics (analysis section / supplementary), computed identically for all methods, never used to rank. No custom headline metric (band-limited PSNR, downscaled DISTS, denoise-before-scoring dropped). | user decision: avoid looking like metric tuning |
 | 2026-10-04 | **All 76 test scenes in all cases** (main tables, analyses, figures); indoor/outdoor splits only as supplementary breakdowns. | user decision |
 | 2026-10-04 | **Handoff 3 stays evaluation-only** (no training): goal is to build a clear picture of the problem before method work. | user decision |
-| 2026-10-04 | DATSR in handoff 3 (mosaic + in-focus-only mosaic); slow SR models not extended to LaKDNet-L / IFAN; visual review done by the user; eval tag `dpdd4` adds MUSIQ, CLIPIQA, SSIM at ×4. | user decision |
+| 2026-10-04 | DATSR in handoff 3 (mosaic + in-focus-only mosaic); slow SR models not extended to LaKDNet-L / IFAN; visual review by the secure agent and by the user; no perspective experiments (upper bounds, anchor-vs-final, exemplar controls) in handoff 3; eval tag `dpdd4` adds MUSIQ, CLIPIQA, SSIM at ×4. | user decision |

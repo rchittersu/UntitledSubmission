@@ -1,4 +1,4 @@
-# Secure-env runbook — handoff 3: evaluation only (complete the protocol, perspective experiments, data facts)
+# Secure-env runbook — handoff 3: evaluation only (complete the protocol, DATSR, visual review, data facts)
 
 **One runbook per handoff.** This file replaces the handoff-2 runbook (in git history). Your handoff-2 patch and
 addendum notes were applied and reviewed outside — thank you; review notes are in `docs/evaluation.md` §7.6.
@@ -14,8 +14,8 @@ Audience: the Claude agent in the secure environment. Read first: `docs/evaluati
   resolution, MUSIQ, CLIPIQA, PSNR/SSIM at ×4, runtime. Per-bin, no-harm, aligned PSNR, sweep = diagnostics only.
 - **Report results; keep interpretation short.** The user will look at the results and the images and form their
   own view. Facts, tables, CIs, and anything surprising or broken — no long narratives.
-- Visual review is done by the user manually: keep the visual material available in the env (see §6), no written
-  visual review needed.
+- Visual review: you do it (§6) and the user also reviews the same material manually, so keep it available in the
+  env and make your notes concrete enough to be checked against the images (scene, crop, what is seen).
 
 Same rules as always: outcome of every step; deviations table; no internal paths/hostnames; hand off early if blocked.
 
@@ -36,7 +36,6 @@ What changed outside (for this handoff):
   `peak_mem_gb_max`.
 - `msres` now includes `ssim_s2/ssim_s4`.
 - `refsr_baseline.py --ref mosaic_focus`: DATSR reference without the blurry co-located crop for defocused tiles.
-- `exemplar_pilot.py`: anchor folders via env `UP4`, `A4`.
 - `dpdd_eval_v3.yaml`: tag **`dpdd4`** with the full frozen headline; group `t1_deblur_x4` (5 deblurrers + input at ×4).
 - Report terminology: bin **b0 = focal plane (in focus)**, b3 = most defocused (the handoff-2 report had it reversed
   in two places).
@@ -63,37 +62,7 @@ tiles had no in-focus candidate. Restormer anchor only if time permits.
 On an idle node (or a reserved GPU, nothing else running), one timing run per pipeline on 5 fixed test scenes
 (same 5 for all; list them): `pipeline_time_s` and `peak_mem_gb` from the new aggregation. State the GPU type.
 
-## 4. Perspective experiments (all 76)
-**4a. Upper bounds with a perfect anchor** (how much is lost purely by going through ×4):
-```bash
-T4=$UHDD_DATA/dpdd_native_v2/x4/targets; R=$UHDD_RESULTS/dpdd_v2/oracle
-python code/scripts/run_model.py --model bicubic_x4 --inputs $T4 --out $R/gt_x4+bicubic --gpus all
-python code/scripts/run_model.py --model hat_l_x4   --inputs $T4 --out $R/gt_x4+hat_l --gpus all
-python code/scripts/fuse_baselines.py --method composite --inputs $UHDD_DATA/dpdd_native_v2/inputs --x4 $R/gt_x4+bicubic \
-    --dp-maps $UHDD_DATA/dpdd_native/dp_maps --out $R/gt_x4+composite --params $UHDD_RESULTS/dpdd_v2/fusion_params/composite.json
-# evaluate each with the dpdd4 metric list (same EV options as run_baselines_bd.sh)
-```
-**4b. Anchor quality vs final quality**: per image, PSNR of the ×4 anchor (at ×4) vs PSNR of anchor + bicubic and of
-the composite (native), for Restormer and DRBNet — report the Spearman correlation and the per-image CSV
-(name, anchor_psnr_x4, final_psnr, frac_b0..b3).
-
-**4c. Exemplar transfer with its controls**, DRBNet anchor:
-```bash
-NATIVE=$UHDD_DATA/dpdd_native_v2 RESULTS=<dir with the anchor folders> DPMAPS=$UHDD_DATA/dpdd_native/dp_maps \
-UP4=<x4 + bicubic folder> A4=<x4 anchor folder> python code/analysis/exemplar_pilot.py --device cuda
-python code/analysis/exemplar_pilot.py --summary
-```
-Paste the summary tables (exemplar / random / oracle vs composite, paired CIs).
-
-**4d. Per-image view**: CSV over the 76 scenes for input, native DRBNet, ×4 + bicubic, composite, exemplar,
-OSEDiff: name, indoor/outdoor, frac_b0..b3, psnr, dists, dpsnr_b0. (Plot data for the user; no interpretation.)
-
-**4e. Sensitivity**: main-table rows recomputed without the 3 test scenes with > 10 px registration shift
-(`1P0A1526`, `1P0A1696`, `1P0A1772`), as paired Δ vs the full-76 numbers (`subset_results.py`).
-
-**4f. Breakdown** (supplementary only): indoor-37 / outdoor-39 for the main rows.
-
-## 5. Data facts for later (no training)
+## 4. Data facts for later (no training)
 - Train / val native sets: summary lines of `build_report.csv` (calibration medians/min, registration shift
   median/max), list of pairs > 10 px, indoor/outdoor counts; same for test (outdoor calibration quality).
 - Confirm DP blur maps exist for train and val (counts).
@@ -101,11 +70,18 @@ OSEDiff: name, indoor/outdoor, frac_b0..b3, psnr, dists, dpsnr_b0. (Plot data fo
   fraction) and check it against the full val set on existing pipelines (input, native DRBNet, ×4 + bicubic,
   composite, exemplar): Spearman of the method ranking and per-method PSNR difference proxy vs full. List the scenes.
 
-## 6. Visual material (for the user's manual review)
-Keep / extend the visual set in the env: add DATSR (both variants) and the composite/exemplar fusions to the 8
-selected captures; same crops as before. Report only where it is (generic description) and what it contains.
+## 5. Visual review (you and the user, on the same material)
+Extend the visual set in the env: add DATSR (both variants) and the composite / exemplar fusions to the 8 selected
+captures (same crops: sharp region, high-error region, centre; full-resolution crops, not downscaled montages).
+Review **all 8 captures at 100 % zoom** and report per capture and per method, briefly and concretely:
+- what is recovered vs. the target (edges, text, texture, grain), what is still blurry;
+- any invented content (text/glyph changes, texture that is not in the target, faces), halos, colour shifts, banding,
+  tile seams or tile-to-tile texture changes;
+- whether in-focus regions are altered vs. the input.
+Add a short cross-capture summary table (method × issue, with the captures where it occurs). Keep the material in place
+and describe generically where it is, so the user can check the same crops.
 
-## 7. Handoff
-Report `handoff/from_secure/<date>_h3.md` (template in CLAUDE.md): steps 0–6, deviations, tables (all 76, CIs),
-CSV blocks for 4b/4d. Update the result numbers in `docs/evaluation.md` §7 and `docs/baselines.md` (status lists).
+## 6. Handoff
+Report `handoff/from_secure/<date>_h3.md` (template in CLAUDE.md): steps 0–5, deviations, tables (all 76, CIs), the
+visual review. Update the result numbers in `docs/evaluation.md` §7 and `docs/baselines.md` (status lists).
 `handoff/make_patch.sh`.
