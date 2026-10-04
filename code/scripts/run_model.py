@@ -84,8 +84,9 @@ def worker(rank: int, world: int, device: torch.device, a: argparse.Namespace, t
 
 
 def missing_outputs(out: Path, names: list[str]) -> list[str]:
-    """Names without a non-empty output PNG in `out`."""
-    return [n for n in names if not (out / f"{n}.png").exists() or (out / f"{n}.png").stat().st_size == 0]
+    """Names without a readable output PNG in `out` (absent, empty or truncated by a killed writer)."""
+    import cv2
+    return [n for n in names if not (out / f"{n}.png").exists() or cv2.imread(str(out / f"{n}.png"), cv2.IMREAD_UNCHANGED) is None]
 
 
 def main():

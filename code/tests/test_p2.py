@@ -240,6 +240,8 @@ def test_missing_outputs_detects_absent_and_empty_files(tmp_path):
     spec = importlib.util.spec_from_file_location("run_model_script", str(__import__("pathlib").Path(__file__).resolve().parents[1] / "scripts" / "run_model.py"))
     rm = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(rm)
-    (tmp_path / "a.png").write_bytes(b"x")
-    (tmp_path / "b.png").write_bytes(b"")
+    import cv2
+    import numpy as np
+    cv2.imwrite(str(tmp_path / "a.png"), np.zeros((4, 4, 3), np.uint16))
+    (tmp_path / "b.png").write_bytes(b"\x89PNG-truncated")
     assert rm.missing_outputs(tmp_path, ["a", "b", "c"]) == ["b", "c"]
