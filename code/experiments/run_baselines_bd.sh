@@ -16,6 +16,7 @@ py=python
 mkdir -p $O
 for m in composite multiscale guided detail exemplar; do
   # one runner per method: atomic lock, so several nodes can share this script (a stale lock after a crash: rm -r $O/.lock_*)
+  [ -f $O/${M}_$m/metrics_dpdd3.json ] && { echo "skip $m: already evaluated"; continue; }
   mkdir $O/.lock_${M}_$m 2>/dev/null || { echo "skip $m: finished or running elsewhere"; continue; }
   P=""; [ -f $PARAMS/$m.json ] && P="--params $PARAMS/$m.json"
   $py code/scripts/fuse_baselines.py --method $m --inputs $D/inputs --x4 $UP4 --x2 $UP2 --anchor4 $A4 \
