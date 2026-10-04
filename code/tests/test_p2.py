@@ -233,3 +233,13 @@ def test_attn_mask_cache_is_exact_and_computed_once():
         a1, a2, a3 = b.calculate_mask((3, 4)), b.calculate_mask((3, 4)), b.calculate_mask((2, 2))
         assert b.calls == 2 and a1 is a2 and a3.shape == (2, 2)             # one build per distinct size
     assert all(torch.equal(r, b.calculate_mask((3, 4))) for r, b in zip(ref, net))
+
+
+def test_missing_outputs_detects_absent_and_empty_files(tmp_path):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("run_model_script", str(__import__("pathlib").Path(__file__).resolve().parents[1] / "scripts" / "run_model.py"))
+    rm = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(rm)
+    (tmp_path / "a.png").write_bytes(b"x")
+    (tmp_path / "b.png").write_bytes(b"")
+    assert rm.missing_outputs(tmp_path, ["a", "b", "c"]) == ["b", "c"]

@@ -82,6 +82,12 @@ def worker(rank: int, world: int, device: torch.device, a: argparse.Namespace, t
         json.dump(meta, f)
 
 
+
+def missing_outputs(out: Path, names: list[str]) -> list[str]:
+    """Names without a non-empty output PNG in `out`."""
+    return [n for n in names if not (out / f"{n}.png").exists() or (out / f"{n}.png").stat().st_size == 0]
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--model", required=True)
@@ -118,7 +124,12 @@ def main():
     gpus = parse_gpus(a.gpus)
     print(f"{a.model}: {len(todo)} images on {gpus or 'cpu'}", flush=True)
     if todo:
-        launch(worker, gpus, a, todo)
+        try:
+            launch(worker, gpus, a, todo)
+        except Exception as e:  # a worker may segfault at interpreter exit after finishing (old pinned libraries of OSEDiff)
+            if missing_outputs(out, [t["name"] for t in todo]):
+                raise
+            print(f"WARNING: a worker process died at exit ({type(e).__name__}) but all {len(todo)} outputs exist; continuing", flush=True)
 
     # merge per-rank metadata (keeps entries from earlier --skip-existing runs)
     meta_path = out / "meta.json"
