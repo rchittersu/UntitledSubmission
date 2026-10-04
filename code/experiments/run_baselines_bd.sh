@@ -13,7 +13,10 @@ PARAMS=${PARAMS:-$UHDD_RESULTS/dpdd_v2/fusion_params}  # tuned on val (see docs/
 EV="--targets $D/x1/targets --masks $D/x1/masks --inputs $D/inputs --dp-maps $DP --crop 64 --tag dpdd3 --gpus all \
     --metrics psnr,ssim,hb,lpips,dists,blurbins,percbins,noharm,apsnr,msres"
 py=python
+mkdir -p $O
 for m in composite multiscale guided detail exemplar; do
+  # one runner per method: atomic lock, so several nodes can share this script (a stale lock after a crash: rm -r $O/.lock_*)
+  mkdir $O/.lock_${M}_$m 2>/dev/null || { echo "skip $m: finished or running elsewhere"; continue; }
   P=""; [ -f $PARAMS/$m.json ] && P="--params $PARAMS/$m.json"
   $py code/scripts/fuse_baselines.py --method $m --inputs $D/inputs --x4 $UP4 --x2 $UP2 --anchor4 $A4 \
       --dp-maps $DP --out $O/${M}_$m $P --procs 8 --device cuda
