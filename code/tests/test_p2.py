@@ -209,3 +209,27 @@ def test_subset_results_recomputes_means(tmp_path):
     j = json.loads(out.read_text())
     assert j["metrics"]["psnr"]["mean"] == 25.0 and j["metrics"]["psnr"]["n"] == 2 and j["metrics"]["time_s"] == 5.0
     assert json.loads((tmp_path / "out" / "step__metrics_x.json").read_text())["n_images"] == 2
+
+
+def test_attn_mask_cache_is_exact_and_computed_once():
+    import torch
+    from uhdd.models import cache_attn_masks
+
+    class Block(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.w = torch.nn.Parameter(torch.zeros(1))
+            self.calls = 0
+
+        def calculate_mask(self, x_size):
+            self.calls += 1
+            return torch.arange(x_size[0] * x_size[1], dtype=torch.float32).reshape(*x_size)
+
+    net = torch.nn.Sequential(Block(), Block())
+    ref = [b.calculate_mask((3, 4)) for b in net]
+    assert cache_attn_masks(net) == 2 and cache_attn_masks(net) == 0        # idempotent
+    for b in net:
+        b.calls = 0
+        a1, a2, a3 = b.calculate_mask((3, 4)), b.calculate_mask((3, 4)), b.calculate_mask((2, 2))
+        assert b.calls == 2 and a1 is a2 and a3.shape == (2, 2)             # one build per distinct size
+    assert all(torch.equal(r, b.calculate_mask((3, 4))) for r, b in zip(ref, net))

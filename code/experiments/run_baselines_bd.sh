@@ -20,7 +20,7 @@ for m in composite multiscale guided detail exemplar; do
   $py code/scripts/evaluate.py --pred $O/${M}_$m --label "$M fuse:$m" $EV
 done
 # DATSR is slow (>= 15 min per 6720x4480 image on one GPU): shard the images over all GPUs of the node (one process per GPU).
-# Default = the headline variant only (MSE weights, mosaic reference); DATSR_FULL=1 adds colocated and the GAN weights.
+# DATSR=1 enables the headline variant (MSE weights, mosaic reference); DATSR_FULL=1 adds colocated and the GAN weights.
 datsr() {  # $1 ref  $2 weights  $3 out dir  $4 label
   mkdir -p $3
   names=($(ls $D/inputs | sed 's/\.png$//')); G=${NGPU:-$(nvidia-smi -L | wc -l)}
@@ -32,7 +32,9 @@ datsr() {  # $1 ref  $2 weights  $3 out dir  $4 label
   wait
   $py code/scripts/evaluate.py --pred $3 --label "$4" $EV
 }
+if [ "${DATSR:-0}" = 1 ]; then   # opt-in: too slow for the default run (see above)
 datsr mosaic restoration_mse $O/${M}_datsr_mse_mosaic "$M @x4 + DATSR-mse (mosaic)"
+fi
 if [ "${DATSR_FULL:-0}" = 1 ]; then
   datsr colocated restoration_mse $O/${M}_datsr_mse_colocated "$M @x4 + DATSR-mse (colocated)"
   datsr mosaic restoration_gan $O/${M}_datsr_gan_mosaic "$M @x4 + DATSR-gan (mosaic)"

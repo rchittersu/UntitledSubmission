@@ -119,6 +119,32 @@ def _builtin(spec: dict) -> Callable:
     raise ValueError(f"unknown builtin {kind}")
 
 
+def cache_attn_masks(net: torch.nn.Module) -> int:
+    """Memoize `calculate_mask(x_size)` of Swin-style blocks (SwinIR, HAT) per input size, on the module's device.
+
+    These models recompute the shifted-window attention mask on the CPU at every block of every forward pass whenever the
+    input size differs from the training size (always the case for 400-512 px tiles): thousands of CPU mask builds per
+    image, GPU idle. The mask depends only on the input size and static block settings, so caching is exact.
+    """
+    n = 0
+    for m in net.modules():
+        orig = getattr(m, "calculate_mask", None)
+        if orig is None or getattr(m, "_mask_cached", False):
+            continue
+        dev = next(m.parameters()).device if any(True for _ in m.parameters()) else torch.device("cpu")
+        memo: dict = {}
+
+        def cached(x_size, _orig=orig, _memo=memo, _dev=dev):
+            key = tuple(x_size) if not isinstance(x_size, int) else (x_size,)
+            if key not in _memo:
+                _memo[key] = _orig(x_size).to(_dev)
+            return _memo[key]
+
+        m.calculate_mask, m._mask_cached = cached, True
+        n += 1
+    return n
+
+
 def build(name: str, config: str | Path, device: torch.device | str,
           channels_last: bool = False, compile: bool = False) -> Restorer:
     spec = _expand(load_config(config)[name])
@@ -137,6 +163,7 @@ def build(name: str, config: str | Path, device: torch.device | str,
         if spec.get("weights") and not spec.get("weights_in_factory"):
             _load_state_dict(net, spec)
         net = net.eval().to(device)
+        cache_attn_masks(net)
         if channels_last:
             net = net.to(memory_format=torch.channels_last)
         for p in net.parameters():
