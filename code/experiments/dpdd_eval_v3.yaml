@@ -77,6 +77,13 @@ pipelines:
       - {model: "{m}", scale: 4}
       - {model: "{up}"}
 
+  - group: g2_lowres_upsample_bokeh   # Bokehlicious works at ~3 MP (RealDefocus), i.e. the x4 regime
+    name: "{m} @x4 + {up}"
+    for: {m: [bokehlicious_deblur], up: [bicubic_x4, hat_l_x4]}
+    steps:
+      - {model: "{m}", scale: 4}
+      - {model: "{up}"}
+
   - group: g2_lowres_upsample_diffusion
     name: "{m} @x4 + {up}"
     for: {m: [restormer_dpdd, drbnet_single], up: [osediff_x4]}
