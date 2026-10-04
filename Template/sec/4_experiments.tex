@@ -1,0 +1,219 @@
+% =====================================================================
+\section{Experiments}
+\label{sec:exp}
+% =====================================================================
+% Numbers: handoff/from_secure/2026-10-04_h2.md (protocol v3, tag dpdd3). Protocol frozen on
+% 2026-10-04 before any result of the method existed (docs/evaluation.md, decision log).
+
+\subsection{Native-resolution DPDD}
+\label{sec:exp_data}
+DPDD~\cite{abuolaim2020dpdd} contains $500$ static scenes captured with a Canon EOS~5D Mark~IV at f/4
+(defocused input) and f/22 (target), split into $350/74/76$ scenes for training, validation and test.
+The released images are $1680\times1120$; the $6720\times4480$ originals exist only as raw captures. We
+develop every raw capture (libraw, camera white balance, the crop of the official framing, verified
+to $0.07$\,px) and calibrate it to the official rendering of the same capture with a per-capture
+colour polynomial, the converter's unsharp mask and a smooth local-tone field. After $4\times$
+downscaling, our images agree with the official ones to $38.8$\,dB (inputs) and $39.0$\,dB (targets)
+on held-out pixels, and the input--target PSNR of our $\times4$ level ($26.74$\,dB) reproduces the
+official benchmark ($26.41$\,dB). Targets are registered to the inputs with a translation; a
+homography over-fits the blur difference between the two apertures (median $6.8$ vs.\ $1.5$\,px
+estimated shift, $12/37$ vs.\ $0/37$ indoor scenes above $10$\,px). Validity masks and a $64$\,px
+border are excluded from all metrics. The left/right dual-pixel views of the input give a disparity
+proportional to the local defocus, which we smooth and use to stratify results into four bins: focal
+plane ($b_0$, $|d|<0.4$\,px at $1680$), mild, strong and very strong defocus (edges $1.5$, $3.5$\,px);
+it correlates with the measured loss of sharpness between input and target (median Spearman $0.76$).
+A paired measurement on focal-plane edges shows that the f/22 target is as sharp as the in-focus f/4
+input up to $0.3$\,cycles/px and softer only near Nyquist, so plain PSNR/SSIM are meaningful at native
+resolution. \todo{headline set: all $76$ scenes (main) with indoor-$37$ in the supplementary, or
+indoor only; outdoor calibration report.}
+
+\subsection{Protocol}
+\label{sec:exp_protocol}
+\paragraph{Metrics.} We report standard full-reference metrics computed out of the box on the whole
+native image: PSNR, SSIM~\cite{wang2004ssim}, LPIPS~\cite{zhang2018lpips} and DISTS~\cite{ding2020dists},
+the no-reference MUSIQ~\cite{ke2021musiq} and CLIPIQA~\cite{wang2023clipiqa}, PSNR/SSIM after $4\times$
+downscaling (the standard DPDD resolution, which makes native results comparable with published
+numbers), and runtime per $30$\,MP image. Blur-stratified PSNR and DISTS, the change in the focal-plane
+bin relative to the input, PSNR after a $\pm2$\,px shift search per $512$\,px tile, and text crops serve
+as diagnostics computed identically for every method; they explain differences but are not used to
+rank. Every comparison is paired per image with $95\%$ bootstrap confidence intervals. The protocol
+was fixed before any result of \method was available.
+\paragraph{Inference.} Each method runs as in its paper: methods evaluated on whole $1680\times1120$
+images run whole at $\times4$ and on $1120$\,px tiles at higher resolution; super-resolution models
+use their code's tile size (SwinIR $400$, HAT $512$, OSEDiff $128$ low-resolution pixels); overlap is
+$1/8$ of the tile for all, with linear blending.
+
+\subsection{Baselines}
+\label{sec:exp_baselines}
+\emph{Native inference}: Restormer~\cite{zamir2022restormer} (with and without TLC~\cite{chu2022tlc}),
+LaKDNet-L~\cite{ruan2023lakdnet}, DRBNet~\cite{ruan2022drbnet}, IFAN~\cite{lee2021ifan} and
+Bokehlicious~\cite{seizinger2025bokehlicious}, with released weights. \emph{Low-resolution deblurring
+and upsampling}: an anchor (DRBNet or Restormer at $\times4$) followed by bicubic, SwinIR and real-world
+SwinIR~\cite{liang2021swinir}, HAT-L and Real-HAT~\cite{chen2023hat}, or OSEDiff~\cite{wu2024osediff}.
+\emph{Training-free fusion} of the anchor and the native input using the dual-pixel blur map: a
+composite that copies the input in focus and the upsampled anchor elsewhere, a multi-scale composite
+that also uses a $\times2$ deblur, a guided filter~\cite{he2013guided}, adding the input's high band,
+and a non-learned version of our exemplar transfer; their parameters are tuned on the validation set.
+\emph{Reference-based super-resolution}: DATSR~\cite{cao2022datsr} with in-focus crops of the
+observation as reference. \emph{Retrained at native resolution}: Restormer and DRBNet fine-tuned on
+native training crops. \todo{DATSR and retrained rows.}
+
+\subsection{Results}
+\label{sec:exp_results}
+
+\begin{table}[t]
+  \centering
+  \small
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabular}{@{}lcccc@{}}
+    \toprule
+    & \multicolumn{2}{c}{deblur at $\times4$} & \multicolumn{2}{c}{deblur at native} \\
+    \cmidrule(lr){2-3}\cmidrule(l){4-5}
+    Method & PSNR & $\Delta$ & PSNR & $\Delta$ \\
+    \midrule
+    Blurry input & 26.71 & -- & 25.28 & -- \\
+    Restormer~\cite{zamir2022restormer} & 28.36 & $+1.65$ & 25.25 & $-0.04$ \\
+    \quad + TLC~\cite{chu2022tlc} & -- & -- & 25.23 & $-0.05$ \\
+    LaKDNet-L~\cite{ruan2023lakdnet} & \todo{--} & & 25.20 & $-0.08$ \\
+    DRBNet~\cite{ruan2022drbnet} & 28.48 & $+1.77$ & 25.32 & $+0.04$ \\
+    IFAN~\cite{lee2021ifan} & \todo{--} & & 25.48 & $+0.20$ \\
+    Bokehlicious~\cite{seizinger2025bokehlicious} & \todo{--} & & 25.92 & $+0.63$ \\
+    \bottomrule
+  \end{tabular}
+  \caption{\textbf{The resolution gap.} The same networks gain $1.7$\,dB over the input when the
+  image is downscaled by $4$ and almost nothing at native resolution. PSNR in dB, each scored at the
+  resolution it runs at; $\Delta$: paired gain over the input. Indoor scenes ($37$).
+  Native $512$\,px instead of $1120$\,px tiles: $\leq 0.06$\,dB difference.}
+  \label{tab:gap}
+\end{table}
+
+\begin{table*}[t]
+  \centering
+  \small
+  \setlength{\tabcolsep}{5pt}
+  \begin{tabular}{@{}llcccccccc@{}}
+    \toprule
+    & & \multicolumn{6}{c}{native resolution} & \multicolumn{2}{c}{at $\times4$} \\
+    \cmidrule(lr){3-8}\cmidrule(l){9-10}
+    & Method & PSNR\up & SSIM\up & LPIPS\dn & DISTS\dn & MUSIQ\up & CLIPIQA\up & PSNR\up & SSIM\up \\
+    \midrule
+    & Blurry input & 23.06 & 0.596 & \todo{--} & 0.260 & \todo{--} & \todo{--} & 24.24 & \todo{--} \\
+    \midrule
+    \multirow{6}{*}{\rotatebox{90}{\scriptsize native}}
+    & Restormer~\cite{zamir2022restormer} & 22.99 & 0.601 & & 0.267 & & & 24.14 & \\
+    & Restormer + TLC~\cite{chu2022tlc} & 22.99 & 0.601 & & 0.266 & & & 24.14 & \\
+    & LaKDNet-L~\cite{ruan2023lakdnet} & 23.00 & 0.575 & & 0.269 & & & 24.33 & \\
+    & DRBNet~\cite{ruan2022drbnet} & 23.12 & 0.586 & & 0.266 & & & 24.35 & \\
+    & IFAN~\cite{lee2021ifan} & 23.22 & 0.601 & & 0.223 & & & 24.47 & \\
+    & Bokehlicious~\cite{seizinger2025bokehlicious} & 23.70 & 0.642 & & 0.233 & & & 24.89 & \\
+    \midrule
+    \multirow{6}{*}{\rotatebox{90}{\scriptsize $\times4$ + upsampler}}
+    & bicubic & 24.58 & 0.662 & & 0.292 & & & 25.87 & \\
+    & HAT-L~\cite{chen2023hat} & 24.52 & 0.656 & & 0.273 & & & 25.82 & \\
+    & SwinIR-real~\cite{liang2021swinir} & 23.96 & 0.638 & & 0.267 & & & 25.33 & \\
+    & Real-HAT~\cite{chen2023hat} & 24.17 & 0.649 & & 0.282 & & & 25.43 & \\
+    & OSEDiff~\cite{wu2024osediff} & 23.51 & 0.616 & & 0.281 & & & 24.97 & \\
+    & $\times2$ deblur + bicubic & 23.84 & 0.642 & & 0.260 & & & 25.00 & \\
+    \midrule
+    \multirow{5}{*}{\rotatebox{90}{\scriptsize fusion}}
+    & DP composite & 24.52 & 0.660 & & 0.259 & & & 25.83 & \\
+    & multi-scale composite & 24.38 & 0.655 & & 0.252 & & & 25.68 & \\
+    & guided filter~\cite{he2013guided} & 24.56 & 0.662 & & 0.316 & & & 25.82 & \\
+    & + input high band & 24.37 & 0.620 & & 0.210 & & & 25.88 & \\
+    & exemplar transfer (non-learned) & 24.41 & 0.639 & & 0.232 & & & 25.82 & \\
+    \midrule
+    & DATSR~\cite{cao2022datsr} (ref.: observation) & \todo{--} & & & & & & & \\
+    & Restormer / DRBNet retrained at native & \todo{--} & & & & & & & \\
+    \midrule
+    & \method (feed-forward) & \todo{--} & & & & & & & \\
+    & \method (one-step DiT) & \todo{--} & & & & & & & \\
+    \bottomrule
+  \end{tabular}
+  \caption{\textbf{Native-resolution DPDD ($76$ test scenes, $6720\times4480$).} All
+  ``$\times4$'' and fusion rows use DRBNet as the low-resolution deblurrer (Restormer anchor in the
+  supplementary). ``at $\times4$'': the native result downscaled to the standard DPDD resolution.
+  \todo{LPIPS, MUSIQ, CLIPIQA, SSIM at $\times4$, runtime; CIs in the supplementary.}}
+  \label{tab:main}
+\end{table*}
+
+\paragraph{The resolution gap (\cref{tab:gap}).} Every network that improves the input by about
+$1.7$\,dB at the benchmark resolution is within $0.2$\,dB of the input at native resolution, except
+Bokehlicious, which is trained on multi-megapixel data and gains $0.6$\,dB. Changing the tile size
+from $1120$ to $512$\,px changes the result by at most $0.06$\,dB, and TLC, which corrects global
+statistics for large inputs, changes nothing: the networks fail because the native blur is larger
+than anything they were trained on, not because of tiling.
+
+\paragraph{Main comparison (\cref{tab:main}).} Deblurring at $\times4$ and upsampling bicubically
+gains $1.5$\,dB over the input and is the strongest pipeline on PSNR, but it is smooth: its DISTS is
+worse than that of the blurry input. HAT-L is indistinguishable from bicubic. The perceptual
+upsamplers trade fidelity for texture (SwinIR-real $-0.6$\,dB, OSEDiff $-1.1$\,dB) without improving
+DISTS over the composite. Among the training-free fusions, copying the input in focus keeps the PSNR of
+the bicubic pipeline and improves DISTS, and transferring in-focus texture improves DISTS further
+($0.259\to0.232$) at $-0.11$\,dB. Nothing training-free improves both. \todo{\method rows and the
+comparison sentence.}
+
+\subsection{Analysis}
+\label{sec:exp_analysis}
+
+\begin{table}[t]
+  \centering
+  \footnotesize
+  \setlength{\tabcolsep}{2.5pt}
+  \begin{tabular}{@{}lccccc@{}}
+    \toprule
+    & \multicolumn{4}{c}{$\Delta$PSNR vs.\ input by defocus bin} & \\
+    \cmidrule(lr){2-5}
+    Method & focal & mild & strong & v.\,strong & DISTS$_{b_3}$\dn \\
+    \midrule
+    Blurry input & 0 & 0 & 0 & 0 & 0.261 \\
+    DRBNet native & $-0.02$ & $+0.10$ & $+0.13$ & $+0.10$ & 0.264 \\
+    $\times4$ + bicubic & $+0.44$ & $+1.32$ & $+2.08$ & $+2.17$ & 0.310 \\
+    $\times4$ + HAT-L & $+0.40$ & $+1.23$ & $+2.01$ & $+2.08$ & 0.297 \\
+    $\times4$ + SwinIR-real & $-0.21$ & $+0.70$ & $+1.46$ & $+1.72$ & 0.303 \\
+    $\times4$ + Real-HAT & $-0.05$ & $+0.92$ & $+1.71$ & $+1.87$ & 0.310 \\
+    $\times4$ + OSEDiff & $\mathbf{-1.11}$ & $+0.26$ & $+1.13$ & $+1.48$ & 0.315 \\
+    DP composite & $+0.14$ & $+1.31$ & $+2.08$ & $+2.17$ & 0.308 \\
+    exemplar (non-learned) & $+0.14$ & $+1.18$ & $+1.92$ & $+1.98$ & 0.266 \\
+    \method & \todo{--} & & & & \\
+    \bottomrule
+  \end{tabular}
+  \caption{\textbf{Where methods gain and lose} ($76$ scenes, DRBNet anchor). Mean paired PSNR change
+  over the input in each dual-pixel defocus bin, and DISTS on $512$\,px tiles of the most defocused
+  bin.}
+  \label{tab:bins}
+\end{table}
+
+\paragraph{Where detail is lost and where it is invented (\cref{tab:bins}).} The gains of the
+low-resolution pipelines grow with the amount of defocus, as expected. In the focal plane, where the
+input is already sharp, the generative upsamplers are \emph{worse than the input}: OSEDiff by
+$1.1$\,dB, with $87\%$ of the scenes affected. Visually, OSEDiff rewrites caption text into different
+glyphs, alters faces and adds banding in dark regions, while SwinIR-real and Real-HAT add halos and
+contrast (\cref{fig:qual}). The bicubic pipelines slightly \emph{gain} in the focal plane, because
+the f/22 target is less noisy than the f/4 input; PSNR thus rewards smoothing there, which is why we
+report in-focus preservation separately. Conversely, DISTS in the most defocused bin ranks the blurry
+input above every smooth pipeline: perceptual metrics at native resolution reward realistic grain and
+texture, which the smooth pipelines lack and which \method aims to restore from real evidence.
+
+\paragraph{In-focus exemplars carry the missing texture.} The non-learned exemplar transfer matches
+each defocused $32$\,px cell to the most similar in-focus cell of the same image at $\times4$ and adds
+its native high band. In a pilot on four scenes, matching halved the PSNR cost and doubled the
+perceptual gain compared with copying random in-focus cells, and an oracle that selects cells using the target shows how much usable
+texture exists in focus. \todo{full-set numbers for random/oracle; relevance-map figure.}
+
+\begin{figure*}[t]
+  \centering
+  \fbox{\parbox[c][5cm][c]{0.97\textwidth}{\centering Qualitative comparison placeholder (768\,px native
+  crops): target $\mid$ input $\mid$ native Restormer $\mid$ $\times4$ + bicubic $\mid$ + HAT-L $\mid$ +
+  SwinIR-real $\mid$ + OSEDiff $\mid$ DP composite $\mid$ \method.\\ Rows: lockers (\texttt{1P0A2030}),
+  poster caption (\texttt{1P0A1890}), dark scene (\texttt{1P0A2202}).}}
+  \caption{\textbf{Qualitative comparison at native resolution.} \todo{caption after the visual
+  review of all eight selected scenes.}}
+  \label{fig:qual}
+\end{figure*}
+
+\subsection{Ablations}
+\label{sec:exp_ablation}
+\todo{On the feed-forward variant: without the memory; random instead of retrieved exemplars; without
+the blur map; dual-pixel vs.\ predicted blur map; without the native input (anchor-only upsampling);
+tile size $256/512/1024$ (the memory should make it irrelevant); plug-in with held-out anchors.
+Human study (2AFC).}

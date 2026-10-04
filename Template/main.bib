@@ -58,54 +58,287 @@
 
 
 
-@misc{Authors14,
- author = {FirstName LastName},
- title = {The frobnicatable foo filter},
- note = {Face and Gesture submission ID 324. Supplied as supplemental material {\tt fg324.pdf}},
- year = 2014
-}
 
-@misc{Authors14b,
- author = {FirstName LastName},
- title = {Frobnication tutorial},
- note = {Supplied as supplemental material {\tt tr.pdf}},
- year = 2014
-}
+% =====================================================================
+% Paper references. Entries marked VERIFY need a check of venue/authors.
+% =====================================================================
 
-@article{Alpher02,
-author = {FirstName Alpher},
-title = {Frobnication},
-journal = PAMI,
-volume = 12,
-number = 1,
-pages = {234--778},
-year = 2002
-}
+% ---- defocus deblurring ----
+@inproceedings{abuolaim2020dpdd,
+  author = {Abuolaim, Abdullah and Brown, Michael S.},
+  title = {Defocus Deblurring Using Dual-Pixel Data},
+  booktitle = ECCV, year = {2020}}
+@inproceedings{abuolaim2021rdpd,
+  author = {Abuolaim, Abdullah and Delbracio, Mauricio and Kelly, Damien and Brown, Michael S. and Milanfar, Peyman},
+  title = {Learning to Reduce Defocus Blur by Realistically Modeling Dual-Pixel Data},
+  booktitle = ICCV, year = {2021}}
+@inproceedings{xin2021dpdefocus,
+  author = {Xin, Shumian and Wadhwa, Neal and Xue, Tianfan and Barron, Jonathan T. and Srinivasan, Pratul P. and Chen, Jiawen and Gkioulekas, Ioannis and Garg, Rahul},
+  title = {Defocus Map Estimation and Deblurring from a Single Dual-Pixel Image},
+  booktitle = ICCV, year = {2021}}
+@inproceedings{son2021kpac,
+  author = {Son, Hyeongseok and Lee, Junyong and Cho, Sunghyun and Lee, Seungyong},
+  title = {Single Image Defocus Deblurring Using Kernel-Sharing Parallel Atrous Convolutions},
+  booktitle = ICCV, year = {2021}}
+@inproceedings{lee2021ifan,
+  author = {Lee, Junyong and Son, Hyeongseok and Rim, Jaesung and Cho, Sunghyun and Lee, Seungyong},
+  title = {Iterative Filter Adaptive Network for Single Image Defocus Deblurring},
+  booktitle = CVPR, year = {2021}}
+@inproceedings{ruan2022drbnet,
+  author = {Ruan, Lingyan and Chen, Bin and Li, Jizhou and Lam, Miuling},
+  title = {Learning to Deblur Using Light Field Generated and Real Defocus Images},
+  booktitle = CVPR, year = {2022}}
+% VERIFY author list / venue (arXiv 2302.02234)
+@article{ruan2023lakdnet,
+  author = {Ruan, Lingyan and Bemana, Mojtaba and Seidel, Hans-Peter and Myszkowski, Karol and Chen, Bin},
+  title = {Revisiting Image Deblurring with an Efficient {ConvNet}},
+  journal = {arXiv preprint arXiv:2302.02234}, year = {2023}}
+% VERIFY venue (NeurIPS 2021?)
+@inproceedings{quan2021gkmnet,
+  author = {Quan, Yuhui and Wu, Zicong and Ji, Hui},
+  title = {Gaussian Kernel Mixture Network for Single Image Defocus Deblurring},
+  booktitle = NIPS, year = {2021}}
+@inproceedings{quan2023nrknet,
+  author = {Quan, Yuhui and Wu, Zicong and Ji, Hui},
+  title = {Neumann Network with Recursive Kernels for Single Image Defocus Deblurring},
+  booktitle = CVPR, year = {2023}}
+@inproceedings{li2023jdrl,
+  author = {Li, Yu and Ren, Dongwei and Shu, Xinya and Zuo, Wangmeng},
+  title = {Learning Single Image Defocus Deblurring with Misaligned Training Pairs},
+  booktitle = AAAI, year = {2023}}
+% VERIFY authors / venue
+@inproceedings{seizinger2025bokehlicious,
+  author = {Seizinger, Tim and Vasluianu, Florin-Alexandru and Conde, Marcos V. and Wu, Zongwei and Timofte, Radu},
+  title = {Bokehlicious: Photorealistic Bokeh Rendering with Controllable Apertures},
+  booktitle = ICCV, year = {2025}}
+@article{zhuo2011defocusmap,
+  author = {Zhuo, Shaojie and Sim, Terence},
+  title = {Defocus Map Estimation from a Single Image},
+  journal = PR, volume = {44}, number = {9}, pages = {1852--1858}, year = {2011}}
+@inproceedings{lee2019dmenet,
+  author = {Lee, Junyong and Lee, Sungkil and Cho, Sunghyun and Lee, Seungyong},
+  title = {Deep Defocus Map Estimation Using Domain Adaptation},
+  booktitle = CVPR, year = {2019}}
 
-@article{Alpher03,
-author = {FirstName Alpher and  FirstName Fotheringham-Smythe},
-title = {Frobnication revisited},
-journal = {Journal of Foo},
-volume = 13,
-number = 1,
-pages = {234--778},
-year = 2003
-}
+% ---- restoration backbones, UHD ----
+@inproceedings{zamir2022restormer,
+  author = {Zamir, Syed Waqas and Arora, Aditya and Khan, Salman and Hayat, Munawar and Khan, Fahad Shahbaz and Yang, Ming-Hsuan},
+  title = {Restormer: Efficient Transformer for High-Resolution Image Restoration},
+  booktitle = CVPR, year = {2022}}
+@inproceedings{chen2022nafnet,
+  author = {Chen, Liangyu and Chu, Xiaojie and Zhang, Xiangyu and Sun, Jian},
+  title = {Simple Baselines for Image Restoration},
+  booktitle = ECCV, year = {2022}}
+@inproceedings{wang2022uformer,
+  author = {Wang, Zhendong and Cun, Xiaodong and Bao, Jianmin and Zhou, Wengang and Liu, Jianzhuang and Li, Houqiang},
+  title = {Uformer: A General U-Shaped Transformer for Image Restoration},
+  booktitle = CVPR, year = {2022}}
+@inproceedings{chu2022tlc,
+  author = {Chu, Xiaojie and Chen, Liangyu and Chen, Chengpeng and Lu, Xin},
+  title = {Improving Image Restoration by Revisiting Global Information Aggregation},
+  booktitle = ECCV, year = {2022}}
+@inproceedings{zheng2021uhdmultiguided,
+  author = {Zheng, Zhuoran and Ren, Wenqi and Cao, Xiaochun and Hu, Xiaobin and Wang, Tao and Song, Fenglong and Jia, Xiuyi},
+  title = {Ultra-High-Definition Image Dehazing via Multi-Guided Bilateral Learning},
+  booktitle = CVPR, year = {2021}}
+@inproceedings{wang2023llformer,
+  author = {Wang, Tao and Zhang, Kaihao and Shen, Tianrun and Luo, Wenhan and Stenger, Bjorn and Lu, Tong},
+  title = {Ultra-High-Definition Low-Light Image Enhancement: A Benchmark and Transformer-Based Method},
+  booktitle = AAAI, year = {2023}}
+% VERIFY author list
+@inproceedings{wang2024uhdformer,
+  author = {Wang, Cong and Pan, Jinshan and Wang, Wei and Fu, Gang and Liang, Siyuan and Wang, Mengzhu and Wu, Xiao-Ming and Liu, Jun},
+  title = {Correlation Matching Transformation Transformers for {UHD} Image Restoration},
+  booktitle = AAAI, year = {2024}}
+% VERIFY full author list
+@article{zhang2022mcblur,
+  author = {Zhang, Kaihao and Wang, Tao and Luo, Wenhan and Ren, Wenqi and Stenger, Bjorn and Liu, Wei and Li, Hongdong and Yang, Ming-Hsuan},
+  title = {{MC-Blur}: A Comprehensive Benchmark for Image Deblurring},
+  journal = CSVT, year = {2023}}
 
-@article{Alpher04,
-author = {FirstName Alpher and FirstName Fotheringham-Smythe and FirstName Gamow},
-title = {Can a machine frobnicate?},
-journal = {Journal of Foo},
-volume = 14,
-number = 1,
-pages = {234--778},
-year = 2004
-}
+% ---- super-resolution, generative restoration ----
+@inproceedings{liang2021swinir,
+  author = {Liang, Jingyun and Cao, Jiezhang and Sun, Guolei and Zhang, Kai and Van Gool, Luc and Timofte, Radu},
+  title = {{SwinIR}: Image Restoration Using Swin Transformer},
+  booktitle = {ICCV Workshops}, year = {2021}}
+@inproceedings{chen2023hat,
+  author = {Chen, Xiangyu and Wang, Xintao and Zhou, Jiantao and Qiao, Yu and Dong, Chao},
+  title = {Activating More Pixels in Image Super-Resolution Transformer},
+  booktitle = CVPR, year = {2023}}
+@inproceedings{wang2021realesrgan,
+  author = {Wang, Xintao and Xie, Liangbin and Dong, Chao and Shan, Ying},
+  title = {{Real-ESRGAN}: Training Real-World Blind Super-Resolution with Pure Synthetic Data},
+  booktitle = {ICCV Workshops}, year = {2021}}
+@inproceedings{zhang2021bsrgan,
+  author = {Zhang, Kai and Liang, Jingyun and Van Gool, Luc and Timofte, Radu},
+  title = {Designing a Practical Degradation Model for Deep Blind Image Super-Resolution},
+  booktitle = ICCV, year = {2021}}
+@article{saharia2022sr3,
+  author = {Saharia, Chitwan and Ho, Jonathan and Chan, William and Salimans, Tim and Fleet, David J. and Norouzi, Mohammad},
+  title = {Image Super-Resolution via Iterative Refinement},
+  journal = PAMI, year = {2022}}
+@inproceedings{whang2022deblurring,
+  author = {Whang, Jay and Delbracio, Mauricio and Talebi, Hossein and Saharia, Chitwan and Dimakis, Alexandros G. and Milanfar, Peyman},
+  title = {Deblurring via Stochastic Refinement},
+  booktitle = CVPR, year = {2022}}
+@inproceedings{xia2023diffir,
+  author = {Xia, Bin and Zhang, Yulun and Wang, Shiyin and Wang, Yitong and Wu, Xinglong and Tian, Yapeng and Yang, Wenming and Van Gool, Luc},
+  title = {{DiffIR}: Efficient Diffusion Model for Image Restoration},
+  booktitle = ICCV, year = {2023}}
+@inproceedings{rombach2022ldm,
+  author = {Rombach, Robin and Blattmann, Andreas and Lorenz, Dominik and Esser, Patrick and Ommer, Bj{\"o}rn},
+  title = {High-Resolution Image Synthesis with Latent Diffusion Models},
+  booktitle = CVPR, year = {2022}}
+@article{wang2024stablesr,
+  author = {Wang, Jianyi and Yue, Zongsheng and Zhou, Shangchen and Chan, Kelvin C. K. and Loy, Chen Change},
+  title = {Exploiting Diffusion Prior for Real-World Image Super-Resolution},
+  journal = IJCV, year = {2024}}
+@inproceedings{lin2024diffbir,
+  author = {Lin, Xinqi and He, Jingwen and Chen, Ziyan and Lyu, Zhaoyang and Dai, Bo and Yu, Fanghua and Ouyang, Wanli and Qiao, Yu and Dong, Chao},
+  title = {{DiffBIR}: Towards Blind Image Restoration with Generative Diffusion Prior},
+  booktitle = ECCV, year = {2024}}
+@inproceedings{yu2024supir,
+  author = {Yu, Fanghua and Gu, Jinjin and Li, Zheyuan and Hu, Jinfan and Kong, Xiangtao and Wang, Xintao and He, Jingwen and Qiao, Yu and Dong, Chao},
+  title = {Scaling Up to Excellence: Practicing Model Scaling for Photo-Realistic Image Restoration in the Wild},
+  booktitle = CVPR, year = {2024}}
+@inproceedings{wu2024seesr,
+  author = {Wu, Rongyuan and Yang, Tao and Sun, Lingchen and Zhang, Zhengqiang and Li, Shuai and Zhang, Lei},
+  title = {{SeeSR}: Towards Semantics-Aware Real-World Image Super-Resolution},
+  booktitle = CVPR, year = {2024}}
+@inproceedings{wang2024sinsr,
+  author = {Wang, Yufei and Yang, Wenhan and Chen, Xinyuan and Wang, Yaohui and Guo, Lanqing and Chau, Lap-Pui and Liu, Ziwei and Qiao, Yu and Kot, Alex C. and Wen, Bihan},
+  title = {{SinSR}: Diffusion-Based Image Super-Resolution in a Single Step},
+  booktitle = CVPR, year = {2024}}
+@inproceedings{wu2024osediff,
+  author = {Wu, Rongyuan and Sun, Lingchen and Ma, Zhiyuan and Zhang, Lei},
+  title = {One-Step Effective Diffusion Network for Real-World Image Super-Resolution},
+  booktitle = NIPS, year = {2024}}
+@inproceedings{peebles2023dit,
+  author = {Peebles, William and Xie, Saining},
+  title = {Scalable Diffusion Models with Transformers},
+  booktitle = ICCV, year = {2023}}
+@inproceedings{esser2024sd3,
+  author = {Esser, Patrick and Kulal, Sumith and Blattmann, Andreas and Entezari, Rahim and M{\"u}ller, Jonas and Saini, Harry and Levi, Yam and Lorenz, Dominik and Sauer, Axel and Boesel, Frederic and Podell, Dustin and Dockhorn, Tim and English, Zion and Lacey, Kyle and Goodwin, Alex and Marek, Yannik and Rombach, Robin},
+  title = {Scaling Rectified Flow Transformers for High-Resolution Image Synthesis},
+  booktitle = {ICML}, year = {2024}}
+@inproceedings{song2023consistency,
+  author = {Song, Yang and Dhariwal, Prafulla and Chen, Mark and Sutskever, Ilya},
+  title = {Consistency Models},
+  booktitle = {ICML}, year = {2023}}
+@inproceedings{sauer2024add,
+  author = {Sauer, Axel and Lorenz, Dominik and Blattmann, Andreas and Rombach, Robin},
+  title = {Adversarial Diffusion Distillation},
+  booktitle = ECCV, year = {2024}}
+@inproceedings{yin2024dmd,
+  author = {Yin, Tianwei and Gharbi, Micha{\"e}l and Zhang, Richard and Shechtman, Eli and Durand, Fr{\'e}do and Freeman, William T. and Park, Taesung},
+  title = {One-Step Diffusion with Distribution Matching Distillation},
+  booktitle = CVPR, year = {2024}}
+@inproceedings{blau2018perception,
+  author = {Blau, Yochai and Michaeli, Tomer},
+  title = {The Perception-Distortion Tradeoff},
+  booktitle = CVPR, year = {2018}}
 
-@inproceedings{Alpher05,
-author = {FirstName Alpher and FirstName Gamow},
-title = {Can a computer frobnicate?},
-booktitle = CVPR,
-pages = {234--778},
-year = 2005
-}
+% ---- reference-based, internal, texture transfer, guided upsampling, tiling ----
+@inproceedings{zhang2019srntt,
+  author = {Zhang, Zhifei and Wang, Zhaowen and Lin, Zhe and Qi, Hairong},
+  title = {Image Super-Resolution by Neural Texture Transfer},
+  booktitle = CVPR, year = {2019}}
+@inproceedings{yang2020ttsr,
+  author = {Yang, Fuzhi and Yang, Huan and Fu, Jianlong and Lu, Hongtao and Guo, Baining},
+  title = {Learning Texture Transformer Network for Image Super-Resolution},
+  booktitle = CVPR, year = {2020}}
+@inproceedings{jiang2021c2matching,
+  author = {Jiang, Yuming and Chan, Kelvin C. K. and Wang, Xintao and Loy, Chen Change and Liu, Ziwei},
+  title = {Robust Reference-Based Super-Resolution via {C2-Matching}},
+  booktitle = CVPR, year = {2021}}
+@inproceedings{lu2021masasr,
+  author = {Lu, Liying and Li, Wenbo and Tao, Xin and Lu, Jiangbo and Jia, Jiaya},
+  title = {{MASA-SR}: Matching Acceleration and Spatial Adaptation for Reference-Based Image Super-Resolution},
+  booktitle = CVPR, year = {2021}}
+@inproceedings{cao2022datsr,
+  author = {Cao, Jiezhang and Liang, Jingyun and Zhang, Kai and Li, Yawei and Zhang, Yulun and Wang, Wenguan and Van Gool, Luc},
+  title = {Reference-Based Image Super-Resolution with Deformable Attention Transformer},
+  booktitle = ECCV, year = {2022}}
+% VERIFY author list
+@inproceedings{guo2024refir,
+  author = {Guo, Hang and Dai, Tao and Ouyang, Zhihao and Zhang, Taolin and Zha, Yaohua and Chen, Bin and Xia, Shu-Tao},
+  title = {{ReFIR}: Grounding Large Restoration Models with Retrieval Augmentation},
+  booktitle = NIPS, year = {2024}}
+@inproceedings{glasner2009single,
+  author = {Glasner, Daniel and Bagon, Shai and Irani, Michal},
+  title = {Super-Resolution from a Single Image},
+  booktitle = ICCV, year = {2009}}
+@inproceedings{zontak2011internal,
+  author = {Zontak, Maria and Irani, Michal},
+  title = {Internal Statistics of a Single Natural Image},
+  booktitle = CVPR, year = {2011}}
+@inproceedings{shocher2018zssr,
+  author = {Shocher, Assaf and Cohen, Nadav and Irani, Michal},
+  title = {``Zero-Shot'' Super-Resolution Using Deep Internal Learning},
+  booktitle = CVPR, year = {2018}}
+@inproceedings{buades2005nlm,
+  author = {Buades, Antoni and Coll, Bartomeu and Morel, Jean-Michel},
+  title = {A Non-Local Algorithm for Image Denoising},
+  booktitle = CVPR, year = {2005}}
+@inproceedings{efros1999texture,
+  author = {Efros, Alexei A. and Leung, Thomas K.},
+  title = {Texture Synthesis by Non-Parametric Sampling},
+  booktitle = ICCV, year = {1999}}
+@inproceedings{hertzmann2001analogies,
+  author = {Hertzmann, Aaron and Jacobs, Charles E. and Oliver, Nuria and Curless, Brian and Salesin, David H.},
+  title = {Image Analogies},
+  booktitle = {SIGGRAPH}, year = {2001}}
+@article{barnes2009patchmatch,
+  author = {Barnes, Connelly and Shechtman, Eli and Finkelstein, Adam and Goldman, Dan B.},
+  title = {{PatchMatch}: A Randomized Correspondence Algorithm for Structural Image Editing},
+  journal = TOG, volume = {28}, number = {3}, year = {2009}}
+@article{kopf2007jbu,
+  author = {Kopf, Johannes and Cohen, Michael F. and Lischinski, Dani and Uyttendaele, Matt},
+  title = {Joint Bilateral Upsampling},
+  journal = TOG, volume = {26}, number = {3}, year = {2007}}
+@article{he2013guided,
+  author = {He, Kaiming and Sun, Jian and Tang, Xiaoou},
+  title = {Guided Image Filtering},
+  journal = PAMI, volume = {35}, number = {6}, pages = {1397--1409}, year = {2013}}
+@inproceedings{wu2018deepguided,
+  author = {Wu, Huikai and Zheng, Shuai and Zhang, Junge and Huang, Kaiqi},
+  title = {Fast End-to-End Trainable Guided Filter},
+  booktitle = CVPR, year = {2018}}
+@article{gharbi2017hdrnet,
+  author = {Gharbi, Micha{\"e}l and Chen, Jiawen and Barron, Jonathan T. and Hasinoff, Samuel W. and Durand, Fr{\'e}do},
+  title = {Deep Bilateral Learning for Real-Time Image Enhancement},
+  journal = TOG, volume = {36}, number = {4}, year = {2017}}
+@inproceedings{bartal2023multidiffusion,
+  author = {Bar-Tal, Omer and Yariv, Lior and Lipman, Yaron and Dekel, Tali},
+  title = {{MultiDiffusion}: Fusing Diffusion Paths for Controlled Image Generation},
+  booktitle = {ICML}, year = {2023}}
+@inproceedings{lee2023syncdiffusion,
+  author = {Lee, Yuseung and Kim, Kunho and Kim, Hyunjin and Sung, Minhyuk},
+  title = {{SyncDiffusion}: Coherent Montage via Synchronized Joint Diffusions},
+  booktitle = NIPS, year = {2023}}
+@inproceedings{du2024demofusion,
+  author = {Du, Ruoyi and Chang, Dongliang and Hospedales, Timothy and Song, Yi-Zhe and Ma, Zhanyu},
+  title = {{DemoFusion}: Democratising High-Resolution Image Generation With No \$\$\$},
+  booktitle = CVPR, year = {2024}}
+
+% ---- metrics ----
+@article{wang2004ssim,
+  author = {Wang, Zhou and Bovik, Alan C. and Sheikh, Hamid R. and Simoncelli, Eero P.},
+  title = {Image Quality Assessment: From Error Visibility to Structural Similarity},
+  journal = TIP, volume = {13}, number = {4}, pages = {600--612}, year = {2004}}
+@inproceedings{zhang2018lpips,
+  author = {Zhang, Richard and Isola, Phillip and Efros, Alexei A. and Shechtman, Eli and Wang, Oliver},
+  title = {The Unreasonable Effectiveness of Deep Features as a Perceptual Metric},
+  booktitle = CVPR, year = {2018}}
+@article{ding2020dists,
+  author = {Ding, Keyan and Ma, Kede and Wang, Shiqi and Simoncelli, Eero P.},
+  title = {Image Quality Assessment: Unifying Structure and Texture Similarity},
+  journal = PAMI, volume = {44}, number = {5}, pages = {2567--2581}, year = {2022}}
+@inproceedings{ke2021musiq,
+  author = {Ke, Junjie and Wang, Qifei and Wang, Yilin and Milanfar, Peyman and Yang, Feng},
+  title = {{MUSIQ}: Multi-Scale Image Quality Transformer},
+  booktitle = ICCV, year = {2021}}
+@inproceedings{wang2023clipiqa,
+  author = {Wang, Jianyi and Chan, Kelvin C. K. and Loy, Chen Change},
+  title = {Exploring {CLIP} for Assessing the Look and Feel of Images},
+  booktitle = AAAI, year = {2023}}

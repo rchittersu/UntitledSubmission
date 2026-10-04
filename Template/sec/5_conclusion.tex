@@ -1,0 +1,10 @@
+% =====================================================================
+\section{Conclusion}
+\label{sec:conclusion}
+% =====================================================================
+Defocus deblurring at the resolution at which photographs are taken is not solved by existing methods:
+run natively they barely change the image, and run at low resolution they need an upsampler that either
+loses or invents detail. Because defocus varies across the image, the photograph itself holds much of
+the detail that is missing, in its in-focus regions. \method uses this evidence to lift any
+low-resolution deblurring method to native resolution. \todo{results summary; limitations: dual-pixel
+oracle vs.\ predicted blur map, scenes without in-focus counterparts, runtime.}

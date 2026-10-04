@@ -1,0 +1,72 @@
+% =====================================================================
+\section{Related Work}
+\label{sec:related}
+% =====================================================================
+
+\paragraph{Defocus deblurring.}
+Classical methods estimate a spatially varying defocus map, from edge cues~\cite{zhuo2011defocusmap}
+or learned predictors~\cite{lee2019dmenet}, and then deconvolve. Abuolaim and
+Brown~\cite{abuolaim2020dpdd} introduced DPDD, real pairs captured with a wide (f/4) and a narrow
+(f/22) aperture, together with DPDNet, which uses the dual-pixel (DP) views; later work modelled DP
+data further~\cite{abuolaim2021rdpd,xin2021dpdefocus}. Single-image methods design kernel-sharing
+atrous convolutions~\cite{son2021kpac}, predict inverse kernels in feature space~\cite{lee2021ifan},
+train on light-field-generated defocus~\cite{ruan2022drbnet}, model blur with Gaussian kernel
+mixtures or recursive kernels~\cite{quan2021gkmnet,quan2023nrknet}, use large kernels~\cite{ruan2023lakdnet},
+or handle the misalignment of aperture-bracketed pairs~\cite{li2023jdrl}; general restoration
+backbones~\cite{zamir2022restormer,chen2022nafnet,wang2022uformer} are strong on DPDD as well.
+Bokehlicious~\cite{seizinger2025bokehlicious} renders and removes bokeh with aperture control and is
+trained on multi-megapixel captures. All of these are trained on crops and evaluated at about $2$--$3$\,MP,
+and hence calibrated to the CoC distribution at that resolution. We do not propose another
+low-resolution deblurrer; any of them serves as our anchor, and we address the step they leave
+open: the native-resolution result.
+
+\paragraph{Ultra-high-definition restoration.}
+UHD restoration methods for low-light enhancement, dehazing, deraining and motion
+deblurring~\cite{zheng2021uhdmultiguided,wang2023llformer,wang2024uhdformer,zhang2022mcblur}
+typically process a strongly downscaled image and recover full resolution with learned upsampling,
+bilateral grids or frequency-domain operators. Our decomposition shares this coarse-to-fine spirit,
+but it is motivated by the growth of the CoC with resolution, uses an arbitrary existing method as
+the coarse stage, and, crucially, exploits the spatially varying amount of detail that survives in
+the defocused observation, both locally and in in-focus regions elsewhere, instead of predicting
+the fine scale from the coarse estimate alone.
+
+\paragraph{Super-resolution and generative restoration.}
+Regression-based super-resolution~\cite{liang2021swinir,chen2023hat} and GAN-based real-world
+models~\cite{wang2021realesrgan,zhang2021bsrgan} are natural upsamplers for a low-resolution
+deblurring result, and diffusion priors~\cite{saharia2022sr3,whang2022deblurring,xia2023diffir,rombach2022ldm}
+adapted from text-to-image models~\cite{wang2024stablesr,lin2024diffbir,yu2024supir,wu2024seesr} have
+raised perceptual quality further. Step distillation~\cite{song2023consistency,sauer2024add,yin2024dmd}
+has produced one-step restorers~\cite{wang2024sinsr,wu2024osediff}, and diffusion
+transformers~\cite{peebles2023dit,esser2024sd3} provide stronger and more scalable priors. These
+models are blind to the native observation: they generate detail consistent with the low-resolution
+input, which at native resolution is the anchor rather than the photograph. Our experiments show the
+consequence, invented text and texture and damaged in-focus regions, in line with the
+perception--distortion trade-off~\cite{blau2018perception}. Our diffusion-transformer variant uses
+the same one-step recipe but is conditioned on the native observation and restricted to regions
+where neither the observation nor the exemplars provide detail.
+
+\paragraph{Reference-based and internal texture transfer.}
+Reference-based super-resolution transfers texture from a separate high-resolution reference through
+patch correspondence~\cite{zhang2019srntt,yang2020ttsr,jiang2021c2matching,lu2021masasr,cao2022datsr},
+and retrieval-augmented restoration conditions large generative models on retrieved
+references~\cite{guo2024refir}. Internal learning exploits the recurrence of patches within a single
+image, across positions and scales~\cite{glasner2009single,zontak2011internal,shocher2018zssr}, a
+principle shared with non-local filtering~\cite{buades2005nlm} and example-based texture
+synthesis~\cite{efros1999texture,hertzmann2001analogies,barnes2009patchmatch}. Our exemplar memory
+combines both ideas in a setting where neither applies directly: the reference is the observation
+itself, its usable parts are defined by the local defocus, and correspondences are established in the
+deblurred anchor, where sharp and defocused regions look alike, while texture is taken from the native
+observation. We compare against reference-based super-resolution~\cite{cao2022datsr} given the
+observation as reference.
+
+\paragraph{Guided upsampling and patch-wise inference.}
+Joint bilateral upsampling~\cite{kopf2007jbu}, the guided filter~\cite{he2013guided} and their learned
+counterparts~\cite{wu2018deepguided,gharbi2017hdrnet} transfer edges from a high-resolution guide to a
+low-resolution solution; they assume a guide that is sharp, whereas ours is sharp only where it is in
+focus. Patch-wise inference at high resolution is known to change the behaviour of restoration
+networks, partly through global statistics that TLC~\cite{chu2022tlc} corrects at test time, and
+tiled generative models fuse overlapping predictions or synchronize them to avoid
+seams~\cite{bartal2023multidiffusion,lee2023syncdiffusion,du2024demofusion}. At native resolution we
+find seams to be a minor effect compared with the blur-extent gap; the global exemplar memory gives
+every tile access to the whole image and makes the same material receive texture from the same
+sources across tiles.

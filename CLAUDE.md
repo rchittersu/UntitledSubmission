@@ -1,30 +1,38 @@
 # UntitledSubmission — CVPR paper workspace
 
-**Target venue: CVPR 2027** (the template files still say 2026; update `\confYear` when finalizing).
+**Target venue: CVPR 2027** (deadline mid-November 2026; `\confYear` set to 2027).
 
 Research project: **ultra-high-resolution (native sensor resolution, ~30 MP+) single-image defocus deblurring** via a blur-guided generative upsampler. Working method name is `\method{}` (placeholder, final name TBD).
 
 ## Repository layout
 
 - `Template/` — CVPR author-kit LaTeX project.
-  - `main.tex` — entry point (review mode). Title/authors/paper ID still template defaults.
-  - `preamble.tex` — extra packages/macros. Note: defines `\todo`, so the `\providecommand{\todo}` in `sec/1_intro.tex` is ignored.
-  - `sec/1_intro.tex` — **the only real content**: Introduction, Related Work, and (appended at the end) a draft method subsection "Surrogate Interface for Off-the-Shelf Methods". A commented list of all citation keys used sits between Related Work and that subsection.
-  - `sec/0_abstract.tex`, `sec/2_formatting.tex`, `sec/3_finalcopy.tex`, `sec/X_suppl.tex`, `rebuttal.tex` — untouched template text.
-  - `main.bib` — template entries only; **none of the paper's citation keys exist yet** (all `\cite`s are undefined).
+  - `main.tex` — entry point (review mode). Working title set; authors / paper ID still template defaults.
+  - `preamble.tex` — packages and project macros (`\todo` renders red; disable before submission).
+  - `sec/0_abstract.tex` … `sec/5_conclusion.tex` — the paper draft (rewritten 2026-10-04 from the results so far):
+    abstract, introduction, related work, method (draft, follows `plan/method_plan.md`), experiments (protocol +
+    all baseline numbers from handoff 2; method rows are `\todo`), conclusion. Macros (`\method`, `\todo`, `\up`, …)
+    are in `preamble.tex`; `cleveref` is loaded in `main.tex`.
+  - `sec/X_suppl.tex`, `rebuttal.tex` — untouched template text.
+  - `main.bib` — all cited entries (entries preceded by `% VERIFY` need a venue/author check).
   - `notes.txt` — informal research notes (inconsistency taxonomy for tiled inference, papers to read, open directions).
   - Build artifacts (`*.aux`, `*.log`, `main.pdf`, …) are git-ignored.
 - `code/` — evaluation harness (`uhdd` package + scripts, see `code/README.md`). Written outside, run in the secure env; outside can only test on CPU (`pytest code/tests`).
 - `docs/` — **canonical evaluation and baseline documentation**: `docs/evaluation.md` (protocol, every metric with definition + code, how to run, results, done / priority / todo) and `docs/baselines.md` (every baseline: purpose, setup, weights, commands, status, results). Keep them current when results arrive (both envs may edit them in patches).
-- `plan/` — research plans shared by both envs: `plan/method_plan.md` (the method, variants A/B, timeline), `plan/intro_notes.md` (pending intro reframing). **`plan/secure_runbook.md` is the single runbook for the current handoff** — one runbook per handoff, replaced by outside after the secure patch is applied (older runbooks live in git history).
+- `plan/` — research plans shared by both envs: `plan/method_plan.md` (the method, variants A/B, timeline). **`plan/secure_runbook.md` is the single runbook for the current handoff** — one runbook per handoff, replaced by outside after the secure patch is applied (older runbooks live in git history).
 - Build: `cd Template && latexmk -pdf main.tex`.
 
-## Core idea (summary of `sec/1_intro.tex`)
+## Core idea (summary of the paper draft and `plan/method_plan.md`)
 
-- **Stage 1** (4× downsampled, whole image in one pass): outputs (i) an all-in-focus *anchor*, (ii) a *deblur-level map* (how much restoration + how reliable), (iii) a whole-image *affinity map* from self-attention.
-- **Stage 2** (native resolution, patch-wise): one-step (distilled) conditional diffusion upsampler. Affinity routes *cross-patch attention* to related patches anywhere in the image; the deblur-level map drives *blur-aware copy/generate* (copy real detail where it survives in the blurry input, synthesize only where it does not).
-- **Plug-in**: any off-the-shelf low-res deblurrer can be lifted to native res. Surrogates replace (ii) and (iii): re-blur agreement (+ input sharpness, optional scale-perturbation variance) → tiny calibration head; DINOv2 feature affinity. Trained with native/surrogate signals randomly swapped and a mixture of real + simulated anchors.
-- **Data/eval**: synthetic defocus from sharp HR photos + real DPDD pairs; native-res DPDD protocol with registration, perceptual/no-reference metrics, patch-seam and cross-patch consistency metrics.
+- **Finding** (handoff 2, 76 native DPDD scenes): native-resolution inference of DPDD deblurrers ≈ identity (blur extent
+  out of distribution, not tiling); ×4 deblur + bicubic recovers structure but no native detail; generative SR invents
+  detail and damages in-focus regions.
+- **Method** (\method): blur-guided upsampler from the native blurry input + ×4 anchor (any deblurrer) + blur map
+  (DP oracle or predicted). Copy path where the input is sharp; **global in-focus exemplar memory** (keys in the anchor
+  domain, values = native in-focus texture, null entry) queried by every tile; generator fills the rest. Variants:
+  feed-forward U-Net and one-step DiT (copy path in pixel space).
+- **Evaluation**: protocol frozen 2026-10-04 (standard metrics headline; blur-stratified / no-harm / hallucination
+  as diagnostics) — `docs/evaluation.md`.
 
 ---
 

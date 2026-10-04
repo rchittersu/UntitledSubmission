@@ -1,7 +1,19 @@
 \begin{abstract}
-The ABSTRACT is to be in fully justified italicized text, at the top of the left-hand column, below the author and affiliation information.
-Use the word ``Abstract'' as the title, in 12-point Times, boldface type, centered relative to the column, initially capitalized.
-The abstract is to be in 10-point, single-spaced type.
-Leave two blank lines after the Abstract, then begin the main text.
-Look at previous \confName abstracts to get a feel for style and length.
+Single-image defocus deblurring is developed and evaluated at about $2$\,MP, while cameras capture
+$24$--$200$\,MP. We study the problem at the native resolution of the sensor and find that the two
+obvious ways to bridge the gap both fail. Applying a state-of-the-art deblurring network directly to
+$30$\,MP images changes almost nothing, because the circles of confusion grow with resolution beyond
+anything seen in training. Deblurring a $4\times$ downscaled image and upsampling the result
+recovers structure but loses native detail, and generative super-resolution brings detail back by
+inventing it, damaging regions that were already sharp. We observe that the missing detail is often
+present elsewhere in the same photograph: defocus is spatially varying, so the in-focus regions of
+the native observation contain real texture of the very materials that are blurred elsewhere.
+We propose \method, a blur-guided upsampler that lifts any low-resolution deblurring method to native
+resolution. It copies the observation where it is sharp, and in defocused regions transfers texture
+from relevant in-focus exemplars retrieved anywhere in the image through a global memory, so that the
+patch-wise inference is not limited by its tile. We present a feed-forward variant and a one-step
+diffusion-transformer variant. To evaluate at native resolution, we rebuild the DPDD benchmark at
+$6720\times4480$ from the raw captures and define a protocol with standard metrics, registration and
+blur-stratified diagnostics. \todo{Results sentence: \method improves N methods by X while not
+altering in-focus regions.}
 \end{abstract}
