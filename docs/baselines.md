@@ -255,3 +255,6 @@ Observations (preview, n = 8, to be confirmed on 76 with tuned parameters and pe
   ×4 anchor double-counts mid frequencies).
 - **Aligned PSNR** is 0.3–0.6 dB above PSNR for every row and preserves the ranking → residual misalignment does not
   drive these conclusions.
+
+## Handoff-2 status [S, 2026-10-04]
+Evaluated on native test set (76): Restormer, LaKDNet-L, DRBNet, IFAN (public-mirror weights), Bokehlicious; upsamplers bicubic, SwinIR-real x4/x2, HAT-L, Real-HAT, OSEDiff; fusion composite/multiscale/guided/detail/exemplar. DATSR: implemented, opt-in (`DATSR=1`), not run (>15 min/image measured). Numbers: see the handoff-2 report.

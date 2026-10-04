@@ -448,3 +448,6 @@ a latent model cannot reproduce in-focus native texture; variant B needs the pix
 | 2026-10-03 | all free parameters tuned on val only | user decision |
 | 2026-10-03 | hallucination/OCR → supplementary + discussion; consistency metric, human study, second camera → todo | user decision |
 | 2026-10-03 | per-method default tiling from each paper's inference setup; overlap = tile / 8 for all | user decision; §2.7 |
+
+### 7.2 Handoff-2 matrix [S, 2026-10-04]
+Full protocol-v3 tables (all 76 and indoor-37, with 95% CIs) are in `handoff/from_secure/2026-10-04_h2.md`. Summary: x4 low-res deblur + bicubic beats all native baselines by 1.1-1.8 dB PSNR (indoor-37); generative upsamplers lose PSNR; training-free fusion shows a PSNR-vs-DISTS trade-off. Not run: DATSR, GPU-vs-CPU metric agreement check.
