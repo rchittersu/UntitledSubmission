@@ -211,7 +211,7 @@ models:
     weights_in_factory: true
     weights: ${UHDD_WEIGHTS}/s3diff/s3diff.pkl                        # huggingface.co/zhangap/S3Diff
     sd_path: ${UHDD_WEIGHTS}/sd-turbo                                 # HF snapshot of stabilityai/sd-turbo
-    guidance: 1.07       # official (s3diff_tile.py)
+    guidance: 1.07       # official CFG inside the one step (s3diff_tile.py): 2 UNet passes; 1.0 = positive prompt only
     color_fix: wavelet   # official default (--align_method)
     seed: 0              # VAE posterior noise field (official: unseeded)
     precision: fp32      # official inference runs fp32

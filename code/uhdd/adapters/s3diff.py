@@ -167,9 +167,10 @@ def wrap(net: S3DiffTiles, spec: dict):
         dist = s3.vae.encode(c_t).latent_dist
         eps = noise.crop(boxes or [(0, 0, *x.shape[-2:])] * B, full_hw or x.shape[-2:], x.device, dist.mean.dtype)
         lat = (dist.mean + dist.std * eps) * s3.vae.config.scaling_factor
-        pos = s3.unet(lat, s3.timesteps, encoder_hidden_states=net.pos_enc.expand(B, -1, -1)).sample
-        neg = s3.unet(lat, s3.timesteps, encoder_hidden_states=net.neg_enc.expand(B, -1, -1)).sample
-        pred = neg + g_scale * (pos - neg)
+        pred = s3.unet(lat, s3.timesteps, encoder_hidden_states=net.pos_enc.expand(B, -1, -1)).sample
+        if g_scale != 1.0:      # CFG: second UNet pass with the negative prompt (guidance 1 = positive prompt only)
+            neg = s3.unet(lat, s3.timesteps, encoder_hidden_states=net.neg_enc.expand(B, -1, -1)).sample
+            pred = neg + g_scale * (pred - neg)
         den = s3.sched.step(pred, s3.timesteps, lat, return_dict=True).prev_sample
         y = (s3.vae.decode(den / s3.vae.config.scaling_factor).sample.clamp(-1, 1) * 0.5 + 0.5).float()
         fix = spec.get("color_fix", "wavelet")
