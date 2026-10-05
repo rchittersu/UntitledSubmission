@@ -1,25 +1,31 @@
 #!/usr/bin/env bash
 # =====================================================================================================================
-# launch_sr.sh — manual anchor x upsampler runs (wrapper around code/scripts/launch_sr.py), with setup notes.
+# launch.sh — manual runs on the native DPDD test set (wrapper around code/scripts/launch.py), with setup notes.
 #
-# WHAT IT DOES
-#   One low-res deblurrer ("anchor", run at x4 = the standard DPDD protocol) followed by one x4 upsampler, on all
-#   76 native DPDD test scenes. Every run lands in its own folder that evaluate.py / summarize.py understand:
+# RESULTS LAYOUT (code/uhdd/layout.py; metrics next to the images)
+#   $UHDD_RESULTS/dpdd/
+#     inputs/<src>/{inputs,targets,masks}   symlinks into $UHDD_DATA + manifest.json (verified by `setup inputs`)
+#     inputs/dp_maps                        DP blur maps (native)
+#     deblur/<src>/<model>@<tiling>/                    PNGs + meta.json + launch.json (+ metrics_dpdd4.*)
+#     upsample/<src>/<anchor>@whole/<sr>@<tiling>/      same; <src> = where the anchor's x4 input came from
+#     fusion/<src>/<anchor>@whole/<method>/             (training-free fusions, DATSR: not in the launcher yet)
+#     scratch/                                          8-bit copies, scene subsets (safe to delete)
+#   Sources <src>: ours_x1 (native), ours_x4 (our raw-built rendering at 1680x1120), official_x4 (the original DPDD
+#   test images), ours_x2. Legacy roots ($UHDD_RESULTS/dpdd_v2, dpdd_official_x4, dpdd_p1) are never written;
+#   `setup inputs --protect-legacy` makes them read-only.
 #
-#       $UHDD_RESULTS/dpdd_v2/sr/<anchor model>@x4+<upsampler>/     76 native PNGs + meta.json (+ metrics_dpdd4.*)
+# WHAT A RUN DOES
+#   deblur    one deblurrer on one source, tiling = the model's paper setup at that resolution (whole image at x4,
+#             1120-px tiles at native), overlap = tile/8. Scored at the source's resolution (x4: border 16 px;
+#             official_x4: headline metrics only, it has no masks).
+#   run       upsample: anchor (deblur of <anchor src>_x4, run first if missing) + x4 upsampler -> native, scored at
+#             native against our targets (frozen headline + diagnostics, DP maps, 64 px border).
+#             --anchor-src official: anchor from the original DPDD images; scored against our native targets
+#             (other rendering) -> labelled diagnostic.
+#   Registry upsamplers run through run_model.py; s3diff / vosr run their own code in their own Python env on 8-bit
+#   copies of the anchor. Runs resume (finished images are skipped) and refuse sources that failed verification.
 #
-#   Per run:
-#     1. anchor    reused from the evaluation-matrix cache ($UHDD_RESULTS/dpdd_v2/steps/x4__<model>@whole) when it
-#                  exists, else computed with run_model.py.
-#     2. upsampler registry models (bicubic, hat_l, hat_real, swinir_real, osediff) go through run_model.py with their
-#                  paper tiling (overlap = tile/8). External tools (s3diff, vosr2, vosr_0.5b) run their own code in
-#                  their own Python env on 8-bit copies of the anchor (sr/_lr8/<anchor>), with their own tiling.
-#     3. --eval    evaluate.py with the frozen protocol (tag dpdd4: PSNR/SSIM/LPIPS/DISTS native, MUSIQ, CLIPIQA,
-#                  PSNR/SSIM at x4, + diagnostics), DP blur maps, 64 px border crop.
-#
-#   Anchors for the upsampler study (user's visual pick, 2026-10-05): drbnet, bokehlicious.
-#   Also available: restormer, lakdnet, ifan.
-#
+#   Deblurrers: input (= identity), drbnet, bokehlicious (study anchors, user's visual pick), restormer, lakdnet, ifan.
 #   Upsamplers:
 #     bicubic      bicubic_x4                       whole image
 #     hat_l        HAT-L classical x4               512 / 64 LR px
@@ -31,26 +37,36 @@
 #     vosr_0.5b    VOSR 0.5B one-step; same tiling
 #
 # USAGE
-#   code/experiments/launch_sr.sh help                          this text
-#   code/experiments/launch_sr.sh env                           print the environment the launcher will use
-#   code/experiments/launch_sr.sh setup s3diff|vosr             one-time: clone, Python env, weights (see SETUP)
-#   code/experiments/launch_sr.sh check                         verify paths, weights and that both envs import
-#   code/experiments/launch_sr.sh list                          what exists, what is scored
-#   code/experiments/launch_sr.sh dry ANCHOR SR                 print the exact commands, run nothing
-#   code/experiments/launch_sr.sh run ANCHOR SR [GPU] [args]    run + score (all 76); extra args go to launch_sr.py,
-#                                                               e.g. --scenes 1P0A1046,1P0A2030 (smoke test)
-#   code/experiments/launch_sr.sh study SR [GPU]                run SR on both study anchors (drbnet, bokehlicious)
-#   code/experiments/launch_sr.sh summary                       one table (with CIs) of everything scored so far
+#   code/experiments/launch.sh help                           this text
+#   code/experiments/launch.sh env                            print the environment the launcher will use
+#   code/experiments/launch.sh setup inputs [--protect-legacy]  link + verify inputs (names, sizes, same scene in
+#                                                             official vs ours); REQUIRED before any run
+#   code/experiments/launch.sh setup s3diff|vosr              one-time: clone, Python env, weights (see SETUP)
+#   code/experiments/launch.sh check                          verify inputs, S3Diff / VOSR paths, weights, envs
+#   code/experiments/launch.sh list                           sources, models, every run and whether it is scored
+#   code/experiments/launch.sh deblur MODEL SRC [GPU] [args]  one deblurrer, scored
+#   code/experiments/launch.sh run ANCHOR SR [GPU] [args]     anchor at x4 + upsampler, scored
+#   code/experiments/launch.sh study SR [GPU] [args]          `run` for both study anchors (drbnet, bokehlicious)
+#   code/experiments/launch.sh fresh [GPU]                    the standard set from scratch (see `fresh` below)
+#   code/experiments/launch.sh summary [--stage S] [--src S]  tables (with CIs) of everything scored
+#   code/experiments/launch.sh compare                        fresh results vs legacy (same harness -> ~equal)
+#   [args] go to launch.py: --scenes 1P0A1046,1P0A2030 (or a file), --dry-run, --anchor-src official, --tile N
 #
 #   Examples
-#     code/experiments/launch_sr.sh dry drbnet vosr2
-#     code/experiments/launch_sr.sh run drbnet vosr2 0 --scenes 1P0A1046         # smoke test, 1 scene
-#     code/experiments/launch_sr.sh run drbnet vosr2 0
-#     code/experiments/launch_sr.sh study s3diff 1                                # drbnet then bokehlicious on GPU 1
-#     nohup code/experiments/launch_sr.sh study vosr2 0 > vosr2.log 2>&1 &         # long runs: detach
+#     code/experiments/launch.sh setup inputs --protect-legacy
+#     code/experiments/launch.sh deblur drbnet ours_x4 0                      # Table 1 row, ours
+#     code/experiments/launch.sh deblur drbnet official_x4 0                  # Table 1 row, official images
+#     code/experiments/launch.sh run drbnet vosr2 0 --dry-run                 # print the exact commands
+#     code/experiments/launch.sh run drbnet vosr2 0 --scenes 1P0A1046         # smoke test, 1 scene
+#     code/experiments/launch.sh run drbnet vosr2 0                           # all 76
+#     code/experiments/launch.sh run drbnet vosr2 0 --anchor-src official     # diagnostic
+#     code/experiments/launch.sh study s3diff 1                               # drbnet then bokehlicious on GPU 1
+#     nohup code/experiments/launch.sh study vosr2 0 > vosr2.log 2>&1 &        # long runs: detach
 #
-#   Runs are resumable for registry models (--skip-existing). For s3diff / vosr, delete a half-finished output folder
-#   (or pass --scenes with the missing ones) before re-running.
+#   fresh = in this order, all 76, scored (registry models only; s3diff / vosr via `study`):
+#     deblur  {input, drbnet, bokehlicious, restormer, lakdnet, ifan} on ours_x4, official_x4, ours_x1
+#     run     {drbnet, bokehlicious} x {bicubic, hat_l, hat_real, swinir_real, osediff}
+#   then `compare` (should match the handoff-3 numbers) and `summary`.
 #
 # ENVIRONMENT (nothing is hard-coded; set these in your shell or an env file, then `source` it)
 #   UHDD_DATA, UHDD_RESULTS     as for every other script (required)
@@ -96,9 +112,13 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-LAUNCH="$ROOT/code/scripts/launch_sr.py"
+LAUNCH="$ROOT/code/scripts/launch.py"
+SETUP_INPUTS="$ROOT/code/scripts/setup_inputs.py"
 PY="${PY:-python}"
 STUDY_ANCHORS=(drbnet bokehlicious)
+FRESH_DEBLUR=(input drbnet bokehlicious restormer lakdnet ifan)
+FRESH_SRC=(ours_x4 official_x4 ours_x1)
+FRESH_SR=(bicubic hat_l hat_real swinir_real osediff)
 
 export S3DIFF_REPO="${S3DIFF_REPO:-${UHDD_REPOS:-}/S3Diff}"
 export S3DIFF_PY="${S3DIFF_PY:-${UHDD_ENVS:-}/s3diff/bin/python}"
@@ -155,10 +175,10 @@ check() {
   local ok=1
   chk() { if eval "$2"; then echo "  ok    $1"; else echo "  FAIL  $1"; ok=0; fi; }
   need UHDD_DATA UHDD_RESULTS
-  echo "main env"
-  chk "native test set       \$UHDD_DATA/dpdd_native_v2/inputs" "[[ -d '$UHDD_DATA/dpdd_native_v2/inputs' ]]"
-  chk "DP blur maps          \$UHDD_DATA/dpdd_native/dp_maps"   "[[ -d '$UHDD_DATA/dpdd_native/dp_maps' ]]"
-  chk "uhdd imports" "'$PY' -c 'import sys; sys.path.insert(0, \"$ROOT/code\"); import uhdd' 2>/dev/null"
+  echo "inputs"
+  chk "uhdd imports" "'$PY' -c 'import sys; sys.path.insert(0, \"$ROOT/code\"); import uhdd.layout' 2>/dev/null"
+  chk "manifest ok           \$UHDD_RESULTS/dpdd/inputs/manifest.json" \
+      "'$PY' -c 'import json,sys; sys.exit(0 if json.load(open(\"$UHDD_RESULTS/dpdd/inputs/manifest.json\"))[\"ok\"] else 1)' 2>/dev/null"
   echo "S3Diff"
   chk "repo        $S3DIFF_REPO" "[[ -f '$S3DIFF_REPO/src/s3diff_tile.py' ]]"
   chk "de_net.pth"               "[[ -f '$S3DIFF_REPO/assets/mm-realsr/de_net.pth' ]]"
@@ -172,22 +192,43 @@ check() {
   (( ok )) && echo "all checks passed" || echo "some checks failed (registry upsamplers only need the main env)"
 }
 
+fresh() {
+  local gpu="${1:-0}"
+  for src in "${FRESH_SRC[@]}"; do
+    for m in "${FRESH_DEBLUR[@]}"; do "$PY" "$LAUNCH" deblur --model "$m" --src "$src" --gpu "$gpu" --eval; done
+  done
+  for a in "${STUDY_ANCHORS[@]}"; do
+    for sr in "${FRESH_SR[@]}"; do "$PY" "$LAUNCH" upsample --anchor "$a" --sr "$sr" --gpu "$gpu" --eval; done
+  done
+  "$PY" "$LAUNCH" compare
+}
+
 cmd="${1:-help}"; shift || true
 case "$cmd" in
   help|-h|--help) usage ;;
   env)     show_env ;;
-  setup)   case "${1:-}" in s3diff) setup_s3diff ;; vosr) setup_vosr ;; *) die "setup s3diff|vosr" ;; esac ;;
+  setup)   what="${1:-}"; shift || true
+           case "$what" in
+             inputs) "$PY" "$SETUP_INPUTS" "$@" ;;
+             s3diff) setup_s3diff ;;
+             vosr)   setup_vosr ;;
+             *)      die "setup inputs|s3diff|vosr" ;;
+           esac ;;
   check)   check ;;
-  list)    "$PY" "$LAUNCH" --list ;;
-  summary) "$PY" "$LAUNCH" --summary ;;
-  dry)     [[ $# -ge 2 ]] || die "dry ANCHOR SR"
-           "$PY" "$LAUNCH" --anchor "$1" --sr "$2" --dry-run "${@:3}" ;;
-  run)     [[ $# -ge 2 ]] || die "run ANCHOR SR [GPU] [launch_sr.py args]"
+  list)    "$PY" "$LAUNCH" list ;;
+  summary) "$PY" "$LAUNCH" summary "$@" ;;
+  compare) "$PY" "$LAUNCH" compare ;;
+  deblur)  [[ $# -ge 2 ]] || die "deblur MODEL SRC [GPU] [launch.py args]"
+           m="$1" src="$2" gpu="${3:-0}"; shift $(( $# >= 3 ? 3 : 2 ))
+           "$PY" "$LAUNCH" deblur --model "$m" --src "$src" --gpu "$gpu" --eval "$@" ;;
+  run)     [[ $# -ge 2 ]] || die "run ANCHOR SR [GPU] [launch.py args]"
            anchor="$1" sr="$2" gpu="${3:-0}"; shift $(( $# >= 3 ? 3 : 2 ))
-           "$PY" "$LAUNCH" --anchor "$anchor" --sr "$sr" --gpu "$gpu" --eval "$@" ;;
-  study)   [[ $# -ge 1 ]] || die "study SR [GPU]"
+           "$PY" "$LAUNCH" upsample --anchor "$anchor" --sr "$sr" --gpu "$gpu" --eval "$@" ;;
+  study)   [[ $# -ge 1 ]] || die "study SR [GPU] [launch.py args]"
+           sr="$1" gpu="${2:-0}"; shift $(( $# >= 2 ? 2 : 1 ))
            for a in "${STUDY_ANCHORS[@]}"; do
-             "$PY" "$LAUNCH" --anchor "$a" --sr "$1" --gpu "${2:-0}" --eval
+             "$PY" "$LAUNCH" upsample --anchor "$a" --sr "$sr" --gpu "$gpu" --eval "$@"
            done ;;
+  fresh)   fresh "$@" ;;
   *)       die "unknown command '$cmd' (see: $0 help)" ;;
 esac

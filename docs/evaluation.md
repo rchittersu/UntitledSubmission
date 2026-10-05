@@ -293,6 +293,32 @@ native patch-wise}; crops sampled stratified by blur bin (half b2/b3), position 
 
 ## 5. How to run
 
+### 5.0 Results layout and the manual launcher (2026-10-05)
+All new results go to one root, organised by **stage → input source → chain** (`code/uhdd/layout.py`):
+```
+$UHDD_RESULTS/dpdd/
+  inputs/<src>/{inputs,targets,masks}   symlinks into $UHDD_DATA; inputs/manifest.json = verification
+  inputs/dp_maps
+  deblur/<src>/<model>@<tiling>/                    PNGs, meta.json, launch.json, metrics_dpdd4.{csv,json}
+  upsample/<src>/<anchor>@whole/<sr>@<tiling>/      <src> = source of the anchor's x4 input
+  fusion/<src>/<anchor>@whole/<method>/             (fusion, DATSR: not ported yet)
+  tables/<tag>/   scratch/
+```
+- Sources: `ours_x1` (native), `ours_x2`, `ours_x4` (our raw-built rendering), `official_x4` (the original DPDD test
+  images, no masks). Tiling tag = `whole` or `t<tile>o<overlap>` (paper setup, §2.7). Metrics next to the images.
+- `code/scripts/setup_inputs.py` links the sources and verifies them before anything runs: 76 scenes, identical names
+  across inputs / targets / masks / DP maps **and across sources**, sizes (×4 = native / 4, official = ours ×4), and
+  content (official vs ours ×4 per-scene PSNR ≈ 39 dB; nearest-thumbnail check against swapped names). Every problem
+  is attributed to a source; the launcher refuses unverified sources.
+- `code/scripts/launch.py` (`deblur`, `upsample [--anchor-src ours|official]`, `list`, `summary`, `compare`) and the
+  wrapper `code/experiments/launch.sh` (setup, `fresh` = the standard set, `study`). Scoring: native outputs against
+  `ours_x1` (frozen headline + diagnostics, 64 px border); ×4 outputs against their own source (border 16;
+  `official_x4`: headline metrics only). An upsampled official anchor is scored against our native targets and
+  labelled diagnostic.
+- Legacy roots `dpdd_v2`, `dpdd_official_x4`, `dpdd_p1` (handoffs 1–3, `run_matrix.py` layout) are kept read-only;
+  `launch.py compare` reads them to check fresh results. `run_matrix.py` / `run_baselines_bd.sh` still use the
+  legacy layout (sections 5.3, 5.4).
+
 ### 5.1 Environment
 ```bash
 export UHDD_DATA=...  UHDD_RESULTS=...  UHDD_REPOS=...  UHDD_WEIGHTS=...    # never hard-code paths
@@ -487,7 +513,8 @@ in-focus-only mosaic); slow SR models stay on Restormer/DRBNet; visual review by
 | 2026-10-04 | **Handoff 3 stays evaluation-only** (no training): goal is to build a clear picture of the problem before method work. | user decision |
 | 2026-10-04 | DATSR in handoff 3 (mosaic + in-focus-only mosaic); slow SR models not extended to LaKDNet-L / IFAN; visual review by the secure agent and by the user; no perspective experiments (upper bounds, anchor-vs-final, exemplar controls) in handoff 3; eval tag `dpdd4` adds MUSIQ, CLIPIQA, SSIM at ×4. | user decision |
 | 2026-10-05 | **×4 column: report both** our raw-built renderings and the original 1680×1120 images; which one leads is deferred until the story is set. | user decision |
-| 2026-10-05 | Anchors for the upsampler study: **DRBNet and Bokehlicious** (user's visual assessment). New upsamplers S3Diff and VOSR 2.0 run manually via `launch_sr.py`; secure aggregates later. | user decision |
+| 2026-10-05 | Anchors for the upsampler study: **DRBNet and Bokehlicious** (user's visual assessment). New upsamplers S3Diff and VOSR 2.0 run manually via `launch_sr.py` (now `launch.py`); secure aggregates later. | user decision |
+| 2026-10-05 | **New results root `dpdd/`** organised by stage → source → chain, metrics next to the images (§5.0). **Fresh start**: all runs redone through the launcher and re-checked against the legacy results (`compare`); legacy roots kept read-only. Official vs ours scene names are verified (names + content) before any run. | user decision |
 
 ### 7.7 Handoff-3 results [S, 2026-10-05, all 76 test scenes, protocol dpdd4]
 Complete tables (Table 1 deblur-only at x4, native-resolution main table with CIs, per-bin diagnostics, timing pass on 5 scenes, control run on the original 1680x1120 DPDD pairs, data facts) are in `handoff/from_secure/2026-10-05_h3.md`. Control: the harness reproduces the published numbers on the original images (input, Restormer, DRBNet, IFAN within ~0.06 dB); our raw-built renderings shift per-model PSNR by -0.58..+0.16 dB and reorder the models. DP maps exist for all splits (test 76, val 74, train 350). Open: complete per-shard DATSR stats (candidate counts, tiles without candidate), visual review (user), val proxy (not run).

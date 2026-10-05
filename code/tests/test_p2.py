@@ -296,13 +296,52 @@ def test_ref_builder_counts_tiles_without_candidate():
     assert (rb.tiles, rb.no_candidate) == (1, 1)
 
 
-def test_launch_sr_external_commands(monkeypatch, tmp_path):
-    import launch_sr
+def test_launch_external_commands(monkeypatch, tmp_path):
+    import launch
     for k, v in {"S3DIFF_PY": "/e/s3/python", "S3DIFF_REPO": "/r/S3Diff", "S3DIFF_SD": "/w/sd", "S3DIFF_PKL": "/w/s.pkl",
                  "VOSR_PY": "/e/vosr/python", "VOSR_REPO": "/r/VOSR", "VOSR_CKPTS": "/w/vosr"}.items():
         monkeypatch.setenv(k, v)
-    cmd, extra = launch_sr.external_cmd("vosr2", tmp_path / "lr", tmp_path / "out", None)
+    cmd, extra = launch.external_cmd("vosr2", tmp_path / "lr", tmp_path / "out", None)
     s = " ".join(map(str, cmd))
     assert "/w/vosr/VOSR2" in s and "--tile_size 512 --tile_overlap 64" in s and "-u 4" in s and extra["PYTHONPATH"] == "/r/VOSR"
-    cmd, _ = launch_sr.external_cmd("s3diff", tmp_path / "lr", tmp_path / "out", "a,b")
+    cmd, _ = launch.external_cmd("s3diff", tmp_path / "lr", tmp_path / "out", "a,b")
     assert cmd[0] == "/e/s3/python" and cmd[-2:] == ["--only", "a,b"] and "/w/s.pkl" in map(str, cmd)
+
+
+def test_layout_paths_and_legacy(monkeypatch, tmp_path):
+    from uhdd import layout
+    monkeypatch.setenv("UHDD_RESULTS", str(tmp_path))
+    a = layout.tag("drbnet_single", 0, 0)
+    s = layout.tag("hat_l_x4", 512, 64)
+    assert (a, s) == ("drbnet_single@whole", "hat_l_x4@t512o64")
+    up = layout.upsample_dir("official_x4", a, s)
+    assert up == tmp_path / "dpdd" / "upsample" / "official_x4" / a / s
+    assert layout.stage_of(up) == ("upsample", "official_x4")
+    assert layout.legacy_dir("upsample", "ours_x4", a, s) == tmp_path / "dpdd_v2" / "steps" / f"x4__{a}__{s}"
+    assert layout.legacy_dir("deblur", "official_x4", a) == tmp_path / "dpdd_official_x4" / "steps" / f"x1__{a}"
+    assert layout.root().name not in layout.LEGACY
+    with pytest.raises(ValueError):
+        layout.deblur_dir("ours_x3", a)
+
+
+def test_launch_step_tag_uses_paper_tiling():
+    import launch
+    assert launch.step_tag("drbnet_single", (1120, 1680))[0] == "drbnet_single@whole"        # paper input fits
+    t, tile, ov = launch.step_tag("drbnet_single", (4480, 6720))                               # native: 1120 tiles
+    assert (tile, ov) == (1120, 140) and t == "drbnet_single@t1120o140"
+    assert launch.step_tag("hat_l_x4", (1120, 1680))[1:] == (512, 64)
+    assert launch.step_tag("drbnet_single", (1120, 1680), tile=256)[1:] == (256, 32)
+
+
+def test_setup_inputs_name_and_permutation_checks():
+    from setup_inputs import names_report, nearest_mismatches
+    sets = {"a": {"x", "y", "z"}, "b": {"x", "y"}, "c": {"x", "y", "z", "w"}}
+    rep = names_report(sets, "a")
+    assert any("b: missing 1" in r for r in rep) and any("c: 1 not in a" in r for r in rep)
+    assert names_report({"a": {"x"}, "b": {"x"}}, "a") == []
+    rng = np.random.default_rng(0)
+    th = {n: rng.random((7, 10, 3)).astype(np.float32) for n in "pqr"}
+    same = {n: v + 0.01 for n, v in th.items()}
+    assert nearest_mismatches(th, same) == []
+    swapped = {"p": same["q"], "q": same["p"], "r": same["r"]}
+    assert sorted(nearest_mismatches(th, swapped)) == [("p", "q"), ("q", "p")]

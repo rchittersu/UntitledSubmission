@@ -21,8 +21,8 @@ the table says which. Legend: ✅ done · 🔶 priority · ⏳ todo · [S] secur
 | **C2** | Anchor + HAT-L (classical) / Real-HAT-GAN ×4 | strongest regression SR | registry `hat_l_x4`, `hat_x4_real` | ✅ code + sanity, 🔶 [S] run |
 | **C3** | Anchor + OSEDiff ×4 (one-step diffusion SR) | closest prior to variant B | registry `osediff_x4` | ✅ code (CUDA only), 🔶 [S] run |
 | **C4** | Anchor + SUPIR or SeeSR (multi-step generative SR) | strongest generative prior | external scripts | ⏳ [S] |
-| **C5** | Anchor + S3Diff (one-step, SD-Turbo + degradation-guided LoRA) | recent one-step diffusion SR | `launch_sr.py --sr s3diff` (`code/external/s3diff_run.py`) | 🔶 [S] manual |
-| **C6** | Anchor + VOSR 2.0 (one-step 1.4B DiT, CVPR 2026) | latest one-step DiT SR (closest to variant B) | `launch_sr.py --sr vosr2` | 🔶 [S] manual |
+| **C5** | Anchor + S3Diff (one-step, SD-Turbo + degradation-guided LoRA) | recent one-step diffusion SR | `launch.sh run <anchor> s3diff` (`code/external/s3diff_run.py`) | 🔶 [S] manual |
+| **C6** | Anchor + VOSR 2.0 (one-step 1.4B DiT, CVPR 2026) | latest one-step DiT SR (closest to variant B) | `launch.sh run <anchor> vosr2` | 🔶 [S] manual |
 | **D1** | Anchor + DATSR (reference-based SR, ref = blurry native input) | closest prior to the exemplar memory | `refsr_baseline.py` | ✅ code + sanity, 🔶 [S] run |
 | **D2** | ReFIR (SeeSR + retrieval augmentation, NeurIPS 2024) | reference-grounded diffusion restoration | — | ✗ not planned (multi-step, ~50 steps via SeeSR/SUPIR; user 2026-10-05) |
 | **D3** | iRAG (retrieval-augmented RefSR diffusion, ICCV 2025) | recent diffusion RefSR | — | ✗ not planned (multi-step, 50 DDIM steps; user 2026-10-05) |
@@ -107,23 +107,25 @@ DP blur level `b` (DP px at 1680, `evaluation.md` §2.4). `ramp(b; a, c) = clip(
 See [§B-results](#b-results) at the end of this file: B1 composite is the strongest on fidelity (27.83 dB, = ×4 + bicubic,
 no in-focus damage); B2–B5 lose 0.14–0.37 dB.
 
-## Manual SR launcher (2026-10-05)
+## Manual launcher (2026-10-05)
 
-`code/scripts/launch_sr.py` runs **one anchor × one upsampler** by hand and writes to
-`$UHDD_RESULTS/dpdd_v2/sr/<anchor>@x4+<upsampler>/` (PNGs + `meta.json`; `--eval` adds `metrics_dpdd4.*`); `--list` shows
-what exists, `--summary` tables everything scored, `--dry-run` prints the exact commands. Anchors for the upsampler study
-(user's visual pick): **DRBNet** and **Bokehlicious**. Registry upsamplers run through `run_model.py`; S3Diff and VOSR run
-their own code in their own Python environments (pinned, mutually incompatible versions) on 8-bit copies of the anchor:
-
-Shell wrapper with all setup notes in its header (`help`, `env`, `setup s3diff|vosr`, `check`, `list`, `dry`, `run`,
-`study`, `summary`): `code/experiments/launch_sr.sh`.
+`code/scripts/launch.py` (wrapper with all setup notes: `code/experiments/launch.sh help`) runs **one deblurrer on one
+input source** or **one ×4 anchor + one ×4 upsampler** by hand, into the results layout of `docs/evaluation.md` §5.0
+(`$UHDD_RESULTS/dpdd/deblur/<src>/…`, `…/upsample/<src>/<anchor>@whole/<sr>@<tiling>/`; PNGs, `meta.json`,
+`launch.json`, `metrics_dpdd4.*`). Anchors for the upsampler study (user's visual pick): **DRBNet** and **Bokehlicious**.
+`--anchor-src official` takes the anchor from the original DPDD images (diagnostic: scored against our native targets).
+Registry upsamplers run through `run_model.py`; S3Diff and VOSR run their own code in their own Python environments
+(pinned, mutually incompatible versions) on 8-bit copies of the anchor. Fresh start for all runs (user, 2026-10-05):
+`fresh` re-runs the standard set, `compare` checks it against the legacy results.
 
 ```bash
-code/experiments/launch_sr.sh setup vosr && code/experiments/launch_sr.sh check
-code/experiments/launch_sr.sh run drbnet vosr2 0 --scenes 1P0A1046   # smoke test
-code/experiments/launch_sr.sh study vosr2 0                          # drbnet + bokehlicious, scored
-code/experiments/launch_sr.sh summary
-# same via python: launch_sr.py --anchor drbnet --sr vosr2 --gpu 0 --eval / --list / --summary
+code/experiments/launch.sh setup inputs --protect-legacy          # once: link + verify inputs (required)
+code/experiments/launch.sh setup vosr && code/experiments/launch.sh check
+code/experiments/launch.sh deblur drbnet official_x4 0            # Table 1 row on the original images
+code/experiments/launch.sh run drbnet vosr2 0 --scenes 1P0A1046   # smoke test
+code/experiments/launch.sh study vosr2 0                          # drbnet + bokehlicious, scored
+code/experiments/launch.sh fresh 0                                # standard set from scratch, then compare
+code/experiments/launch.sh summary
 ```
 Setup [S] (one environment per tool, as in their READMEs):
 - **S3Diff** (`github.com/ArcticHare105/S3Diff`, Apache-2.0): `S3DIFF_REPO`, `S3DIFF_PY` (its env: torch 2.1, diffusers 0.25.1,

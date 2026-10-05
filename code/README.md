@@ -197,5 +197,6 @@ Full description: `docs/evaluation.md` (metrics, how to run) and `docs/baselines
 - Tiling defaults per method from its paper (registry `paper_input` / `paper_tile`, `uhdd.tiling.default_tiling`);
   overlap = tile / 8. `run_model.py` without `--tile` and `run_matrix.py` steps without `tile` use them.
 - Helpers: `scripts/pair_official.py` (name-paired official splits), `scripts/vae_ceiling.py` (variant B backbone).
-- Manual anchor × upsampler runs (incl. S3Diff, VOSR 2.0 in their own environments): `scripts/launch_sr.py` (shell wrapper + setup: `experiments/launch_sr.sh help`)
-  (`--list`, `--dry-run`, `--eval`, `--summary`); see `docs/baselines.md` "Manual SR launcher".
+- Manual runs in the results layout `$UHDD_RESULTS/dpdd/` (`uhdd/layout.py`, `docs/evaluation.md` §5.0): inputs linked and
+  verified by `scripts/setup_inputs.py`; `scripts/launch.py deblur|upsample|list|summary|compare` (incl. S3Diff, VOSR 2.0 in
+  their own environments, `--anchor-src official`); wrapper + setup notes: `experiments/launch.sh help`.
