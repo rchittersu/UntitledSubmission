@@ -1,4 +1,4 @@
-"""S3Diff (Zhang et al., NeurIPS 2024; github.com/ArcticHare105/S3Diff): one-step x4 SR on SD-Turbo with
+"""S3Diff (Zhang et al., arXiv 2024; github.com/ArcticHare105/S3Diff): one-step x4 SR on SD-Turbo with
 degradation-guided LoRA. Generative x4 upsampler after the 1/4-res deblur (docs/baselines.md, C5).
 
 Per tile, the official test path (src/inference_s3diff.py + src/s3diff_tile.py) without the authors' own latent

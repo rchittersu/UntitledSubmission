@@ -2,8 +2,10 @@
 \section{Experiments}
 \label{sec:exp}
 % =====================================================================
-% Numbers: handoff/from_secure/2026-10-04_h2.md (protocol v3, tag dpdd3). Protocol frozen on
-% 2026-10-04 before any result of the method existed (docs/evaluation.md, decision log).
+% Numbers: handoff/from_secure/2026-10-05_h3.md (protocol dpdd4, all 76); fusion rows still from h2 (tuned on
+% val; the h3 re-evaluation looked untuned). Handoff 4 re-runs everything through the launcher (new results
+% layout) and adds S3Diff / VOSR: refresh all numbers from it. Protocol frozen on 2026-10-04 before any
+% result of the method existed (docs/evaluation.md, decision log).
 
 \subsection{Native-resolution DPDD}
 \label{sec:exp_data}
@@ -14,8 +16,8 @@ develop every raw capture (libraw, camera white balance, the crop of the officia
 to $0.07$\,px) and calibrate it to the official rendering of the same capture with a per-capture
 colour polynomial, the converter's unsharp mask and a smooth local-tone field. After $4\times$
 downscaling, our images agree with the official ones to $38.8$\,dB (inputs) and $39.0$\,dB (targets)
-on held-out pixels, and the input--target PSNR of our $\times4$ level ($26.74$\,dB) reproduces the
-official benchmark ($26.41$\,dB). Targets are registered to the inputs with a translation; a
+on held-out pixels, and the input--target PSNR of our $\times4$ level ($24.24$\,dB on the $76$ test
+scenes) is close to that of the official images ($23.93$\,dB). Targets are registered to the inputs with a translation; a
 homography over-fits the blur difference between the two apertures (median $6.8$ vs.\ $1.5$\,px
 estimated shift, $12/37$ vs.\ $0/37$ indoor scenes above $10$\,px). Validity masks and a $64$\,px
 border are excluded from all metrics. The left/right dual-pixel views of the input give a disparity
@@ -24,7 +26,10 @@ plane ($b_0$, $|d|<0.4$\,px at $1680$), mild, strong and very strong defocus (ed
 it correlates with the measured loss of sharpness between input and target (median Spearman $0.76$).
 A paired measurement on focal-plane edges shows that the f/22 target is as sharp as the in-focus f/4
 input up to $0.3$\,cycles/px and softer only near Nyquist, so plain PSNR/SSIM are meaningful at native
-resolution. All results use the $76$ test scenes.
+resolution. All results use the $76$ test scenes. Because our $\times4$ level is a re-rendering, results at the
+benchmark resolution are reported both on it and on the original $1680\times1120$ images, on which our
+evaluation reproduces published numbers to within $0.06$\,dB; the two renderings shift individual
+models by $-0.58$ to $+0.16$\,dB and change their order (\cref{tab:gap}).
 
 \subsection{Protocol}
 \label{sec:exp_protocol}
@@ -39,23 +44,28 @@ rank. Every comparison is paired per image with $95\%$ bootstrap confidence inte
 was fixed before any result of \method was available.
 \paragraph{Inference.} Each method runs as in its paper: methods evaluated on whole $1680\times1120$
 images run whole at $\times4$ and on $1120$\,px tiles at higher resolution; super-resolution models
-use their code's tile size (SwinIR $400$, HAT $512$, OSEDiff $128$ low-resolution pixels); overlap is
-$1/8$ of the tile for all, with linear blending.
+use their code's tile size in low-resolution pixels (SwinIR $400$, HAT $512$, OSEDiff and VOSR $128$, \ie
+their $512$\,px training size, S3Diff $192$, its latent tile); overlap is $1/8$ of the tile for all, with
+linear blending, in one shared tiling implementation. Each tile follows the method's official one-step
+path; per-image quantities (S3Diff's degradation estimate) are computed on the whole image, and the
+sampling noise of the generative upsamplers is drawn once per image and shared by overlapping tiles.
 
 \subsection{Baselines}
 \label{sec:exp_baselines}
 \emph{Native inference}: Restormer~\cite{zamir2022restormer} (with and without TLC~\cite{chu2022tlc}),
 LaKDNet-L~\cite{ruan2023lakdnet}, DRBNet~\cite{ruan2022drbnet}, IFAN~\cite{lee2021ifan} and
 Bokehlicious~\cite{seizinger2025bokehlicious}, with released weights. \emph{Low-resolution deblurring
-and upsampling}: an anchor (DRBNet or Restormer at $\times4$) followed by bicubic, SwinIR and real-world
-SwinIR~\cite{liang2021swinir}, HAT-L and Real-HAT~\cite{chen2023hat}, or OSEDiff~\cite{wu2024osediff}.
+and upsampling}: an anchor deblurred at $\times4$ (DRBNet or Bokehlicious, the strongest at that resolution;
+other anchors in the supplementary) followed by bicubic, real-world SwinIR~\cite{liang2021swinir}, HAT-L and
+Real-HAT~\cite{chen2023hat}, or the one-step generative upsamplers OSEDiff~\cite{wu2024osediff},
+S3Diff~\cite{zhang2024s3diff} and VOSR~\cite{wu2026vosr}.
 \emph{Training-free fusion} of the anchor and the native input using the dual-pixel blur map: a
 composite that copies the input in focus and the upsampled anchor elsewhere, a multi-scale composite
 that also uses a $\times2$ deblur, a guided filter~\cite{he2013guided}, adding the input's high band,
 and a non-learned version of our exemplar transfer; their parameters are tuned on the validation set.
-\emph{Reference-based super-resolution}: DATSR~\cite{cao2022datsr} with in-focus crops of the
-observation as reference. \emph{Retrained at native resolution}: Restormer and DRBNet fine-tuned on
-native training crops. \todo{DATSR and retrained rows.}
+\emph{Reference-based super-resolution}: DATSR~\cite{cao2022datsr} with a reference built per tile from the
+observation (the co-located crop and the three most similar in-focus crops). \emph{Retrained at native
+resolution}: Restormer and DRBNet fine-tuned on native training crops. \todo{retrained rows.}
 
 \subsection{Results}
 \label{sec:exp_results}
@@ -63,27 +73,30 @@ native training crops. \todo{DATSR and retrained rows.}
 \begin{table}[t]
   \centering
   \small
-  \setlength{\tabcolsep}{4pt}
-  \begin{tabular}{@{}lcccc@{}}
+  \setlength{\tabcolsep}{2.2pt}
+  \begin{tabular}{@{}lcccccc@{}}
     \toprule
-    & \multicolumn{2}{c}{deblur at $\times4$} & \multicolumn{2}{c}{deblur at native} \\
-    \cmidrule(lr){2-3}\cmidrule(l){4-5}
-    Method & PSNR & $\Delta$ & PSNR & $\Delta$ \\
+    & \multicolumn{4}{c}{deblur at $\times4$} & \multicolumn{2}{c}{deblur at native} \\
+    \cmidrule(lr){2-5}\cmidrule(l){6-7}
+    & \multicolumn{2}{c}{original} & \multicolumn{2}{c}{ours} & \multicolumn{2}{c}{ours} \\
+    \cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(l){6-7}
+    Method & PSNR & $\Delta$ & PSNR & $\Delta$ & PSNR & $\Delta$ \\
     \midrule
-    Blurry input & \todo{--} & -- & 23.06 & -- \\
-    Restormer~\cite{zamir2022restormer} & \todo{--} & & 22.99 & $-0.08$ \\
-    \quad + TLC~\cite{chu2022tlc} & -- & -- & 22.99 & $-0.07$ \\
-    LaKDNet-L~\cite{ruan2023lakdnet} & \todo{--} & & 23.00 & $-0.06$ \\
-    DRBNet~\cite{ruan2022drbnet} & \todo{--} & & 23.12 & $+0.06$ \\
-    IFAN~\cite{lee2021ifan} & \todo{--} & & 23.22 & $+0.15$ \\
-    Bokehlicious~\cite{seizinger2025bokehlicious} & \todo{--} & & 23.70 & $+0.64$ \\
+    Blurry input & 23.93 & -- & 24.24 & -- & 23.06 & -- \\
+    Restormer~\cite{zamir2022restormer} & 26.04 & $+2.11$ & 25.60 & $+1.37$ & 22.99 & $-0.08$ \\
+    \quad + TLC~\cite{chu2022tlc} & -- & -- & -- & -- & 22.99 & $-0.07$ \\
+    LaKDNet-L~\cite{ruan2023lakdnet} & \textbf{26.31} & $+2.38$ & 25.74 & $+1.50$ & 23.00 & $-0.06$ \\
+    DRBNet~\cite{ruan2022drbnet} & 25.79 & $+1.86$ & 25.85 & $+1.62$ & 23.12 & $+0.06$ \\
+    IFAN~\cite{lee2021ifan} & 25.42 & $+1.49$ & 25.58 & $+1.35$ & 23.22 & $+0.15$ \\
+    Bokehlicious~\cite{seizinger2025bokehlicious} & 26.13 & $+2.20$ & \textbf{26.08} & $+1.84$ & \textbf{23.70} & $+0.64$ \\
     \bottomrule
   \end{tabular}
-  \caption{\textbf{The resolution gap.} The same networks gain $1.7$\,dB over the input when the
-  image is downscaled by $4$ and almost nothing at native resolution. PSNR in dB, each scored at the
-  resolution it runs at; $\Delta$: paired gain over the input. $76$ test scenes. \todo{$\times4$ column on all
-  $76$ on both our renderings and the original images (both reported; which leads is open).}
-  Native $512$\,px instead of $1120$\,px tiles: $\leq 0.06$\,dB difference.}
+  \caption{\textbf{The resolution gap.} The same networks gain $1.4$--$2.4$\,dB over the input at the
+  benchmark resolution and almost nothing at native resolution. PSNR in dB, each scored at the resolution it
+  runs at; $\Delta$: paired gain over the input. ``original'': the released $1680\times1120$ images (published
+  numbers reproduced to $0.06$\,dB); ``ours'': our raw-built rendering, the $\times4$ level of the native set.
+  $76$ test scenes. Native $512$\,px instead of $1120$\,px tiles: $\leq 0.06$\,dB difference.
+  \todo{which $\times4$ rendering leads is open; refresh from handoff 4.}}
   \label{tab:gap}
 \end{table}
 
@@ -97,57 +110,69 @@ native training crops. \todo{DATSR and retrained rows.}
     \cmidrule(lr){3-8}\cmidrule(l){9-10}
     & Method & PSNR\up & SSIM\up & LPIPS\dn & DISTS\dn & MUSIQ\up & CLIPIQA\up & PSNR\up & SSIM\up \\
     \midrule
-    & Blurry input & 23.06 & 0.596 & \todo{--} & 0.260 & \todo{--} & \todo{--} & 24.24 & \todo{--} \\
+    & Blurry input & 23.06 & 0.596 & 0.370 & 0.260 & 27.3 & 0.321 & 24.24 & 0.711 \\
     \midrule
     \multirow{6}{*}{\rotatebox{90}{\scriptsize native}}
-    & Restormer~\cite{zamir2022restormer} & 22.99 & 0.601 & & 0.267 & & & 24.14 & \\
-    & Restormer + TLC~\cite{chu2022tlc} & 22.99 & 0.601 & & 0.266 & & & 24.14 & \\
-    & LaKDNet-L~\cite{ruan2023lakdnet} & 23.00 & 0.575 & & 0.269 & & & 24.33 & \\
-    & DRBNet~\cite{ruan2022drbnet} & 23.12 & 0.586 & & 0.266 & & & 24.35 & \\
-    & IFAN~\cite{lee2021ifan} & 23.22 & 0.601 & & 0.223 & & & 24.47 & \\
-    & Bokehlicious~\cite{seizinger2025bokehlicious} & 23.70 & 0.642 & & 0.233 & & & 24.89 & \\
+    & Restormer~\cite{zamir2022restormer} & 22.99 & 0.601 & 0.382 & 0.267 & 28.9 & 0.317 & 24.14 & 0.713 \\
+    & Restormer + TLC~\cite{chu2022tlc} & 22.99 & 0.601 & 0.381 & 0.266 & 29.0 & 0.317 & 24.14 & 0.714 \\
+    & LaKDNet-L~\cite{ruan2023lakdnet} & 23.00 & 0.575 & 0.390 & 0.269 & 29.2 & 0.325 & 24.33 & 0.711 \\
+    & DRBNet~\cite{ruan2022drbnet} & 23.12 & 0.586 & 0.376 & 0.266 & 29.1 & 0.329 & 24.35 & 0.714 \\
+    & IFAN~\cite{lee2021ifan} & 23.22 & 0.601 & \textbf{0.348} & 0.223 & 31.4 & 0.330 & 24.47 & 0.727 \\
+    & Bokehlicious~\cite{seizinger2025bokehlicious} & 23.70 & 0.642 & 0.369 & 0.233 & 31.8 & 0.335 & 24.89 & 0.758 \\
     \midrule
-    \multirow{6}{*}{\rotatebox{90}{\scriptsize $\times4$ + upsampler}}
-    & bicubic & 24.58 & 0.662 & & 0.292 & & & 25.87 & \\
-    & HAT-L~\cite{chen2023hat} & 24.52 & 0.656 & & 0.273 & & & 25.82 & \\
-    & SwinIR-real~\cite{liang2021swinir} & 23.96 & 0.638 & & 0.267 & & & 25.33 & \\
-    & Real-HAT~\cite{chen2023hat} & 24.17 & 0.649 & & 0.282 & & & 25.43 & \\
-    & OSEDiff~\cite{wu2024osediff} & 23.51 & 0.616 & & 0.281 & & & 24.97 & \\
-    & $\times2$ deblur + bicubic & 23.84 & 0.642 & & 0.260 & & & 25.00 & \\
+    \multirow{8}{*}{\rotatebox{90}{\scriptsize DRBNet $\times4$ + upsampler}}
+    & bicubic & 24.58 & 0.662 & 0.573 & 0.292 & 24.5 & 0.408 & 25.87 & 0.778 \\
+    & HAT-L~\cite{chen2023hat} & 24.52 & 0.656 & 0.533 & 0.273 & 30.1 & 0.459 & 25.82 & 0.772 \\
+    & SwinIR-real~\cite{liang2021swinir} & 23.96 & 0.638 & 0.470 & 0.267 & 41.9 & 0.397 & 25.33 & 0.760 \\
+    & Real-HAT~\cite{chen2023hat} & 24.17 & 0.649 & 0.447 & 0.282 & 37.3 & 0.374 & 25.43 & 0.762 \\
+    & OSEDiff~\cite{wu2024osediff} & 23.51 & 0.616 & 0.471 & 0.281 & \textbf{50.0} & \textbf{0.563} & 24.97 & 0.752 \\
+    & S3Diff~\cite{zhang2024s3diff} & \todo{--} & & & & & & & \\
+    & VOSR~\cite{wu2026vosr} & \todo{--} & & & & & & & \\
+    & $\times2$ deblur + bicubic & 23.84 & 0.642 & 0.424 & 0.260 & 28.7 & 0.414 & 25.00 & 0.740 \\
+    \midrule
+    \multirow{5}{*}{\rotatebox{90}{\scriptsize Bokehl.\ $\times4$ +}}
+    & bicubic & \textbf{24.79} & \textbf{0.667} & 0.546 & 0.289 & 24.7 & 0.424 & \textbf{26.10} & \textbf{0.801} \\
+    & HAT-L~\cite{chen2023hat} & 24.40 & 0.611 & 0.500 & 0.281 & 36.7 & 0.414 & 26.05 & 0.789 \\
+    & Real-HAT~\cite{chen2023hat} & 24.31 & 0.648 & 0.452 & 0.278 & 40.0 & 0.377 & 25.65 & 0.777 \\
+    & S3Diff~\cite{zhang2024s3diff} & \todo{--} & & & & & & & \\
+    & VOSR~\cite{wu2026vosr} & \todo{--} & & & & & & & \\
     \midrule
     \multirow{5}{*}{\rotatebox{90}{\scriptsize fusion}}
     & DP composite & 24.52 & 0.660 & & 0.259 & & & 25.83 & \\
     & multi-scale composite & 24.38 & 0.655 & & 0.252 & & & 25.68 & \\
     & guided filter~\cite{he2013guided} & 24.56 & 0.662 & & 0.316 & & & 25.82 & \\
-    & + input high band & 24.37 & 0.620 & & 0.210 & & & 25.88 & \\
+    & + input high band & 24.37 & 0.620 & & \textbf{0.210} & & & 25.88 & \\
     & exemplar transfer (non-learned) & 24.41 & 0.639 & & 0.232 & & & 25.82 & \\
     \midrule
-    & DATSR~\cite{cao2022datsr} (ref.: observation) & \todo{--} & & & & & & & \\
+    & DATSR~\cite{cao2022datsr} (ref.: observation) & 24.52 & 0.655 & 0.510 & 0.255 & 33.4 & 0.445 & 25.84 & 0.774 \\
     & Restormer / DRBNet retrained at native & \todo{--} & & & & & & & \\
     \midrule
     & \method (feed-forward) & \todo{--} & & & & & & & \\
     & \method (one-step DiT) & \todo{--} & & & & & & & \\
     \bottomrule
   \end{tabular}
-  \caption{\textbf{Native-resolution DPDD ($76$ test scenes, $6720\times4480$).} All
-  ``$\times4$'' and fusion rows use DRBNet as the low-resolution deblurrer (Restormer anchor in the
-  supplementary). ``at $\times4$'': the native result downscaled to the standard DPDD resolution.
-  \todo{LPIPS, MUSIQ, CLIPIQA, SSIM at $\times4$, runtime; CIs in the supplementary.}}
+  \caption{\textbf{Native-resolution DPDD ($76$ test scenes, $6720\times4480$).} Fusion and DATSR rows use
+  DRBNet as the low-resolution deblurrer (other anchors in the supplementary). ``at $\times4$'': the native
+  result downscaled to the standard DPDD resolution. \todo{runtime column; CIs in the supplementary; S3Diff,
+  VOSR rows and refreshed numbers from handoff 4; fusion rows (handoff 2, tuned on validation) to be
+  re-evaluated with LPIPS, MUSIQ, CLIPIQA, SSIM at $\times4$.}}
   \label{tab:main}
 \end{table*}
 
-\paragraph{The resolution gap (\cref{tab:gap}).} Every network that improves the input by about
-$1.7$\,dB at the benchmark resolution is within $0.2$\,dB of the input at native resolution, except
+\paragraph{The resolution gap (\cref{tab:gap}).} Every network that improves the input by $1.4$--$2.4$\,dB
+at the benchmark resolution is within $0.2$\,dB of the input at native resolution, except
 Bokehlicious, which is trained on multi-megapixel data and gains $0.6$\,dB. Changing the tile size
 from $1120$ to $512$\,px changes the result by at most $0.06$\,dB, and TLC, which corrects global
 statistics for large inputs, changes nothing: the networks fail because the native blur is larger
 than anything they were trained on, not because of tiling.
 
 \paragraph{Main comparison (\cref{tab:main}).} Deblurring at $\times4$ and upsampling bicubically
-gains $1.5$\,dB over the input and is the strongest pipeline on PSNR, but it is smooth: its DISTS is
-worse than that of the blurry input. HAT-L is indistinguishable from bicubic. The perceptual
-upsamplers trade fidelity for texture (SwinIR-real $-0.6$\,dB, OSEDiff $-1.1$\,dB) without improving
-DISTS over the composite. Among the training-free fusions, copying the input in focus keeps the PSNR of
+gains $1.5$--$1.7$\,dB over the input (Bokehlicious anchor: $24.79$\,dB, the best PSNR and SSIM in the
+table), but it is smooth: its LPIPS and DISTS are worse than those of the blurry input. HAT-L does not
+improve on bicubic. The perceptual upsamplers trade fidelity for texture (SwinIR-real $-0.6$\,dB, OSEDiff
+$-1.1$\,dB): OSEDiff has by far the best no-reference scores while losing the most PSNR, and none of
+them improves DISTS over the composite. Reference-based super-resolution with the observation as
+reference (DATSR) matches HAT-L in PSNR with a better DISTS, but not the composite. Among the training-free fusions, copying the input in focus keeps the PSNR of
 the bicubic pipeline and improves DISTS, and transferring in-focus texture improves DISTS further
 ($0.259\to0.232$) at $-0.11$\,dB. Nothing training-free improves both. \todo{\method rows and the
 comparison sentence.}

@@ -38,8 +38,8 @@ We find that the two obvious ways to apply existing methods at native resolution
 different reasons (\cref{fig:teaser}, \cref{sec:exp}).
 \emph{Native-resolution inference}, necessarily in tiles, changes almost nothing: on the $76$ DPDD
 test scenes at $30$\,MP, four recent deblurring networks stay within $0.2$\,dB of the blurry input
-and the fifth~\cite{seizinger2025bokehlicious} gains $0.6$\,dB, while the same networks gain about
-$1.7$\,dB when the image is downscaled by $4$. Tile size and test-time statistics
+and the fifth~\cite{seizinger2025bokehlicious} gains $0.6$\,dB, while the same networks gain
+$1.4$--$2.4$\,dB when the image is downscaled by $4$. Tile size and test-time statistics
 correction~\cite{chu2022tlc} make no difference. The cause is not missing context or tile seams but
 blur of an extent the networks never saw.
 \emph{Deblurring at low resolution and upsampling} recovers the structure (\eg, $+1.5$\,dB over the

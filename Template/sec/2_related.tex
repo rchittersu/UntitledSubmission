@@ -36,8 +36,9 @@ models~\cite{wang2021realesrgan,zhang2021bsrgan} are natural upsamplers for a lo
 deblurring result, and diffusion priors~\cite{saharia2022sr3,whang2022deblurring,xia2023diffir,rombach2022ldm}
 adapted from text-to-image models~\cite{wang2024stablesr,lin2024diffbir,yu2024supir,wu2024seesr} have
 raised perceptual quality further. Step distillation~\cite{song2023consistency,sauer2024add,yin2024dmd}
-has produced one-step restorers~\cite{wang2024sinsr,wu2024osediff}, and diffusion
-transformers~\cite{peebles2023dit,esser2024sd3} provide stronger and more scalable priors. These
+has produced one-step restorers~\cite{wang2024sinsr,wu2024osediff,zhang2024s3diff}, and diffusion
+transformers~\cite{peebles2023dit,esser2024sd3} provide stronger and more scalable priors, including
+one-step super-resolution without a text-to-image backbone~\cite{wu2026vosr}. These
 models are blind to the native observation: they generate detail consistent with the low-resolution
 input, which at native resolution is the anchor rather than the photograph. Our experiments show the
 consequence, invented text and texture and damaged in-focus regions, in line with the
