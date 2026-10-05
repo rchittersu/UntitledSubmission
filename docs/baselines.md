@@ -258,3 +258,6 @@ Observations (preview, n = 8, to be confirmed on 76 with tuned parameters and pe
 
 ## Handoff-2 status [S, 2026-10-04]
 Evaluated on native test set (76): Restormer, LaKDNet-L, DRBNet, IFAN (public-mirror weights), Bokehlicious; upsamplers bicubic, SwinIR-real x4/x2, HAT-L, Real-HAT, OSEDiff; fusion composite/multiscale/guided/detail/exemplar. DATSR: implemented, opt-in (`DATSR=1`), not run (>15 min/image measured). Numbers: see the handoff-2 report.
+
+## Handoff-3 status [S, 2026-10-05]
+All baselines evaluated on all 76 test scenes under `dpdd4`. x4 rows with bicubic / HAT-L for LaKDNet-L, IFAN, Bokehlicious (Bokehlicious also Real-HAT); slow SRs (SwinIR-real, Real-HAT, OSEDiff) for Restormer and DRBNet only. DATSR (MSE weights, DRBNet anchor) done on all 76 for `mosaic` and `mosaic_focus`: ~80-93 s per image on a shared GPU; numbers in the handoff-3 report.
