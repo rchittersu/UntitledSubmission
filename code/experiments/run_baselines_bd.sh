@@ -37,8 +37,8 @@ datsr() {  # $1 ref  $2 weights  $3 out dir  $4 label
   $py code/scripts/evaluate.py --pred $3 --label "$4" $EV
 }
 if [ "${DATSR:-0}" = 1 ]; then   # opt-in: too slow for the default run (see above)
-datsr mosaic restoration_mse $O/${M}_datsr_mse_mosaic "$M @x4 + DATSR-mse (mosaic)"
-datsr mosaic_focus restoration_mse $O/${M}_datsr_mse_mosaic_focus "$M @x4 + DATSR-mse (in-focus mosaic)"
+[ -z "${DATSR_ONLY:-}" ] || [ "$DATSR_ONLY" = mosaic ] && datsr mosaic restoration_mse $O/${M}_datsr_mse_mosaic "$M @x4 + DATSR-mse (mosaic)"
+[ -z "${DATSR_ONLY:-}" ] || [ "$DATSR_ONLY" = mosaic_focus ] && datsr mosaic_focus restoration_mse $O/${M}_datsr_mse_mosaic_focus "$M @x4 + DATSR-mse (in-focus mosaic)"
 fi
 if [ "${DATSR_FULL:-0}" = 1 ]; then
   datsr colocated restoration_mse $O/${M}_datsr_mse_colocated "$M @x4 + DATSR-mse (colocated)"
