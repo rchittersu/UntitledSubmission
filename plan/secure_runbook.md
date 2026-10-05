@@ -69,7 +69,8 @@ code/experiments/launch.sh study ours_x4 s3diff 0
 code/experiments/launch.sh study ours_x4 vosr2 1
 code/experiments/launch.sh upsample official_x4 drbnet vosr2 0          # diagnostic
 ```
-Use several GPUs by launching independent commands on different GPUs (each run is one folder; runs resume).
+Multi-GPU: give a GPU list (`0,1,2,3` or `all`) as the GPU argument; the scenes are split over the GPUs (one
+process per GPU, also for S3Diff / VOSR). Independent commands on disjoint GPUs also work (runs resume).
 
 ## 4. Correctness re-check
 ```bash

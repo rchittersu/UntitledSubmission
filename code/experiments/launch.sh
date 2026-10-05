@@ -51,6 +51,8 @@
 #   code/experiments/launch.sh summary [--stage S] [--src S]  tables (with CIs) of everything scored
 #   code/experiments/launch.sh compare                        fresh results vs legacy (same harness -> ~equal)
 #   SRC: ours_x1 (native), ours_x2, ours_x4, official_x4 (upsample: ours_x4 or official_x4)
+#   GPU: 0 | 0,1,2,3 | all  — scenes are split over the listed GPUs, one process per GPU (registry models via
+#        run_model.py / evaluate.py; S3Diff / VOSR: one process per GPU on a round-robin shard, output [gpu N]).
 #   [args] go to launch.py: --scenes 1P0A1046,1P0A2030 (or a file), --dry-run, --tile N (deblur only)
 #
 #   Examples
@@ -63,7 +65,8 @@
 #     code/experiments/launch.sh upsample ours_x4 drbnet vosr2 0                  # all 76
 #     code/experiments/launch.sh upsample official_x4 drbnet vosr2 0              # diagnostic
 #     code/experiments/launch.sh study ours_x4 s3diff 1                           # drbnet then bokehlicious, GPU 1
-#     nohup code/experiments/launch.sh study ours_x4 vosr2 0 > vosr2.log 2>&1 &    # long runs: detach
+#     code/experiments/launch.sh upsample ours_x4 drbnet vosr2 0,1,2,3            # 76 scenes split over 4 GPUs
+#     nohup code/experiments/launch.sh study ours_x4 vosr2 all > vosr2.log 2>&1 &  # long runs: detach
 #
 #   fresh = in this order, all 76, scored (registry models only; s3diff / vosr via `study`):
 #     deblur    {ours_x4, official_x4, ours_x1} x {input, drbnet, bokehlicious, restormer, lakdnet, ifan}

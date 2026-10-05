@@ -29,6 +29,8 @@ WHAT HAPPENS
                maps, masks, 64 px border). x4 outputs: against the targets of the same source, border 16 px;
                official_x4 has no masks -> headline metrics only. An upsampled official anchor is scored against
                our native targets (other rendering): diagnostic only, labelled so.
+    --gpu 0,1,2,3 / all: scenes split over the GPUs (run_model.py / evaluate.py shard internally; S3Diff / VOSR get
+               one process per GPU on a round-robin shard).
     Runs resume: finished images are skipped. Each run refuses to start unless setup_inputs.py verified its sources.
 
 ENVIRONMENT
@@ -157,6 +159,58 @@ def run(cmd: list, dry: bool, extra_env: dict | None = None) -> float:
     return time.time() - t
 
 
+def gpu_list(spec: str) -> list[str]:
+    """'0' / '0,1,3' / 'all' -> GPU ids (strings for CUDA_VISIBLE_DEVICES). 'all' = $CUDA_VISIBLE_DEVICES, else every
+    GPU nvidia-smi lists."""
+    spec = (spec or "0").strip().lower()
+    if spec != "all":
+        return [g for g in spec.split(",") if g]
+    vis = os.environ.get("CUDA_VISIBLE_DEVICES")
+    if vis:
+        return [g for g in vis.split(",") if g]
+    try:
+        out = subprocess.run(["nvidia-smi", "-L"], capture_output=True, text=True).stdout
+        n = sum(1 for line in out.splitlines() if line.startswith("GPU "))
+    except OSError:
+        n = 0
+    return [str(i) for i in range(max(n, 1))]
+
+
+def split(names: list[str], gpus: list[str]) -> list[tuple[str, list[str]]]:
+    """Round-robin shards of `names` over `gpus` (empty shards dropped)."""
+    return [(g, names[i::len(gpus)]) for i, g in enumerate(gpus) if names[i::len(gpus)]]
+
+
+def run_parallel(jobs: list[tuple[list, dict]], dry: bool) -> list[float]:
+    """Run commands concurrently (one per GPU), output prefixed with [gpu N]; wall time per job; fail if any fails."""
+    import threading
+    for cmd, e in jobs:
+        pre = " ".join(f"{k}={v}" for k, v in e.items())
+        print(f"  $ {pre} {' '.join(shlex.quote(str(c)) for c in cmd)} &", flush=True)
+    if dry:
+        return [0.0] * len(jobs)
+    t0, procs, threads, dts = time.time(), [], [], [0.0] * len(jobs)
+
+    def pump(i, p, tag):
+        for line in p.stdout:
+            print(f"[gpu {tag}] {line}", end="", flush=True)
+        p.wait()
+        dts[i] = time.time() - t0
+
+    for i, (cmd, e) in enumerate(jobs):
+        p = subprocess.Popen([str(c) for c in cmd], env={**os.environ, **e}, stdout=subprocess.PIPE,
+                             stderr=subprocess.STDOUT, text=True)
+        procs.append(p)
+        threads.append(threading.Thread(target=pump, args=(i, p, e.get("CUDA_VISIBLE_DEVICES", "?"))))
+        threads[-1].start()
+    for t in threads:
+        t.join()
+    bad = [i for i, p in enumerate(procs) if p.returncode]
+    if bad:
+        sys.exit(f"{len(bad)} of {len(jobs)} GPU jobs failed (see [gpu N] output above); rerun to resume")
+    return dts
+
+
 def subset(src: Path, names: list[str], key: str, dry: bool) -> Path:
     """Folder of symlinks to `names` in `src` (run_model.py and VOSR read whole folders)."""
     dst = layout.scratch_dir("subsets", key)
@@ -276,21 +330,26 @@ def upsample(src: str, anchor: str, sr: str, names: list[str], gpu: str, dry: bo
         run(cmd, dry)
         provenance(out, {**rec, "tile": tile, "overlap": overlap, "cmd": " ".join(map(str, cmd))}, dry)
     elif left:
+        # external tools are single-process: one process per GPU, each on its own shard of the scenes
         lr8 = lr8_dir(a_out, src, a_tag, left, dry)
         full = len(left) == len(scene_names(src, None))
-        only = None if full else ",".join(left)
-        if not full and sr.startswith("vosr"):
-            lr8 = subset(lr8, left, f"lr8_{src}_{a_tag}", dry)
-        cmd, extra = external_cmd(sr, lr8, out, only)
-        g = gpu if gpu not in ("all", "cpu") else "0"
-        dt = run(cmd, dry, {"CUDA_VISIBLE_DEVICES": g, **extra})
-        if not dry and sr.startswith("vosr"):   # VOSR writes no timing: wall time / n for the images of this launch
+        shards = split(left, gpu_list(gpu))
+        jobs = []
+        for g, part in shards:
+            whole = full and len(shards) == 1
+            inp = lr8 if whole or sr == "s3diff" else subset(lr8, part, f"lr8_{src}_{a_tag}_gpu{g}", dry)
+            cmd, extra = external_cmd(sr, inp, out, None if whole else ",".join(part))
+            jobs.append((cmd, {"CUDA_VISIBLE_DEVICES": g, **extra}))
+        dts = run_parallel(jobs, dry)
+        if not dry and sr.startswith("vosr"):   # VOSR writes no timing: shard wall time / shard size (incl. loading)
             m = out / "meta.json"
             meta = json.loads(m.read_text()) if m.exists() else {"images": {}, "summary": {"method": sr,
                                                                                          "note": "time = wall / n"}}
-            meta["images"].update({n: {"time_s": round(dt / len(left), 3)} for n in left})
+            for (g, part), dt in zip(shards, dts):
+                meta["images"].update({n: {"time_s": round(dt / len(part), 3), "gpu": g} for n in part})
             m.write_text(json.dumps(meta, indent=1))
-        provenance(out, {**rec, "cmd": " ".join(map(str, cmd))}, dry)
+        provenance(out, {**rec, "gpus": [g for g, _ in shards],
+                         "cmd": [" ".join(map(str, c)) for c, _ in jobs]}, dry)
     if ev:
         evaluate(out, src, label, gpu, dry, native_targets=True)
     return out
@@ -371,7 +430,8 @@ def main():
     sub = ap.add_subparsers(dest="cmd", required=True)
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--scenes", default="all", help="'all' (default), comma list, or a file with one name per line")
-    common.add_argument("--gpu", default="0", help="GPU index ('all' = every GPU, registry models only)")
+    common.add_argument("--gpu", default="0", help="'0', '0,1,3' or 'all': scenes are split over these GPUs "
+                                                     "(one process per GPU, also for S3Diff / VOSR)")
     common.add_argument("--eval", action="store_true", help=f"also score (tag {TAG})")
     common.add_argument("--dry-run", action="store_true", help="print the commands, run nothing")
     d = sub.add_parser("deblur", parents=[common], help="one deblurrer on one input source")

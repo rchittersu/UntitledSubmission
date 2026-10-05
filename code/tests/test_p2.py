@@ -345,3 +345,14 @@ def test_setup_inputs_name_and_permutation_checks():
     assert nearest_mismatches(th, same) == []
     swapped = {"p": same["q"], "q": same["p"], "r": same["r"]}
     assert sorted(nearest_mismatches(th, swapped)) == [("p", "q"), ("q", "p")]
+
+
+def test_launch_gpu_split(monkeypatch):
+    import launch
+    assert launch.gpu_list("0,2") == ["0", "2"] and launch.gpu_list("1") == ["1"]
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "3,5")
+    assert launch.gpu_list("all") == ["3", "5"]
+    names = [f"s{i}" for i in range(5)]
+    sh = launch.split(names, ["0", "1", "2"])
+    assert [g for g, _ in sh] == ["0", "1", "2"] and sorted(n for _, p in sh for n in p) == names
+    assert launch.split(["a"], ["0", "1"]) == [("0", ["a"])]
