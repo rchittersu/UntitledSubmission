@@ -277,3 +277,20 @@ def test_ref_builder_mosaic_focus_drops_blurry_colocated():
     assert np.array_equal(m[:64, :64], col) and not np.array_equal(mf[:64, :64], col)
     assert np.array_equal(RefBuilder(x, a4, blur4, 32, "mosaic_focus")((40, 10, 32, 32))[:64, :64],
                           RefBuilder(x, a4, blur4, 32, "mosaic").crop(4 * 40 + 64 - 32, 4 * 10 + 64 - 32, 64))
+
+
+def test_refsr_merge_meta_unions_shards(tmp_path):
+    import json
+    from refsr_baseline import merge_meta
+    (tmp_path / ".meta_1.json").write_text(json.dumps({"images": {"a": {"time_s": 1}}, "summary": {"method": "m"}}))
+    (tmp_path / ".meta_2.json").write_text(json.dumps({"images": {"b": {"time_s": 2}}, "summary": {"method": "m"}}))
+    merge_meta(tmp_path)
+    assert set(json.loads((tmp_path / "meta.json").read_text())["images"]) == {"a", "b"}
+
+
+def test_ref_builder_counts_tiles_without_candidate():
+    x = np.random.default_rng(2).random((256, 384, 3), dtype=np.float32)
+    a4 = cv2.resize(x, (96, 64), interpolation=cv2.INTER_AREA)
+    rb = RefBuilder(x, a4, np.full((64, 96), 5.0, np.float32), 32, "mosaic_focus")   # nothing in focus
+    rb((0, 0, 32, 32))
+    assert (rb.tiles, rb.no_candidate) == (1, 1)

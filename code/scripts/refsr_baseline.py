@@ -54,6 +54,7 @@ def stats_desc(img: np.ndarray) -> np.ndarray:
 class RefBuilder:
     def __init__(self, x: np.ndarray, anchor4: np.ndarray, blur4: np.ndarray, tile: int, mode: str):
         self.x, self.a4, self.mode, self.cr = x, anchor4, mode, 2 * tile            # native crop size
+        self.tiles = self.no_candidate = 0
         if not mode.startswith("mosaic"):
             return
         H, W = x.shape[:2]
@@ -95,6 +96,9 @@ class RefBuilder:
             dq = (stats_desc(q) - self.mu) / self.sd
             for j in np.argsort(((self.descs - dq) ** 2).sum(1))[:4 - len(parts)]:
                 parts.append(self.crop(*self.cands[j], cr))
+        if len(parts) == int(colocated):
+            self.no_candidate += 1                                         # no in-focus crop could be added
+        self.tiles += 1
         if not parts:
             parts = [self.crop(cy, cx, cr)]
         parts += [parts[0]] * (4 - len(parts))
@@ -144,9 +148,23 @@ def main():
                             TileSpec(tile=a.tile, overlap=a.overlap, batch=a.batch), multiple=16, scale=4)
         dt = time.time() - t0
         write_image(out / f"{n}.png", np.rint(y[0].permute(1, 2, 0).cpu().numpy() * 65535).astype(np.uint16))
-        meta["images"][n] = {"time_s": dt, "tiling": grid, "n_candidates": len(getattr(refs, "cands", []))}
-        print(f"{n}: {dt:.0f} s, {len(getattr(refs, 'cands', []))} in-focus candidates", flush=True)
-        (out / "meta.json").write_text(json.dumps(meta, indent=1))
+        meta["images"][n] = {"time_s": dt, "tiling": grid, "n_candidates": len(getattr(refs, "cands", [])),
+                             "tiles": refs.tiles, "tiles_without_candidate": refs.no_candidate}
+        print(f"{n}: {dt:.0f} s, {len(getattr(refs, 'cands', []))} in-focus candidates, "
+              f"{refs.no_candidate}/{refs.tiles} tiles without one", flush=True)
+        (out / f".meta_{os.getpid()}.json").write_text(json.dumps(meta, indent=1))
+        merge_meta(out)
+
+
+def merge_meta(out: Path) -> None:
+    """meta.json = union of all shards' .meta_<pid>.json (shards keep their own files, so the last one to finish
+    writes the complete set)."""
+    merged = {"images": {}, "summary": {}}
+    for f in sorted(out.glob(".meta_*.json")):
+        m = json.loads(f.read_text())
+        merged["images"].update(m["images"])
+        merged["summary"] = m["summary"]
+    (out / "meta.json").write_text(json.dumps(merged, indent=1))
 
 
 if __name__ == "__main__":
