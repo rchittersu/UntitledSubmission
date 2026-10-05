@@ -18,10 +18,10 @@
 #   deblur    one deblurrer on one source, tiling = the model's paper setup at that resolution (whole image at x4,
 #             1120-px tiles at native), overlap = tile/8. Scored at the source's resolution (x4: border 16 px;
 #             official_x4: headline metrics only, it has no masks).
-#   run       upsample: anchor (deblur of <anchor src>_x4, run first if missing) + x4 upsampler -> native, scored at
-#             native against our targets (frozen headline + diagnostics, DP maps, 64 px border).
-#             --anchor-src official: anchor from the original DPDD images; scored against our native targets
-#             (other rendering) -> labelled diagnostic.
+#   upsample  anchor (deblur of SRC, an x4 source; run first if missing) + x4 upsampler -> native, scored at native
+#             against our targets (frozen headline + diagnostics, DP maps, 64 px border).
+#             SRC = official_x4: anchor from the original DPDD images; scored against our native targets (other
+#             rendering) -> labelled diagnostic.
 #   Registry upsamplers run through run_model.py; s3diff / vosr run their own code in their own Python env on 8-bit
 #   copies of the anchor. Runs resume (finished images are skipped) and refuse sources that failed verification.
 #
@@ -44,28 +44,30 @@
 #   code/experiments/launch.sh setup s3diff|vosr              one-time: clone, Python env, weights (see SETUP)
 #   code/experiments/launch.sh check                          verify inputs, S3Diff / VOSR paths, weights, envs
 #   code/experiments/launch.sh list                           sources, models, every run and whether it is scored
-#   code/experiments/launch.sh deblur MODEL SRC [GPU] [args]  one deblurrer, scored
-#   code/experiments/launch.sh run ANCHOR SR [GPU] [args]     anchor at x4 + upsampler, scored
-#   code/experiments/launch.sh study SR [GPU] [args]          `run` for both study anchors (drbnet, bokehlicious)
+#   code/experiments/launch.sh deblur SRC MODEL [GPU] [args]          one deblurrer on one source, scored
+#   code/experiments/launch.sh upsample SRC MODEL SR [GPU] [args]     deblur MODEL on SRC (x4) + upsampler SR, scored
+#   code/experiments/launch.sh study SRC SR [GPU] [args]              `upsample` for both study anchors
 #   code/experiments/launch.sh fresh [GPU]                    the standard set from scratch (see `fresh` below)
 #   code/experiments/launch.sh summary [--stage S] [--src S]  tables (with CIs) of everything scored
 #   code/experiments/launch.sh compare                        fresh results vs legacy (same harness -> ~equal)
-#   [args] go to launch.py: --scenes 1P0A1046,1P0A2030 (or a file), --dry-run, --anchor-src official, --tile N
+#   SRC: ours_x1 (native), ours_x2, ours_x4, official_x4 (upsample: ours_x4 or official_x4)
+#   [args] go to launch.py: --scenes 1P0A1046,1P0A2030 (or a file), --dry-run, --tile N (deblur only)
 #
 #   Examples
 #     code/experiments/launch.sh setup inputs --protect-legacy
-#     code/experiments/launch.sh deblur drbnet ours_x4 0                      # Table 1 row, ours
-#     code/experiments/launch.sh deblur drbnet official_x4 0                  # Table 1 row, official images
-#     code/experiments/launch.sh run drbnet vosr2 0 --dry-run                 # print the exact commands
-#     code/experiments/launch.sh run drbnet vosr2 0 --scenes 1P0A1046         # smoke test, 1 scene
-#     code/experiments/launch.sh run drbnet vosr2 0                           # all 76
-#     code/experiments/launch.sh run drbnet vosr2 0 --anchor-src official     # diagnostic
-#     code/experiments/launch.sh study s3diff 1                               # drbnet then bokehlicious on GPU 1
-#     nohup code/experiments/launch.sh study vosr2 0 > vosr2.log 2>&1 &        # long runs: detach
+#     code/experiments/launch.sh deblur ours_x4 drbnet 0                          # Table 1 row, ours
+#     code/experiments/launch.sh deblur official_x4 drbnet 0                      # Table 1 row, official images
+#     code/experiments/launch.sh deblur ours_x1 restormer 0                       # native, paper tiling
+#     code/experiments/launch.sh upsample ours_x4 drbnet vosr2 0 --dry-run        # print the exact commands
+#     code/experiments/launch.sh upsample ours_x4 drbnet vosr2 0 --scenes 1P0A1046   # smoke test, 1 scene
+#     code/experiments/launch.sh upsample ours_x4 drbnet vosr2 0                  # all 76
+#     code/experiments/launch.sh upsample official_x4 drbnet vosr2 0              # diagnostic
+#     code/experiments/launch.sh study ours_x4 s3diff 1                           # drbnet then bokehlicious, GPU 1
+#     nohup code/experiments/launch.sh study ours_x4 vosr2 0 > vosr2.log 2>&1 &    # long runs: detach
 #
 #   fresh = in this order, all 76, scored (registry models only; s3diff / vosr via `study`):
-#     deblur  {input, drbnet, bokehlicious, restormer, lakdnet, ifan} on ours_x4, official_x4, ours_x1
-#     run     {drbnet, bokehlicious} x {bicubic, hat_l, hat_real, swinir_real, osediff}
+#     deblur    {ours_x4, official_x4, ours_x1} x {input, drbnet, bokehlicious, restormer, lakdnet, ifan}
+#     upsample  ours_x4 x {drbnet, bokehlicious} x {bicubic, hat_l, hat_real, swinir_real, osediff}
 #   then `compare` (should match the handoff-3 numbers) and `summary`.
 #
 # ENVIRONMENT (nothing is hard-coded; set these in your shell or an env file, then `source` it)
@@ -195,10 +197,10 @@ check() {
 fresh() {
   local gpu="${1:-0}"
   for src in "${FRESH_SRC[@]}"; do
-    for m in "${FRESH_DEBLUR[@]}"; do "$PY" "$LAUNCH" deblur --model "$m" --src "$src" --gpu "$gpu" --eval; done
+    for m in "${FRESH_DEBLUR[@]}"; do "$PY" "$LAUNCH" deblur --src "$src" --model "$m" --gpu "$gpu" --eval; done
   done
   for a in "${STUDY_ANCHORS[@]}"; do
-    for sr in "${FRESH_SR[@]}"; do "$PY" "$LAUNCH" upsample --anchor "$a" --sr "$sr" --gpu "$gpu" --eval; done
+    for sr in "${FRESH_SR[@]}"; do "$PY" "$LAUNCH" upsample --src ours_x4 --anchor "$a" --sr "$sr" --gpu "$gpu" --eval; done
   done
   "$PY" "$LAUNCH" compare
 }
@@ -218,16 +220,16 @@ case "$cmd" in
   list)    "$PY" "$LAUNCH" list ;;
   summary) "$PY" "$LAUNCH" summary "$@" ;;
   compare) "$PY" "$LAUNCH" compare ;;
-  deblur)  [[ $# -ge 2 ]] || die "deblur MODEL SRC [GPU] [launch.py args]"
-           m="$1" src="$2" gpu="${3:-0}"; shift $(( $# >= 3 ? 3 : 2 ))
-           "$PY" "$LAUNCH" deblur --model "$m" --src "$src" --gpu "$gpu" --eval "$@" ;;
-  run)     [[ $# -ge 2 ]] || die "run ANCHOR SR [GPU] [launch.py args]"
-           anchor="$1" sr="$2" gpu="${3:-0}"; shift $(( $# >= 3 ? 3 : 2 ))
-           "$PY" "$LAUNCH" upsample --anchor "$anchor" --sr "$sr" --gpu "$gpu" --eval "$@" ;;
-  study)   [[ $# -ge 1 ]] || die "study SR [GPU] [launch.py args]"
-           sr="$1" gpu="${2:-0}"; shift $(( $# >= 2 ? 2 : 1 ))
+  deblur)  [[ $# -ge 2 ]] || die "deblur SRC MODEL [GPU] [launch.py args]"
+           src="$1" m="$2" gpu="${3:-0}"; shift $(( $# >= 3 ? 3 : 2 ))
+           "$PY" "$LAUNCH" deblur --src "$src" --model "$m" --gpu "$gpu" --eval "$@" ;;
+  upsample) [[ $# -ge 3 ]] || die "upsample SRC MODEL SR [GPU] [launch.py args]"
+           src="$1" m="$2" sr="$3" gpu="${4:-0}"; shift $(( $# >= 4 ? 4 : 3 ))
+           "$PY" "$LAUNCH" upsample --src "$src" --anchor "$m" --sr "$sr" --gpu "$gpu" --eval "$@" ;;
+  study)   [[ $# -ge 2 ]] || die "study SRC SR [GPU] [launch.py args]"
+           src="$1" sr="$2" gpu="${3:-0}"; shift $(( $# >= 3 ? 3 : 2 ))
            for a in "${STUDY_ANCHORS[@]}"; do
-             "$PY" "$LAUNCH" upsample --anchor "$a" --sr "$sr" --gpu "$gpu" --eval "$@"
+             "$PY" "$LAUNCH" upsample --src "$src" --anchor "$a" --sr "$sr" --gpu "$gpu" --eval "$@"
            done ;;
   fresh)   fresh "$@" ;;
   *)       die "unknown command '$cmd' (see: $0 help)" ;;

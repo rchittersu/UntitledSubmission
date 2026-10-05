@@ -310,7 +310,7 @@ $UHDD_RESULTS/dpdd/
   across inputs / targets / masks / DP maps **and across sources**, sizes (×4 = native / 4, official = ours ×4), and
   content (official vs ours ×4 per-scene PSNR ≈ 39 dB; nearest-thumbnail check against swapped names). Every problem
   is attributed to a source; the launcher refuses unverified sources.
-- `code/scripts/launch.py` (`deblur`, `upsample [--anchor-src ours|official]`, `list`, `summary`, `compare`) and the
+- `code/scripts/launch.py` (`deblur`, `upsample --src ours_x4|official_x4`, `list`, `summary`, `compare`) and the
   wrapper `code/experiments/launch.sh` (setup, `fresh` = the standard set, `study`). Scoring: native outputs against
   `ours_x1` (frozen headline + diagnostics, 64 px border); ×4 outputs against their own source (border 16;
   `official_x4`: headline metrics only). An upsampled official anchor is scored against our native targets and

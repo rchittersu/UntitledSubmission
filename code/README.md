@@ -199,4 +199,4 @@ Full description: `docs/evaluation.md` (metrics, how to run) and `docs/baselines
 - Helpers: `scripts/pair_official.py` (name-paired official splits), `scripts/vae_ceiling.py` (variant B backbone).
 - Manual runs in the results layout `$UHDD_RESULTS/dpdd/` (`uhdd/layout.py`, `docs/evaluation.md` §5.0): inputs linked and
   verified by `scripts/setup_inputs.py`; `scripts/launch.py deblur|upsample|list|summary|compare` (incl. S3Diff, VOSR 2.0 in
-  their own environments, `--anchor-src official`); wrapper + setup notes: `experiments/launch.sh help`.
+  their own environments, anchors from `official_x4`); wrapper + setup notes: `experiments/launch.sh help`.

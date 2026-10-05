@@ -19,7 +19,8 @@ Read first: `code/experiments/launch.sh help`, `docs/evaluation.md` §5.0 (resul
   folder gets a `launch.json` (command, commit, scenes). Sources: `ours_x1`, `ours_x4`, `official_x4`, `ours_x2`.
 - **Fresh start** (user decision): everything is re-run into the new root with `code/scripts/launch.py`
   (wrapper `code/experiments/launch.sh`). `launch_sr.py/.sh` were renamed to `launch.py/.sh` and now also run
-  deblurrers. `--anchor-src official` upsamples an anchor computed on the original DPDD images (diagnostic).
+  deblurrers. CLI: `launch.sh deblur SRC MODEL`, `launch.sh upsample SRC MODEL SR`; `upsample official_x4 …` upsamples an anchor
+  computed on the original DPDD images (diagnostic).
 - **Legacy roots** (`dpdd_v2`, `dpdd_official_x4`, `dpdd_p1`) are kept as they are and never written; they are only
   read by `launch.py compare`.
 - `run_matrix.py`, `run_baselines_bd.sh`, `refsr_baseline.py` still write the legacy layout — **do not use them in
@@ -57,16 +58,16 @@ Defaults come from `$UHDD_REPOS`, `$UHDD_WEIGHTS`, `$UHDD_ENVS` (see `launch.sh 
 other install steps than its `requirements.txt`, follow the README and note it in the deviations table.
 Smoke test, one scene each, then look at the output image:
 ```bash
-code/experiments/launch.sh run drbnet s3diff 0 --scenes <one test scene>
-code/experiments/launch.sh run drbnet vosr2 0 --scenes <one test scene>
+code/experiments/launch.sh upsample ours_x4 drbnet s3diff 0 --scenes <one test scene>
+code/experiments/launch.sh upsample ours_x4 drbnet vosr2 0 --scenes <one test scene>
 ```
 
 ## 3. Fresh standard set (the user may launch these; check them)
 ```bash
 code/experiments/launch.sh fresh 0          # deblur {input + 5} on ours_x4, official_x4, ours_x1; drbnet/bokehlicious x 5 registry upsamplers; then compare
-code/experiments/launch.sh study s3diff 0
-code/experiments/launch.sh study vosr2 1
-code/experiments/launch.sh run drbnet vosr2 0 --anchor-src official     # diagnostic
+code/experiments/launch.sh study ours_x4 s3diff 0
+code/experiments/launch.sh study ours_x4 vosr2 1
+code/experiments/launch.sh upsample official_x4 drbnet vosr2 0          # diagnostic
 ```
 Use several GPUs by launching independent commands on different GPUs (each run is one folder; runs resume).
 

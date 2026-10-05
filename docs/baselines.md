@@ -21,8 +21,8 @@ the table says which. Legend: ✅ done · 🔶 priority · ⏳ todo · [S] secur
 | **C2** | Anchor + HAT-L (classical) / Real-HAT-GAN ×4 | strongest regression SR | registry `hat_l_x4`, `hat_x4_real` | ✅ code + sanity, 🔶 [S] run |
 | **C3** | Anchor + OSEDiff ×4 (one-step diffusion SR) | closest prior to variant B | registry `osediff_x4` | ✅ code (CUDA only), 🔶 [S] run |
 | **C4** | Anchor + SUPIR or SeeSR (multi-step generative SR) | strongest generative prior | external scripts | ⏳ [S] |
-| **C5** | Anchor + S3Diff (one-step, SD-Turbo + degradation-guided LoRA) | recent one-step diffusion SR | `launch.sh run <anchor> s3diff` (`code/external/s3diff_run.py`) | 🔶 [S] manual |
-| **C6** | Anchor + VOSR 2.0 (one-step 1.4B DiT, CVPR 2026) | latest one-step DiT SR (closest to variant B) | `launch.sh run <anchor> vosr2` | 🔶 [S] manual |
+| **C5** | Anchor + S3Diff (one-step, SD-Turbo + degradation-guided LoRA) | recent one-step diffusion SR | `launch.sh upsample ours_x4 <anchor> s3diff` (`code/external/s3diff_run.py`) | 🔶 [S] manual |
+| **C6** | Anchor + VOSR 2.0 (one-step 1.4B DiT, CVPR 2026) | latest one-step DiT SR (closest to variant B) | `launch.sh upsample ours_x4 <anchor> vosr2` | 🔶 [S] manual |
 | **D1** | Anchor + DATSR (reference-based SR, ref = blurry native input) | closest prior to the exemplar memory | `refsr_baseline.py` | ✅ code + sanity, 🔶 [S] run |
 | **D2** | ReFIR (SeeSR + retrieval augmentation, NeurIPS 2024) | reference-grounded diffusion restoration | — | ✗ not planned (multi-step, ~50 steps via SeeSR/SUPIR; user 2026-10-05) |
 | **D3** | iRAG (retrieval-augmented RefSR diffusion, ICCV 2025) | recent diffusion RefSR | — | ✗ not planned (multi-step, 50 DDIM steps; user 2026-10-05) |
@@ -113,7 +113,7 @@ no in-focus damage); B2–B5 lose 0.14–0.37 dB.
 input source** or **one ×4 anchor + one ×4 upsampler** by hand, into the results layout of `docs/evaluation.md` §5.0
 (`$UHDD_RESULTS/dpdd/deblur/<src>/…`, `…/upsample/<src>/<anchor>@whole/<sr>@<tiling>/`; PNGs, `meta.json`,
 `launch.json`, `metrics_dpdd4.*`). Anchors for the upsampler study (user's visual pick): **DRBNet** and **Bokehlicious**.
-`--anchor-src official` takes the anchor from the original DPDD images (diagnostic: scored against our native targets).
+Source `official_x4` takes the anchor from the original DPDD images (diagnostic: scored against our native targets).
 Registry upsamplers run through `run_model.py`; S3Diff and VOSR run their own code in their own Python environments
 (pinned, mutually incompatible versions) on 8-bit copies of the anchor. Fresh start for all runs (user, 2026-10-05):
 `fresh` re-runs the standard set, `compare` checks it against the legacy results.
@@ -121,9 +121,9 @@ Registry upsamplers run through `run_model.py`; S3Diff and VOSR run their own co
 ```bash
 code/experiments/launch.sh setup inputs --protect-legacy          # once: link + verify inputs (required)
 code/experiments/launch.sh setup vosr && code/experiments/launch.sh check
-code/experiments/launch.sh deblur drbnet official_x4 0            # Table 1 row on the original images
-code/experiments/launch.sh run drbnet vosr2 0 --scenes 1P0A1046   # smoke test
-code/experiments/launch.sh study vosr2 0                          # drbnet + bokehlicious, scored
+code/experiments/launch.sh deblur official_x4 drbnet 0                     # Table 1 row on the original images
+code/experiments/launch.sh upsample ours_x4 drbnet vosr2 0 --scenes 1P0A1046   # smoke test
+code/experiments/launch.sh study ours_x4 vosr2 0                           # drbnet + bokehlicious, scored
 code/experiments/launch.sh fresh 0                                # standard set from scratch, then compare
 code/experiments/launch.sh summary
 ```

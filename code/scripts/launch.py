@@ -5,23 +5,23 @@ Meant to be read and run by hand (shell wrapper with setup notes: code/experimen
 own folder (PNGs + meta.json + launch.json; --eval adds metrics_dpdd4.csv/json next to the images):
 
     $UHDD_RESULTS/dpdd/deblur/<src>/<model>@<tiling>/
-    $UHDD_RESULTS/dpdd/upsample/<anchor src>_x4/<anchor>@whole/<sr>@<tiling>/
+    $UHDD_RESULTS/dpdd/upsample/<src>/<anchor>@whole/<sr>@<tiling>/        <src> = x4 source of the anchor
 
 USAGE
     python code/scripts/setup_inputs.py                                     # once: link + verify inputs (required)
     python code/scripts/launch.py list                                      # sources, models, runs and their state
-    python code/scripts/launch.py deblur --model drbnet --src ours_x4 --eval          # Table 1 row (scored at x4)
-    python code/scripts/launch.py deblur --model drbnet --src official_x4 --eval      # same on the original images
-    python code/scripts/launch.py deblur --model restormer --src ours_x1 --eval       # native, paper tiling
-    python code/scripts/launch.py upsample --anchor drbnet --sr vosr2 --gpu 0 --eval  # x4 anchor + x4 upsampler
-    python code/scripts/launch.py upsample --anchor drbnet --sr vosr2 --anchor-src official --eval   # diagnostic
+    python code/scripts/launch.py deblur --src ours_x4 --model drbnet --eval          # Table 1 row (scored at x4)
+    python code/scripts/launch.py deblur --src official_x4 --model drbnet --eval      # same on the original images
+    python code/scripts/launch.py deblur --src ours_x1 --model restormer --eval       # native, paper tiling
+    python code/scripts/launch.py upsample --src ours_x4 --anchor drbnet --sr vosr2 --gpu 0 --eval   # x4 anchor + x4 SR
+    python code/scripts/launch.py upsample --src official_x4 --anchor drbnet --sr vosr2 --eval      # diagnostic
     python code/scripts/launch.py summary                                   # tables (with CIs) of everything scored
     python code/scripts/launch.py compare                                   # fresh results vs legacy (handoff 2/3)
     any run: --scenes 1P0A1046,1P0A2030 (or a file), --dry-run (print the commands only)
 
 WHAT HAPPENS
     deblur   : run_model.py on inputs/<src>, tiling = the model's paper setup at that resolution (or --tile).
-    upsample : the anchor = deblur of inputs/<anchor src>_x4 with the anchor's paper setup (whole image at x4; run
+    upsample : the anchor = deblur of inputs/<src> (an x4 source) with the anchor's paper setup (whole image at x4; run
                first if missing), then the upsampler. Registry upsamplers (bicubic, hat_l, hat_real, swinir_real,
                osediff) run through run_model.py with their paper tiling; external tools (s3diff, vosr2, vosr_0.5b) run
                their own code in their own Python env on 8-bit copies of the anchor, with their own tiling.
@@ -252,8 +252,10 @@ def external_cmd(sr: str, lr8: Path, out: Path, only: str | None) -> tuple[list,
     return cmd, {"PYTHONPATH": env("VOSR_REPO")}
 
 
-def upsample(anchor: str, sr: str, anchor_src: str, names: list[str], gpu: str, dry: bool, ev: bool) -> Path:
-    src = f"{anchor_src}_x4"
+def upsample(src: str, anchor: str, sr: str, names: list[str], gpu: str, dry: bool, ev: bool) -> Path:
+    if layout.source(src)["scale"] != 4:
+        sys.exit(f"upsample needs an x4 source (x4 upsamplers), got {src}")
+    official = src.startswith("official")
     man = require(src, layout.NATIVE)
     a_out = deblur(anchor, src, names, gpu, dry, ev=False)
     a_tag = a_out.name
@@ -262,7 +264,7 @@ def upsample(anchor: str, sr: str, anchor_src: str, names: list[str], gpu: str, 
     else:
         s_tag = step_tag(REGISTRY_SR[sr], hw_of(man, src))[0]
     out = layout.upsample_dir(src, a_tag, s_tag)
-    label = f"{anchor} @x4 ({anchor_src}) + {sr}" + (" [diagnostic: official rendering]" if anchor_src == "official" else "")
+    label = f"{anchor} @x4 ({src}) + {sr}" + (" [diagnostic: official rendering]" if official else "")
     left = todo(out, names)
     print(f"== upsample {a_tag} + {s_tag} ({src}): {len(names)} scenes, {len(left)} to run -> {out}")
     rec = {"stage": "upsample", "src": src, "anchor": anchor, "anchor_dir": str(a_out), "sr": sr, "scenes": left}
@@ -373,16 +375,16 @@ def main():
     common.add_argument("--eval", action="store_true", help=f"also score (tag {TAG})")
     common.add_argument("--dry-run", action="store_true", help="print the commands, run nothing")
     d = sub.add_parser("deblur", parents=[common], help="one deblurrer on one input source")
-    d.add_argument("--model", required=True, help=f"{', '.join(DEBLUR)} or a registry name")
     d.add_argument("--src", required=True, choices=list(layout.SOURCES))
+    d.add_argument("--model", required=True, help=f"{', '.join(DEBLUR)} or a registry name")
     d.add_argument("--tile", type=int, help="override the paper tiling (input px; 0 = whole image)")
     d.add_argument("--overlap", type=int, help="default: tile / 8")
     u = sub.add_parser("upsample", parents=[common], help="x4 anchor + x4 upsampler, output at native resolution")
+    u.add_argument("--src", required=True, choices=[s for s, v in layout.SOURCES.items() if v["scale"] == 4],
+                   help="x4 input of the anchor: ours_x4 (our raw-built rendering) or official_x4 (the original DPDD "
+                        "images; diagnostic, scored against our native targets)")
     u.add_argument("--anchor", required=True, help=f"{', '.join(DEBLUR)} or a registry name")
     u.add_argument("--sr", required=True, choices=list(REGISTRY_SR) + list(EXTERNAL_SR))
-    u.add_argument("--anchor-src", default="ours", choices=["ours", "official"],
-                   help="x4 input of the anchor: our raw-built rendering (default) or the original DPDD images "
-                        "(diagnostic: scored against our native targets)")
     sub.add_parser("list")
     s = sub.add_parser("summary")
     s.add_argument("--stage", choices=["deblur", "upsample", "fusion"])
@@ -400,9 +402,7 @@ def main():
         deblur(model_name(a.model, DEBLUR), a.src, scene_names(a.src, a.scenes), a.gpu, a.dry_run, a.eval,
                a.tile, a.overlap)
     else:
-        src = f"{a.anchor_src}_x4"
-        upsample(model_name(a.anchor, DEBLUR), a.sr, a.anchor_src, scene_names(src, a.scenes), a.gpu, a.dry_run,
-                 a.eval)
+        upsample(a.src, model_name(a.anchor, DEBLUR), a.sr, scene_names(a.src, a.scenes), a.gpu, a.dry_run, a.eval)
 
 
 if __name__ == "__main__":
