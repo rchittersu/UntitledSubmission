@@ -26,7 +26,8 @@ WHAT HAPPENS
                osediff, s3diff, vosr2, vosr_0.5b) is a registry model run through run_model.py in the main env with
                its paper tiling (overlap tile/8, linear blending); S3Diff / VOSR via uhdd/adapters (per-tile
                official path, per-image latent noise shared by overlapping tiles).
-    --eval   : evaluate.py, tag dpdd4. Native outputs: the frozen headline + diagnostics against inputs/ours_x1 (DP
+    --eval   : evaluate.py, tag dpdd4 (skipped when metrics_dpdd4.json already covers every PNG and is newer;
+               --rescore forces it). Native outputs: the frozen headline + diagnostics against inputs/ours_x1 (DP
                maps, masks, 64 px border). x4 outputs: against the targets of the same source, border 16 px;
                official_x4 has no masks -> headline metrics only. An upsampled official anchor is scored against
                our native targets (other rendering): diagnostic only, labelled so.
@@ -174,8 +175,22 @@ def provenance(out: Path, rec: dict, dry: bool) -> None:
     p.write_text(json.dumps(hist, indent=1))
 
 
-def evaluate(out: Path, src: str, label: str, gpu: str, dry: bool, native_targets: bool) -> None:
-    """Score `out` (tag dpdd4). native_targets: output at native resolution -> ours_x1 targets."""
+def scored_current(out: Path) -> bool:
+    """metrics_<TAG>.json exists, covers every PNG in `out` and is newer than all of them."""
+    m = out / f"metrics_{TAG}.json"
+    pngs = list(out.glob("*.png"))
+    if not (m.exists() and pngs):
+        return False
+    return (json.loads(m.read_text()).get("n_images") == len(pngs)
+            and m.stat().st_mtime >= max(p.stat().st_mtime for p in pngs))
+
+
+def evaluate(out: Path, src: str, label: str, gpu: str, dry: bool, native_targets: bool, force: bool = False) -> None:
+    """Score `out` (tag dpdd4). native_targets: output at native resolution -> ours_x1 targets. Skipped when the
+    metrics are current (all PNGs scored, nothing newer), unless `force`."""
+    if not force and not dry and scored_current(out):
+        print(f"  scored: {out / f'metrics_{TAG}.json'} (current; --rescore to redo)")
+        return
     if native_targets:
         s, scale, metrics = layout.NATIVE, 1, METRICS_NATIVE
     else:
@@ -191,7 +206,7 @@ def evaluate(out: Path, src: str, label: str, gpu: str, dry: bool, native_target
 
 # ---------------------------------------------------------------- stages
 def deblur(model: str, src: str, names: list[str], gpu: str, dry: bool, ev: bool,
-           tile: int | None = None, overlap: int | None = None) -> Path:
+           tile: int | None = None, overlap: int | None = None, force: bool = False) -> Path:
     man = require(src, layout.NATIVE)
     t, tile, overlap = step_tag(model, hw_of(man, src), tile, overlap)
     out = layout.deblur_dir(src, t)
@@ -208,11 +223,12 @@ def deblur(model: str, src: str, names: list[str], gpu: str, dry: bool, ev: bool
         provenance(out, {"stage": "deblur", "src": src, "model": model, "tile": tile, "overlap": overlap,
                          "scenes": left, "cmd": " ".join(map(str, cmd))}, dry)
     if ev:
-        evaluate(out, src, label, gpu, dry, native_targets=layout.source(src)["scale"] == 1)
+        evaluate(out, src, label, gpu, dry, native_targets=layout.source(src)["scale"] == 1, force=force)
     return out
 
 
-def upsample(src: str, anchor: str, sr: str, names: list[str], gpu: str, dry: bool, ev: bool) -> Path:
+def upsample(src: str, anchor: str, sr: str, names: list[str], gpu: str, dry: bool, ev: bool,
+             force: bool = False) -> Path:
     if layout.source(src)["scale"] != 4:
         sys.exit(f"upsample needs an x4 source (x4 upsamplers), got {src}")
     official = src.startswith("official")
@@ -233,7 +249,7 @@ def upsample(src: str, anchor: str, sr: str, names: list[str], gpu: str, dry: bo
         run(cmd, dry)
         provenance(out, {**rec, "tile": tile, "overlap": overlap, "cmd": " ".join(map(str, cmd))}, dry)
     if ev:
-        evaluate(out, src, label, gpu, dry, native_targets=True)
+        evaluate(out, src, label, gpu, dry, native_targets=True, force=force)
     return out
 
 
@@ -312,7 +328,8 @@ def main():
     common.add_argument("--scenes", default="all", help="'all' (default), comma list, or a file with one name per line")
     common.add_argument("--gpu", default="0", help="'0', '0,1,3' or 'all': scenes are split over these GPUs "
                                                      "(one process per GPU)")
-    common.add_argument("--eval", action="store_true", help=f"also score (tag {TAG})")
+    common.add_argument("--eval", action="store_true", help=f"also score (tag {TAG}); skipped if already current")
+    common.add_argument("--rescore", action="store_true", help="score again even if the metrics are current")
     common.add_argument("--dry-run", action="store_true", help="print the commands, run nothing")
     d = sub.add_parser("deblur", parents=[common], help="one deblurrer on one input source")
     d.add_argument("--src", required=True, choices=list(layout.SOURCES))
@@ -340,9 +357,10 @@ def main():
         return compare()
     if a.cmd == "deblur":
         deblur(model_name(a.model, DEBLUR), a.src, scene_names(a.src, a.scenes), a.gpu, a.dry_run, a.eval,
-               a.tile, a.overlap)
+               a.tile, a.overlap, a.rescore)
     else:
-        upsample(a.src, model_name(a.anchor, DEBLUR), a.sr, scene_names(a.src, a.scenes), a.gpu, a.dry_run, a.eval)
+        upsample(a.src, model_name(a.anchor, DEBLUR), a.sr, scene_names(a.src, a.scenes), a.gpu, a.dry_run, a.eval,
+                 a.rescore)
 
 
 if __name__ == "__main__":

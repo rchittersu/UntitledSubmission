@@ -54,7 +54,9 @@
 #   SRC: ours_x1 (native), ours_x2, ours_x4, official_x4 (upsample: ours_x4 or official_x4)
 #   GPU: 0 | 0,1,2,3 | all  — scenes are split over the listed GPUs, one process per GPU (run_model.py /
 #        evaluate.py). Each process loads its own copy of the model (VOSR 2.0: 1.4B params in fp32 per GPU).
-#   [args] go to launch.py: --scenes 1P0A1046,1P0A2030 (or a file), --dry-run, --tile N (deblur only)
+#   [args] go to launch.py: --scenes 1P0A1046,1P0A2030 (or a file), --dry-run, --tile N (deblur only), --rescore
+#   Every run is scored (metrics_dpdd4.csv/json next to the images); scoring is skipped when the metrics are current
+#   (cover every PNG, newer than all of them) unless --rescore.
 #
 #   Examples
 #     code/experiments/launch.sh setup inputs --protect-legacy

@@ -368,3 +368,15 @@ def test_run_tiled_calls_prepare_once_with_whole_image():
     fn.prepare = lambda x: seen.append(tuple(x.shape))
     run_tiled(fn, torch.rand(1, 3, 50, 70), TileSpec(32, 4, 2, "linear", 0))
     assert seen == [(1, 3, 50, 70)]
+
+
+def test_launch_scored_current(tmp_path):
+    import json, os, launch
+    (tmp_path / "a.png").write_bytes(b"x")
+    assert not launch.scored_current(tmp_path)
+    m = tmp_path / "metrics_dpdd4.json"
+    m.write_text(json.dumps({"n_images": 1}))
+    os.utime(m, (2e9, 2e9))
+    assert launch.scored_current(tmp_path)
+    (tmp_path / "b.png").write_bytes(b"x")          # new image -> stale
+    assert not launch.scored_current(tmp_path)
