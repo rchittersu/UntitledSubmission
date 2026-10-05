@@ -24,8 +24,8 @@ the table says which. Legend: ✅ done · 🔶 priority · ⏳ todo · [S] secur
 | **C5** | Anchor + S3Diff (one-step, SD-Turbo + degradation-guided LoRA) | recent one-step diffusion SR | `launch_sr.py --sr s3diff` (`code/external/s3diff_run.py`) | 🔶 [S] manual |
 | **C6** | Anchor + VOSR 2.0 (one-step 1.4B DiT, CVPR 2026) | latest one-step DiT SR (closest to variant B) | `launch_sr.py --sr vosr2` | 🔶 [S] manual |
 | **D1** | Anchor + DATSR (reference-based SR, ref = blurry native input) | closest prior to the exemplar memory | `refsr_baseline.py` | ✅ code + sanity, 🔶 [S] run |
-| **D2** | ReFIR (SeeSR + retrieval augmentation, NeurIPS 2024) | reference-grounded diffusion restoration | — | ⏳ candidate (weights: SeeSR/SD2-base, Google Drive) |
-| **D3** | iRAG (retrieval-augmented RefSR diffusion, ICCV 2025) | recent diffusion RefSR | — | ⏳ candidate (weights on Google Drive) |
+| **D2** | ReFIR (SeeSR + retrieval augmentation, NeurIPS 2024) | reference-grounded diffusion restoration | — | ✗ not planned (multi-step, ~50 steps via SeeSR/SUPIR; user 2026-10-05) |
+| **D3** | iRAG (retrieval-augmented RefSR diffusion, ICCV 2025) | recent diffusion RefSR | — | ✗ not planned (multi-step, 50 DDIM steps; user 2026-10-05) |
 | **D4** | C2-Matching / MASA-SR / TTSR | classic Ref-SR | — | ⏳ (weights on Google Drive, CUDA DCN) |
 | **E1** | Native patch-wise: Restormer, LaKDNet-L, DRBNet, Bokehlicious | existing defocus models at native res | registry | ✅ [S] P1 |
 | **E2** | IFAN native patch-wise | — | registry `ifan` | 🔶 [S] runbook step 7 |
