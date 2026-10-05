@@ -1,0 +1,30 @@
+# Control: the five deblurrers on the ORIGINAL DPDD test images (1680x1120, the 76 official test pairs), whole image,
+# same harness / metrics / crop as Table 1 (t1_deblur_x4 in dpdd_eval_v3.yaml). Lets us compare with the published
+# numbers and with our own x4 renderings built from raw.
+# Run: python code/scripts/run_matrix.py code/experiments/dpdd_official_x4.yaml --gpus all
+data:
+  inputs:  {1: "${UHDD_DATA}/dpdd_official/inputs"}
+  targets: {1: "${UHDD_DATA}/dpdd_official/targets"}
+
+results: "${UHDD_RESULTS}/dpdd_official_x4"
+
+run:
+  precision: fp32
+
+eval:
+  tag: dpdd4
+  metrics: psnr,ssim,lpips,dists,musiq,clipiqa
+  crop_native: 16        # = 64 / 4, the border crop Table 1 uses at x4
+  table_cols: psnr,ssim,lpips,dists,musiq,clipiqa,pipeline_time_s,peak_mem_gb
+
+pipelines:
+  - group: official_deblur
+    name: "{m} deblur (official 1680x1120)"
+    for: {m: [restormer_dpdd, lakdnet_dpdd_l, drbnet_single, ifan, bokehlicious_deblur]}
+    steps:
+      - {model: "{m}", scale: 1, tile: 0}
+
+  - group: official_deblur
+    name: "input (blurry) (official 1680x1120)"
+    steps:
+      - {model: identity, scale: 1, tile: 0}
