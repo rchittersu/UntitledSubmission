@@ -41,6 +41,13 @@ class Restorer:
     def __call__(self, x: torch.Tensor, **kw) -> torch.Tensor:
         return self.fn(x, **kw)
 
+    def prepare(self, x: torch.Tensor) -> None:
+        """Per-image state before tiling (adapter's optional `fn.prepare(whole image)`, e.g. a global degradation
+        score or a latent noise field shared by all tiles)."""
+        p = getattr(self.fn, "prepare", None)
+        if p is not None:
+            p(x)
+
 
 def _expand(v: Any) -> Any:
     """Expand ${ENV_VARS} recursively; unresolved variables are an error (no silent paths)."""

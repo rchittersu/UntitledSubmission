@@ -194,9 +194,10 @@ Full description: `docs/evaluation.md` (metrics, how to run) and `docs/baselines
   (`--tune` on val). Reference-based SR: `scripts/refsr_baseline.py` (DATSR, mmcv-free via `uhdd/adapters/datsr.py`).
   Both: `code/experiments/run_baselines_bd.sh <anchor model>`.
 - New registry models: `hat_l_x4`, `hat_x4_real` (basicsr-free adapter), `osediff_x4` (CUDA only), `restormer_dpdd_tlc`.
+- `s3diff_x4`, `vosr2_x4`, `vosr_0.5b_x4` (`uhdd/adapters/s3diff.py`, `vosr.py`): one-step generative SR in the main env with our
+  tiling; per-image state via the adapter's `prepare` hook (`run_tiled`), noise shared across tiles (`adapters/noisefield.py`).
 - Tiling defaults per method from its paper (registry `paper_input` / `paper_tile`, `uhdd.tiling.default_tiling`);
   overlap = tile / 8. `run_model.py` without `--tile` and `run_matrix.py` steps without `tile` use them.
 - Helpers: `scripts/pair_official.py` (name-paired official splits), `scripts/vae_ceiling.py` (variant B backbone).
 - Manual runs in the results layout `$UHDD_RESULTS/dpdd/` (`uhdd/layout.py`, `docs/evaluation.md` §5.0): inputs linked and
-  verified by `scripts/setup_inputs.py`; `scripts/launch.py deblur|upsample|list|summary|compare` (incl. S3Diff, VOSR 2.0 in
-  their own environments, anchors from `official_x4`); wrapper + setup notes: `experiments/launch.sh help`.
+  verified by `scripts/setup_inputs.py`; `scripts/launch.py deblur|upsample|list|summary|compare` (anchors from `official_x4`); wrapper + setup notes: `experiments/launch.sh help`.

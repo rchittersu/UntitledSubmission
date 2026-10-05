@@ -48,15 +48,20 @@ Checks (all must pass; a source that fails is refused by the launcher):
 Report: the printed summary + `checks` from `inputs/manifest.json` (PSNR median / min per kind, mismatches).
 `--protect-legacy` removes write permission from the legacy roots (undo: `chmod -R u+w <dir>`).
 
-## 2. External SR environments (S3Diff, VOSR 2.0)
+## 2. S3Diff and VOSR 2.0 (registry models in the main env)
+S3Diff and VOSR are now registry models (`s3diff_x4`, `vosr2_x4`, `vosr_0.5b_x4`; adapters in `code/uhdd/adapters/`)
+run by `run_model.py` in the **one main env** with our tiling, like OSEDiff (docs/baselines.md, "S3Diff and VOSR in our
+pipeline"). Update the main env and fetch code + weights:
 ```bash
-code/experiments/launch.sh setup s3diff
-code/experiments/launch.sh setup vosr
+pip install -r code/requirements.txt          # diffusers >= 0.35, transformers, peft, fairscale, ...
+code/experiments/launch.sh setup s3diff       # $UHDD_REPOS/S3Diff, $UHDD_WEIGHTS/{sd-turbo,s3diff}
+code/experiments/launch.sh setup vosr         # $UHDD_REPOS/VOSR, $UHDD_WEIGHTS/vosr
 code/experiments/launch.sh check
 ```
-Defaults come from `$UHDD_REPOS`, `$UHDD_WEIGHTS`, `$UHDD_ENVS` (see `launch.sh help`). If a repo's README asks for
-other install steps than its `requirements.txt`, follow the README and note it in the deviations table.
-Smoke test, one scene each, then look at the output image:
+Upgrading diffusers/transformers/peft can affect OSEDiff: re-run one OSEDiff scene and compare with its legacy output
+(`compare` after step 3 covers it). If one library version cannot serve all three, report the conflict (versions,
+error) — do not create separate envs without telling the user.
+Smoke test, one scene each, then look at the output image (and `meta.json`: time, peak memory, tiling):
 ```bash
 code/experiments/launch.sh upsample ours_x4 drbnet s3diff 0 --scenes <one test scene>
 code/experiments/launch.sh upsample ours_x4 drbnet vosr2 0 --scenes <one test scene>
@@ -64,13 +69,13 @@ code/experiments/launch.sh upsample ours_x4 drbnet vosr2 0 --scenes <one test sc
 
 ## 3. Fresh standard set (the user may launch these; check them)
 ```bash
-code/experiments/launch.sh fresh 0          # deblur {input + 5} on ours_x4, official_x4, ours_x1; drbnet/bokehlicious x 5 registry upsamplers; then compare
+code/experiments/launch.sh fresh 0          # deblur {input + 5} on ours_x4, official_x4, ours_x1; drbnet/bokehlicious x 5 upsamplers; then compare
 code/experiments/launch.sh study ours_x4 s3diff 0
 code/experiments/launch.sh study ours_x4 vosr2 1
 code/experiments/launch.sh upsample official_x4 drbnet vosr2 0          # diagnostic
 ```
 Multi-GPU: give a GPU list (`0,1,2,3` or `all`) as the GPU argument; the scenes are split over the GPUs (one
-process per GPU, also for S3Diff / VOSR). Independent commands on disjoint GPUs also work (runs resume).
+process per GPU; each loads its own model copy). Independent commands on disjoint GPUs also work (runs resume).
 
 ## 4. Correctness re-check
 ```bash

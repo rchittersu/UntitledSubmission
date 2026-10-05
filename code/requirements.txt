@@ -11,4 +11,9 @@ safetensors     # IFAN weights mirror
 pyiqa           # lpips, dists, musiq, maniqa, clipiqa (optional for other metrics)
 pytest
 rawpy            # develop_raw.py, estimate_gt_mtf.py (CR2 -> linear RGB / raw Bayer)
-diffusers        # vae_ceiling.py (variant B backbone choice)
+diffusers>=0.35  # OSEDiff, S3Diff, VOSR adapters (VOSR's Qwen-Image VAE), vae_ceiling.py
+transformers     # CLIP text encoder (S3Diff), RAM/DAPE (OSEDiff)
+peft             # LoRA layers (OSEDiff, S3Diff)
+fairscale        # VOSR (models/rmsnorm.py), OSEDiff RAM
+requests         # imported by S3Diff / OSEDiff model files
+tqdm

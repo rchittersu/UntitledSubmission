@@ -9,7 +9,7 @@
 #     deblur/<src>/<model>@<tiling>/                    PNGs + meta.json + launch.json (+ metrics_dpdd4.*)
 #     upsample/<src>/<anchor>@whole/<sr>@<tiling>/      same; <src> = where the anchor's x4 input came from
 #     fusion/<src>/<anchor>@whole/<method>/             (training-free fusions, DATSR: not in the launcher yet)
-#     scratch/                                          8-bit copies, scene subsets (safe to delete)
+#     scratch/                                          scene subsets (safe to delete)
 #   Sources <src>: ours_x1 (native), ours_x4 (our raw-built rendering at 1680x1120), official_x4 (the original DPDD
 #   test images), ours_x2. Legacy roots ($UHDD_RESULTS/dpdd_v2, dpdd_official_x4, dpdd_p1) are never written;
 #   `setup inputs --protect-legacy` makes them read-only.
@@ -22,8 +22,9 @@
 #             against our targets (frozen headline + diagnostics, DP maps, 64 px border).
 #             SRC = official_x4: anchor from the original DPDD images; scored against our native targets (other
 #             rendering) -> labelled diagnostic.
-#   Registry upsamplers run through run_model.py; s3diff / vosr run their own code in their own Python env on 8-bit
-#   copies of the anchor. Runs resume (finished images are skipped) and refuse sources that failed verification.
+#   Every model (deblurrers and upsamplers, incl. OSEDiff, S3Diff, VOSR) is a registry model (configs/models.yaml)
+#   run by run_model.py in the ONE main env, with its paper tiling, overlap = tile/8, linear blending. Runs resume
+#   (finished images are skipped) and refuse sources that failed verification.
 #
 #   Deblurrers: input (= identity), drbnet, bokehlicious (study anchors, user's visual pick), restormer, lakdnet, ifan.
 #   Upsamplers:
@@ -32,9 +33,9 @@
 #     hat_real     Real-HAT-GAN x4                  512 / 64
 #     swinir_real  SwinIR-M real-world (BSRGAN) x4  400 / 50
 #     osediff      OSEDiff one-step (SD2.1)         128 / 16 LR px (HR 512)
-#     s3diff       S3Diff one-step (SD-Turbo + degradation-guided LoRA); official latent tiles 96 / 32
-#     vosr2        VOSR 2.0 one-step 1.4B DiT (CVPR 2026); DiT tiles 512 / 64 output px
-#     vosr_0.5b    VOSR 0.5B one-step; same tiling
+#     s3diff       S3Diff one-step (SD-Turbo + degradation LoRA)  192 / 24 LR px (= official latent tile 96)
+#     vosr2        VOSR 2.0 one-step 1.4B DiT (CVPR 2026)  128 / 16 LR px (= official DiT tile 512 output px)
+#     vosr_0.5b    VOSR 0.5B one-step                       128 / 16
 #
 # USAGE
 #   code/experiments/launch.sh help                           this text
@@ -51,8 +52,8 @@
 #   code/experiments/launch.sh summary [--stage S] [--src S]  tables (with CIs) of everything scored
 #   code/experiments/launch.sh compare                        fresh results vs legacy (same harness -> ~equal)
 #   SRC: ours_x1 (native), ours_x2, ours_x4, official_x4 (upsample: ours_x4 or official_x4)
-#   GPU: 0 | 0,1,2,3 | all  — scenes are split over the listed GPUs, one process per GPU (registry models via
-#        run_model.py / evaluate.py; S3Diff / VOSR: one process per GPU on a round-robin shard, output [gpu N]).
+#   GPU: 0 | 0,1,2,3 | all  — scenes are split over the listed GPUs, one process per GPU (run_model.py /
+#        evaluate.py). Each process loads its own copy of the model (VOSR 2.0: 1.4B params in fp32 per GPU).
 #   [args] go to launch.py: --scenes 1P0A1046,1P0A2030 (or a file), --dry-run, --tile N (deblur only)
 #
 #   Examples
@@ -68,44 +69,34 @@
 #     code/experiments/launch.sh upsample ours_x4 drbnet vosr2 0,1,2,3            # 76 scenes split over 4 GPUs
 #     nohup code/experiments/launch.sh study ours_x4 vosr2 all > vosr2.log 2>&1 &  # long runs: detach
 #
-#   fresh = in this order, all 76, scored (registry models only; s3diff / vosr via `study`):
+#   fresh = in this order, all 76, scored (S3Diff / VOSR via `study`, they are the slow ones):
 #     deblur    {ours_x4, official_x4, ours_x1} x {input, drbnet, bokehlicious, restormer, lakdnet, ifan}
 #     upsample  ours_x4 x {drbnet, bokehlicious} x {bicubic, hat_l, hat_real, swinir_real, osediff}
 #   then `compare` (should match the handoff-3 numbers) and `summary`.
 #
 # ENVIRONMENT (nothing is hard-coded; set these in your shell or an env file, then `source` it)
-#   UHDD_DATA, UHDD_RESULTS     as for every other script (required)
-#   UHDD_REPOS                  where third-party code is cloned        (default for *_REPO below)
-#   UHDD_WEIGHTS                where weights are stored                (default for S3DIFF_SD / S3DIFF_PKL)
-#   UHDD_ENVS                   where the per-tool Python envs live     (default for *_PY below)
+#   UHDD_DATA, UHDD_RESULTS     data and results roots (required)
+#   UHDD_REPOS, UHDD_WEIGHTS    third-party code / weights (model paths: code/configs/models.yaml)
+#   PY                          python of the main env (default: python on PATH)
 #
-#   S3DIFF_REPO   S3Diff checkout                         default $UHDD_REPOS/S3Diff
-#   S3DIFF_PY     python of the S3Diff env                default $UHDD_ENVS/s3diff/bin/python
-#   S3DIFF_SD     local snapshot of stabilityai/sd-turbo  default $UHDD_WEIGHTS/sd-turbo
-#   S3DIFF_PKL    s3diff.pkl                              default $UHDD_WEIGHTS/s3diff/s3diff.pkl
-#   VOSR_REPO     VOSR checkout                           default $UHDD_REPOS/VOSR
-#   VOSR_PY       python of the VOSR env                  default $UHDD_ENVS/vosr/bin/python
-#   VOSR_CKPTS    folder with VOSR2/, VOSR_0.5B_os/, Qwen-Image-vae-2d/, torch_cache/ ...
-#                                                         default $VOSR_REPO/preset/ckpts
-#   PY            python of the main uhdd env             default: python on PATH
+# SETUP (one time; `setup s3diff` / `setup vosr` runs exactly these steps). One Python env for everything:
+#   pip install -r code/requirements.txt (diffusers >= 0.35, transformers, peft, fairscale, ...). Both adapters were
+#   checked outside on CPU with tiny random models against diffusers 0.40 / peft 0.21 / transformers 5.18.
 #
-# SETUP (one time; `setup s3diff` / `setup vosr` runs exactly these steps)
-#   The two tools pin mutually incompatible torch / diffusers versions, so each gets its own env; the main uhdd env
-#   is untouched. Registry upsamplers need nothing beyond the main env (OSEDiff setup: docs/baselines.md, C3).
+#   S3Diff — github.com/ArcticHare105/S3Diff (Apache-2.0)            registry s3diff_x4, uhdd/adapters/s3diff.py
+#     code     $UHDD_REPOS/S3Diff (de_net.pth ships in assets/mm-realsr/)
+#     weights  $UHDD_WEIGHTS/sd-turbo (stabilityai/sd-turbo), $UHDD_WEIGHTS/s3diff/s3diff.pkl (zhangap/S3Diff)
+#     per tile: bilinear x4, VAE posterior sample (shared per-image noise), UNet t=999 with CFG 1.07 (official
+#     prompts), one DDPM step, decode, wavelet colour fix; degradation score from DEResNet on the whole LR image.
 #
-#   S3Diff — github.com/ArcticHare105/S3Diff (Apache-2.0)
-#     env      torch 2.1, diffusers 0.25.1, peft 0.10, xformers (the repo's requirements.txt)
-#     weights  sd-turbo snapshot (huggingface.co/stabilityai/sd-turbo),
-#              s3diff.pkl (huggingface.co/zhangap/S3Diff), de_net.pth ships in the repo (assets/mm-realsr/)
-#     run      code/external/s3diff_run.py = the official loop of src/inference_s3diff.py (bilinear x4, latent
-#              tiles 96/32, wavelet colour fix) without the official end-of-run pyiqa scoring; per-image time in meta.json
+#   VOSR — github.com/cswry/VOSR (Apache-2.0, CVPR 2026)              registry vosr2_x4 / vosr_0.5b_x4, adapters/vosr.py
+#     code     $UHDD_REPOS/VOSR
+#     weights  $UHDD_WEIGHTS/vosr = CSWRY/VOSR (VOSR2/, VOSR_0.5B_os/, Qwen-Image-vae-2d/, stable-diffusion-2-1-base/,
+#              sd21_lwdecoder.pth, torch_cache/ = DINOv2 hub code + weights, loaded offline)
+#     per tile: bicubic x4, VAE posterior mode, DINOv2 features of the tile, one flow step from noise (shared per-image
+#     noise, seed 42), decode, wavelet (Gaussian sigma 5) colour fix. Config from the checkpoint's args.json.
 #
-#   VOSR — github.com/cswry/VOSR (Apache-2.0, CVPR 2026)
-#     env      torch 2.5.1, diffusers 0.35 (the repo's requirements.txt)
-#     weights  huggingface.co/CSWRY/VOSR -> $VOSR_CKPTS (VOSR2/, VOSR_0.5B_os/, Qwen-Image VAE, DINOv2 torch cache)
-#     run      official inference_vosr_onestep.py -u 4 --tile_size 512 --tile_overlap 64, wavelet colour fix,
-#              deterministic VAE posterior; no per-image timing -> meta.json gets wall time / n
-#
+#   Fidelity reference (optional): code/external/s3diff_run.py reproduces the official S3Diff script (its own env).
 #   Needs: git, huggingface-cli (pip install -U "huggingface_hub[cli]"), CUDA GPU. Set HF_TOKEN if a repo is gated.
 #
 # OUTPUT CHECKS (after a run)
@@ -125,55 +116,34 @@ FRESH_DEBLUR=(input drbnet bokehlicious restormer lakdnet ifan)
 FRESH_SRC=(ours_x4 official_x4 ours_x1)
 FRESH_SR=(bicubic hat_l hat_real swinir_real osediff)
 
-export S3DIFF_REPO="${S3DIFF_REPO:-${UHDD_REPOS:-}/S3Diff}"
-export S3DIFF_PY="${S3DIFF_PY:-${UHDD_ENVS:-}/s3diff/bin/python}"
-export S3DIFF_SD="${S3DIFF_SD:-${UHDD_WEIGHTS:-}/sd-turbo}"
-export S3DIFF_PKL="${S3DIFF_PKL:-${UHDD_WEIGHTS:-}/s3diff/s3diff.pkl}"
-export VOSR_REPO="${VOSR_REPO:-${UHDD_REPOS:-}/VOSR}"
-export VOSR_PY="${VOSR_PY:-${UHDD_ENVS:-}/vosr/bin/python}"
-export VOSR_CKPTS="${VOSR_CKPTS:-$VOSR_REPO/preset/ckpts}"
-
 usage() { sed -n '3,/^# =====/p' "${BASH_SOURCE[0]}" | sed '$d; s/^# \{0,1\}//'; }
 die() { echo "error: $*" >&2; exit 1; }
 need() { for v in "$@"; do [[ -n "${!v:-}" ]] || die "set \$$v (see: $0 help)"; done; }
 step() { echo; echo ">> $*"; }
 
 show_env() {
-  for v in UHDD_DATA UHDD_RESULTS UHDD_REPOS UHDD_WEIGHTS UHDD_ENVS PY \
-           S3DIFF_REPO S3DIFF_PY S3DIFF_SD S3DIFF_PKL VOSR_REPO VOSR_PY VOSR_CKPTS; do
+  for v in UHDD_DATA UHDD_RESULTS UHDD_REPOS UHDD_WEIGHTS PY; do
     printf '  %-13s %s\n' "$v" "${!v:-<unset>}"
   done
 }
 
-make_env() {  # make_env NAME REPO  -> venv under $UHDD_ENVS/NAME with the repo's requirements
-  local name="$1" repo="$2" envdir="$UHDD_ENVS/$1"
-  if [[ -x "$envdir/bin/python" ]]; then echo "env exists: $envdir"; return; fi
-  "${ENV_PYTHON:-python3.10}" -m venv "$envdir"   # ENV_PYTHON: base interpreter for the tool envs (3.10 works for both)
-  "$envdir/bin/pip" install -U pip wheel
-  "$envdir/bin/pip" install -r "$repo/requirements.txt"
-  "$envdir/bin/pip" install opencv-python-headless pillow
-}
-
 setup_s3diff() {
-  need UHDD_REPOS UHDD_WEIGHTS UHDD_ENVS
-  step "clone S3Diff -> $S3DIFF_REPO"
-  [[ -d "$S3DIFF_REPO/.git" ]] || git clone https://github.com/ArcticHare105/S3Diff "$S3DIFF_REPO"
-  step "python env -> $UHDD_ENVS/s3diff (torch 2.1, diffusers 0.25.1, peft 0.10, xformers)"
-  make_env s3diff "$S3DIFF_REPO"
-  step "weights: sd-turbo -> $S3DIFF_SD, s3diff.pkl -> $(dirname "$S3DIFF_PKL")"
-  huggingface-cli download stabilityai/sd-turbo --local-dir "$S3DIFF_SD"
-  huggingface-cli download zhangap/S3Diff s3diff.pkl --local-dir "$(dirname "$S3DIFF_PKL")"
-  [[ -f "$S3DIFF_REPO/assets/mm-realsr/de_net.pth" ]] || echo "WARNING: de_net.pth not found in the repo (assets/mm-realsr/)"
+  need UHDD_REPOS UHDD_WEIGHTS
+  step "clone S3Diff -> $UHDD_REPOS/S3Diff"
+  [[ -d "$UHDD_REPOS/S3Diff/.git" ]] || git clone https://github.com/ArcticHare105/S3Diff "$UHDD_REPOS/S3Diff"
+  step "weights: sd-turbo -> $UHDD_WEIGHTS/sd-turbo, s3diff.pkl -> $UHDD_WEIGHTS/s3diff"
+  huggingface-cli download stabilityai/sd-turbo --local-dir "$UHDD_WEIGHTS/sd-turbo"
+  huggingface-cli download zhangap/S3Diff s3diff.pkl --local-dir "$UHDD_WEIGHTS/s3diff"
+  [[ -f "$UHDD_REPOS/S3Diff/assets/mm-realsr/de_net.pth" ]] || echo "WARNING: de_net.pth not found in the repo (assets/mm-realsr/)"
 }
 
 setup_vosr() {
-  need UHDD_REPOS UHDD_ENVS
-  step "clone VOSR -> $VOSR_REPO"
-  [[ -d "$VOSR_REPO/.git" ]] || git clone https://github.com/cswry/VOSR "$VOSR_REPO"
-  step "python env -> $UHDD_ENVS/vosr (torch 2.5.1, diffusers 0.35)"
-  make_env vosr "$VOSR_REPO"
-  step "weights: CSWRY/VOSR -> $VOSR_CKPTS"
-  huggingface-cli download CSWRY/VOSR --local-dir "$VOSR_CKPTS"
+  need UHDD_REPOS UHDD_WEIGHTS
+  step "clone VOSR -> $UHDD_REPOS/VOSR"
+  [[ -d "$UHDD_REPOS/VOSR/.git" ]] || git clone https://github.com/cswry/VOSR "$UHDD_REPOS/VOSR"
+  step "weights: CSWRY/VOSR -> $UHDD_WEIGHTS/vosr (VOSR2, VOSR_0.5B_os and what they need)"
+  huggingface-cli download CSWRY/VOSR --local-dir "$UHDD_WEIGHTS/vosr" --include "VOSR2/*" "VOSR_0.5B_os/*" \
+      "Qwen-Image-vae-2d/*" "stable-diffusion-2-1-base/*" "sd21_lwdecoder.pth" "torch_cache/*"
 }
 
 check() {
@@ -184,17 +154,20 @@ check() {
   chk "uhdd imports" "'$PY' -c 'import sys; sys.path.insert(0, \"$ROOT/code\"); import uhdd.layout' 2>/dev/null"
   chk "manifest ok           \$UHDD_RESULTS/dpdd/inputs/manifest.json" \
       "'$PY' -c 'import json,sys; sys.exit(0 if json.load(open(\"$UHDD_RESULTS/dpdd/inputs/manifest.json\"))[\"ok\"] else 1)' 2>/dev/null"
+  chk "main env imports diffusers, transformers, peft, fairscale" \
+      "'$PY' -c 'import diffusers, transformers, peft, fairscale' 2>/dev/null"
+  chk "CUDA available" "'$PY' -c 'import torch, sys; sys.exit(0 if torch.cuda.is_available() else 1)' 2>/dev/null"
   echo "S3Diff"
-  chk "repo        $S3DIFF_REPO" "[[ -f '$S3DIFF_REPO/src/s3diff_tile.py' ]]"
-  chk "de_net.pth"               "[[ -f '$S3DIFF_REPO/assets/mm-realsr/de_net.pth' ]]"
-  chk "sd-turbo    $S3DIFF_SD"   "[[ -d '$S3DIFF_SD' ]]"
-  chk "s3diff.pkl  $S3DIFF_PKL"  "[[ -f '$S3DIFF_PKL' ]]"
-  chk "env imports $S3DIFF_PY"   "'$S3DIFF_PY' -c 'import torch, diffusers, peft; assert torch.cuda.is_available()' 2>/dev/null"
+  chk "repo        \$UHDD_REPOS/S3Diff"            "[[ -f '${UHDD_REPOS:-}/S3Diff/src/s3diff.py' ]]"
+  chk "de_net.pth"                                  "[[ -f '${UHDD_REPOS:-}/S3Diff/assets/mm-realsr/de_net.pth' ]]"
+  chk "sd-turbo    \$UHDD_WEIGHTS/sd-turbo"        "[[ -d '${UHDD_WEIGHTS:-}/sd-turbo/unet' ]]"
+  chk "s3diff.pkl  \$UHDD_WEIGHTS/s3diff"          "[[ -f '${UHDD_WEIGHTS:-}/s3diff/s3diff.pkl' ]]"
   echo "VOSR"
-  chk "repo        $VOSR_REPO"   "[[ -f '$VOSR_REPO/inference_vosr_onestep.py' ]]"
-  chk "VOSR2 ckpt  $VOSR_CKPTS/VOSR2" "[[ -d '$VOSR_CKPTS/VOSR2' ]]"
-  chk "env imports $VOSR_PY"     "'$VOSR_PY' -c 'import torch, diffusers; assert torch.cuda.is_available()' 2>/dev/null"
-  (( ok )) && echo "all checks passed" || echo "some checks failed (registry upsamplers only need the main env)"
+  chk "repo        \$UHDD_REPOS/VOSR"              "[[ -f '${UHDD_REPOS:-}/VOSR/models/lightningdit.py' ]]"
+  chk "VOSR2       \$UHDD_WEIGHTS/vosr/VOSR2"      "[[ -f '${UHDD_WEIGHTS:-}/vosr/VOSR2/args.json' ]]"
+  chk "Qwen VAE    \$UHDD_WEIGHTS/vosr/Qwen-Image-vae-2d" "[[ -d '${UHDD_WEIGHTS:-}/vosr/Qwen-Image-vae-2d' ]]"
+  chk "DINOv2 hub  \$UHDD_WEIGHTS/vosr/torch_cache" "[[ -d '${UHDD_WEIGHTS:-}/vosr/torch_cache/facebookresearch_dinov2_main' ]]"
+  (( ok )) && echo "all checks passed" || echo "some checks failed"
 }
 
 fresh() {

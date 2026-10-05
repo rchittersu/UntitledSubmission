@@ -22,21 +22,19 @@ USAGE
 WHAT HAPPENS
     deblur   : run_model.py on inputs/<src>, tiling = the model's paper setup at that resolution (or --tile).
     upsample : the anchor = deblur of inputs/<src> (an x4 source) with the anchor's paper setup (whole image at x4; run
-               first if missing), then the upsampler. Registry upsamplers (bicubic, hat_l, hat_real, swinir_real,
-               osediff) run through run_model.py with their paper tiling; external tools (s3diff, vosr2, vosr_0.5b) run
-               their own code in their own Python env on 8-bit copies of the anchor, with their own tiling.
+               first if missing), then the upsampler. Every upsampler (bicubic, hat_l, hat_real, swinir_real,
+               osediff, s3diff, vosr2, vosr_0.5b) is a registry model run through run_model.py in the main env with
+               its paper tiling (overlap tile/8, linear blending); S3Diff / VOSR via uhdd/adapters (per-tile
+               official path, per-image latent noise shared by overlapping tiles).
     --eval   : evaluate.py, tag dpdd4. Native outputs: the frozen headline + diagnostics against inputs/ours_x1 (DP
                maps, masks, 64 px border). x4 outputs: against the targets of the same source, border 16 px;
                official_x4 has no masks -> headline metrics only. An upsampled official anchor is scored against
                our native targets (other rendering): diagnostic only, labelled so.
-    --gpu 0,1,2,3 / all: scenes split over the GPUs (run_model.py / evaluate.py shard internally; S3Diff / VOSR get
-               one process per GPU on a round-robin shard).
+    --gpu 0,1,2,3 / all: scenes split over the GPUs (run_model.py / evaluate.py: one process per GPU).
     Runs resume: finished images are skipped. Each run refuses to start unless setup_inputs.py verified its sources.
 
 ENVIRONMENT
-    UHDD_DATA, UHDD_RESULTS                  as for every other script
-    S3DIFF_REPO, S3DIFF_PY, S3DIFF_SD, S3DIFF_PKL     S3Diff checkout, python of its env, sd-turbo dir, s3diff.pkl
-    VOSR_REPO, VOSR_PY, VOSR_CKPTS                    VOSR checkout, python of its env, folder with VOSR2/, ...
+    UHDD_DATA, UHDD_RESULTS, UHDD_REPOS, UHDD_WEIGHTS     as for every other script (model paths: configs/models.yaml)
 """
 from __future__ import annotations
 
@@ -62,14 +60,10 @@ DEBLUR = {  # short name -> registry model (anchors for the upsampler study: drb
     "input": "identity", "drbnet": "drbnet_single", "bokehlicious": "bokehlicious_deblur",
     "restormer": "restormer_dpdd", "lakdnet": "lakdnet_dpdd_l", "ifan": "ifan",
 }
-REGISTRY_SR = {
+REGISTRY_SR = {  # every upsampler runs through run_model.py with its paper tiling (registry, overlap tile/8)
     "bicubic": "bicubic_x4", "hat_l": "hat_l_x4", "hat_real": "hat_x4_real",
     "swinir_real": "swinir_x4_real", "osediff": "osediff_x4",
-}
-EXTERNAL_SR = {  # short name -> (folder tag, description)
-    "s3diff": ("s3diff@lat96o32", "S3Diff one-step (SD-Turbo + degradation-guided LoRA); official latent tiles 96/32"),
-    "vosr2": ("vosr2@t512o64", "VOSR 2.0 one-step 1.4B DiT (CVPR 2026); DiT tiles 512 output px, overlap 64"),
-    "vosr_0.5b": ("vosr_0.5b@t512o64", "VOSR 0.5B one-step; same tiling"),
+    "s3diff": "s3diff_x4", "vosr2": "vosr2_x4", "vosr_0.5b": "vosr_0.5b_x4",
 }
 METRICS_NATIVE = "psnr,ssim,lpips,dists,musiq,clipiqa,msres,hb,blurbins,percbins,noharm,apsnr"
 METRICS_LOWRES = "psnr,ssim,lpips,dists,musiq,clipiqa,hb,blurbins,percbins,noharm,apsnr"
@@ -79,13 +73,6 @@ COLS = {"deblur": "psnr,ssim,lpips,dists,musiq,clipiqa,dpsnr_b0,time_s",
 
 
 # ---------------------------------------------------------------- helpers
-def env(name: str) -> str:
-    v = os.environ.get(name)
-    if not v:
-        sys.exit(f"set ${name} (see code/experiments/launch.sh help)")
-    return v
-
-
 def registry() -> dict:
     import yaml
     return yaml.safe_load((CODE / "configs" / "models.yaml").read_text())["models"]
@@ -159,58 +146,6 @@ def run(cmd: list, dry: bool, extra_env: dict | None = None) -> float:
     return time.time() - t
 
 
-def gpu_list(spec: str) -> list[str]:
-    """'0' / '0,1,3' / 'all' -> GPU ids (strings for CUDA_VISIBLE_DEVICES). 'all' = $CUDA_VISIBLE_DEVICES, else every
-    GPU nvidia-smi lists."""
-    spec = (spec or "0").strip().lower()
-    if spec != "all":
-        return [g for g in spec.split(",") if g]
-    vis = os.environ.get("CUDA_VISIBLE_DEVICES")
-    if vis:
-        return [g for g in vis.split(",") if g]
-    try:
-        out = subprocess.run(["nvidia-smi", "-L"], capture_output=True, text=True).stdout
-        n = sum(1 for line in out.splitlines() if line.startswith("GPU "))
-    except OSError:
-        n = 0
-    return [str(i) for i in range(max(n, 1))]
-
-
-def split(names: list[str], gpus: list[str]) -> list[tuple[str, list[str]]]:
-    """Round-robin shards of `names` over `gpus` (empty shards dropped)."""
-    return [(g, names[i::len(gpus)]) for i, g in enumerate(gpus) if names[i::len(gpus)]]
-
-
-def run_parallel(jobs: list[tuple[list, dict]], dry: bool) -> list[float]:
-    """Run commands concurrently (one per GPU), output prefixed with [gpu N]; wall time per job; fail if any fails."""
-    import threading
-    for cmd, e in jobs:
-        pre = " ".join(f"{k}={v}" for k, v in e.items())
-        print(f"  $ {pre} {' '.join(shlex.quote(str(c)) for c in cmd)} &", flush=True)
-    if dry:
-        return [0.0] * len(jobs)
-    t0, procs, threads, dts = time.time(), [], [], [0.0] * len(jobs)
-
-    def pump(i, p, tag):
-        for line in p.stdout:
-            print(f"[gpu {tag}] {line}", end="", flush=True)
-        p.wait()
-        dts[i] = time.time() - t0
-
-    for i, (cmd, e) in enumerate(jobs):
-        p = subprocess.Popen([str(c) for c in cmd], env={**os.environ, **e}, stdout=subprocess.PIPE,
-                             stderr=subprocess.STDOUT, text=True)
-        procs.append(p)
-        threads.append(threading.Thread(target=pump, args=(i, p, e.get("CUDA_VISIBLE_DEVICES", "?"))))
-        threads[-1].start()
-    for t in threads:
-        t.join()
-    bad = [i for i, p in enumerate(procs) if p.returncode]
-    if bad:
-        sys.exit(f"{len(bad)} of {len(jobs)} GPU jobs failed (see [gpu N] output above); rerun to resume")
-    return dts
-
-
 def subset(src: Path, names: list[str], key: str, dry: bool) -> Path:
     """Folder of symlinks to `names` in `src` (run_model.py and VOSR read whole folders)."""
     dst = layout.scratch_dir("subsets", key)
@@ -277,35 +212,6 @@ def deblur(model: str, src: str, names: list[str], gpu: str, dry: bool, ev: bool
     return out
 
 
-def lr8_dir(anchor_out: Path, src: str, anchor_tag: str, names: list[str], dry: bool) -> Path:
-    """8-bit copies of the anchor (S3Diff and VOSR read 8-bit sRGB through PIL)."""
-    out = layout.scratch_dir("lr8", src, anchor_tag)
-    print(f"[lr8] 8-bit copies -> {out}")
-    if dry:
-        return out
-    import cv2
-    out.mkdir(parents=True, exist_ok=True)
-    for n in names:
-        dst = out / f"{n}.png"
-        if not dst.exists():
-            img = cv2.imread(str(anchor_out / f"{n}.png"), cv2.IMREAD_UNCHANGED)
-            if img.dtype != "uint8":
-                img = (img.astype("float32") / 257.0 + 0.5).clip(0, 255).astype("uint8")
-            cv2.imwrite(str(dst), img)
-    return out
-
-
-def external_cmd(sr: str, lr8: Path, out: Path, only: str | None) -> tuple[list, dict]:
-    if sr == "s3diff":
-        cmd = [env("S3DIFF_PY"), CODE / "external" / "s3diff_run.py", "--repo", env("S3DIFF_REPO"),
-               "--inputs", lr8, "--out", out, "--sd-path", env("S3DIFF_SD"), "--pretrained", env("S3DIFF_PKL")]
-        return cmd + (["--only", only] if only else []), {}
-    ckpt = {"vosr2": "VOSR2", "vosr_0.5b": "VOSR_0.5B_os"}[sr]
-    cmd = [env("VOSR_PY"), Path(env("VOSR_REPO")) / "inference_vosr_onestep.py", "-c", Path(env("VOSR_CKPTS")) / ckpt,
-           "-i", lr8, "-o", out, "-u", "4", "--tile_size", "512", "--tile_overlap", "64"]
-    return cmd, {"PYTHONPATH": env("VOSR_REPO")}
-
-
 def upsample(src: str, anchor: str, sr: str, names: list[str], gpu: str, dry: bool, ev: bool) -> Path:
     if layout.source(src)["scale"] != 4:
         sys.exit(f"upsample needs an x4 source (x4 upsamplers), got {src}")
@@ -313,43 +219,19 @@ def upsample(src: str, anchor: str, sr: str, names: list[str], gpu: str, dry: bo
     man = require(src, layout.NATIVE)
     a_out = deblur(anchor, src, names, gpu, dry, ev=False)
     a_tag = a_out.name
-    if sr in EXTERNAL_SR:
-        s_tag = EXTERNAL_SR[sr][0]
-    else:
-        s_tag = step_tag(REGISTRY_SR[sr], hw_of(man, src))[0]
+    s_tag = step_tag(REGISTRY_SR[sr], hw_of(man, src))[0]
     out = layout.upsample_dir(src, a_tag, s_tag)
     label = f"{anchor} @x4 ({src}) + {sr}" + (" [diagnostic: official rendering]" if official else "")
     left = todo(out, names)
     print(f"== upsample {a_tag} + {s_tag} ({src}): {len(names)} scenes, {len(left)} to run -> {out}")
     rec = {"stage": "upsample", "src": src, "anchor": anchor, "anchor_dir": str(a_out), "sr": sr, "scenes": left}
-    if left and sr in REGISTRY_SR:
+    if left:
         _, tile, overlap = step_tag(REGISTRY_SR[sr], hw_of(man, src))
         inp = a_out if len(left) == len(scene_names(src, None)) else subset(a_out, left, f"up_{src}_{a_tag}", dry)
         cmd = [PY, HERE / "run_model.py", "--model", REGISTRY_SR[sr], "--inputs", inp, "--out", out, "--gpus", gpu,
                "--tile", tile, "--overlap", overlap, "--skip-existing"]
         run(cmd, dry)
         provenance(out, {**rec, "tile": tile, "overlap": overlap, "cmd": " ".join(map(str, cmd))}, dry)
-    elif left:
-        # external tools are single-process: one process per GPU, each on its own shard of the scenes
-        lr8 = lr8_dir(a_out, src, a_tag, left, dry)
-        full = len(left) == len(scene_names(src, None))
-        shards = split(left, gpu_list(gpu))
-        jobs = []
-        for g, part in shards:
-            whole = full and len(shards) == 1
-            inp = lr8 if whole or sr == "s3diff" else subset(lr8, part, f"lr8_{src}_{a_tag}_gpu{g}", dry)
-            cmd, extra = external_cmd(sr, inp, out, None if whole else ",".join(part))
-            jobs.append((cmd, {"CUDA_VISIBLE_DEVICES": g, **extra}))
-        dts = run_parallel(jobs, dry)
-        if not dry and sr.startswith("vosr"):   # VOSR writes no timing: shard wall time / shard size (incl. loading)
-            m = out / "meta.json"
-            meta = json.loads(m.read_text()) if m.exists() else {"images": {}, "summary": {"method": sr,
-                                                                                         "note": "time = wall / n"}}
-            for (g, part), dt in zip(shards, dts):
-                meta["images"].update({n: {"time_s": round(dt / len(part), 3), "gpu": g} for n in part})
-            m.write_text(json.dumps(meta, indent=1))
-        provenance(out, {**rec, "gpus": [g for g, _ in shards],
-                         "cmd": [" ".join(map(str, c)) for c, _ in jobs]}, dry)
     if ev:
         evaluate(out, src, label, gpu, dry, native_targets=True)
     return out
@@ -372,8 +254,6 @@ def listing() -> None:
         print("inputs   : not set up (setup_inputs.py)")
     print("deblur   :", ", ".join(f"{k} ({v})" for k, v in DEBLUR.items()))
     print("registry :", ", ".join(f"{k} ({v})" for k, v in REGISTRY_SR.items()))
-    for k, (t, d) in EXTERNAL_SR.items():
-        print(f"external : {k:10s} {d}")
     print(f"\nruns under {r}:")
     for d in runs():
         n = len(list(d.glob("*.png")))
@@ -431,7 +311,7 @@ def main():
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--scenes", default="all", help="'all' (default), comma list, or a file with one name per line")
     common.add_argument("--gpu", default="0", help="'0', '0,1,3' or 'all': scenes are split over these GPUs "
-                                                     "(one process per GPU, also for S3Diff / VOSR)")
+                                                     "(one process per GPU)")
     common.add_argument("--eval", action="store_true", help=f"also score (tag {TAG})")
     common.add_argument("--dry-run", action="store_true", help="print the commands, run nothing")
     d = sub.add_parser("deblur", parents=[common], help="one deblurrer on one input source")
@@ -444,7 +324,7 @@ def main():
                    help="x4 input of the anchor: ours_x4 (our raw-built rendering) or official_x4 (the original DPDD "
                         "images; diagnostic, scored against our native targets)")
     u.add_argument("--anchor", required=True, help=f"{', '.join(DEBLUR)} or a registry name")
-    u.add_argument("--sr", required=True, choices=list(REGISTRY_SR) + list(EXTERNAL_SR))
+    u.add_argument("--sr", required=True, choices=list(REGISTRY_SR))
     sub.add_parser("list")
     s = sub.add_parser("summary")
     s.add_argument("--stage", choices=["deblur", "upsample", "fusion"])

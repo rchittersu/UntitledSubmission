@@ -86,6 +86,9 @@ def run_tiled(fn: Callable[[torch.Tensor], torch.Tensor], x: torch.Tensor, spec:
     H, W = x.shape[-2:]
 
     positional = getattr(fn, "positional", False)
+    prepare = getattr(fn, "prepare", None)
+    if prepare is not None:          # per-image state of the model (whole image, before tiling)
+        prepare(x)
 
     def call(t: torch.Tensor, boxes: list[tuple[int, int, int, int]]) -> torch.Tensor:
         return (fn(t, boxes=boxes, full_hw=(H, W)) if positional else fn(t)).float()

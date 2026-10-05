@@ -7,7 +7,7 @@
       upsample/<src>/<anchor>@<tiling>/<sr>@<tiling>/    same; <src> = where the anchor's input came from
       fusion/<src>/<anchor>@<tiling>/<method>/           training-free fusions, reference-based SR
       tables/<tag>/
-      scratch/                                           8-bit copies, scene subsets (safe to delete)
+      scratch/                                           scene subsets (safe to delete)
 
 Metrics live next to the images. Legacy roots (LEGACY) are never written by anything that uses this module.
 """

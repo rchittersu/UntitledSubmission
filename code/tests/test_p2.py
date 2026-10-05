@@ -296,16 +296,12 @@ def test_ref_builder_counts_tiles_without_candidate():
     assert (rb.tiles, rb.no_candidate) == (1, 1)
 
 
-def test_launch_external_commands(monkeypatch, tmp_path):
+def test_launch_sr_models_are_registry_models():
     import launch
-    for k, v in {"S3DIFF_PY": "/e/s3/python", "S3DIFF_REPO": "/r/S3Diff", "S3DIFF_SD": "/w/sd", "S3DIFF_PKL": "/w/s.pkl",
-                 "VOSR_PY": "/e/vosr/python", "VOSR_REPO": "/r/VOSR", "VOSR_CKPTS": "/w/vosr"}.items():
-        monkeypatch.setenv(k, v)
-    cmd, extra = launch.external_cmd("vosr2", tmp_path / "lr", tmp_path / "out", None)
-    s = " ".join(map(str, cmd))
-    assert "/w/vosr/VOSR2" in s and "--tile_size 512 --tile_overlap 64" in s and "-u 4" in s and extra["PYTHONPATH"] == "/r/VOSR"
-    cmd, _ = launch.external_cmd("s3diff", tmp_path / "lr", tmp_path / "out", "a,b")
-    assert cmd[0] == "/e/s3/python" and cmd[-2:] == ["--only", "a,b"] and "/w/s.pkl" in map(str, cmd)
+    reg = launch.registry()
+    assert all(m in reg for m in launch.REGISTRY_SR.values())
+    assert launch.step_tag("s3diff_x4", (1120, 1680))[1:] == (192, 24)     # official latent tile 96 = 192 LR px
+    assert launch.step_tag("vosr2_x4", (1120, 1680))[1:] == (128, 16)      # official DiT tile 512 out px
 
 
 def test_layout_paths_and_legacy(monkeypatch, tmp_path):
@@ -347,12 +343,28 @@ def test_setup_inputs_name_and_permutation_checks():
     assert sorted(nearest_mismatches(th, swapped)) == [("p", "q"), ("q", "p")]
 
 
-def test_launch_gpu_split(monkeypatch):
-    import launch
-    assert launch.gpu_list("0,2") == ["0", "2"] and launch.gpu_list("1") == ["1"]
-    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "3,5")
-    assert launch.gpu_list("all") == ["3", "5"]
-    names = [f"s{i}" for i in range(5)]
-    sh = launch.split(names, ["0", "1", "2"])
-    assert [g for g, _ in sh] == ["0", "1", "2"] and sorted(n for _, p in sh for n in p) == names
-    assert launch.split(["a"], ["0", "1"]) == [("0", ["a"])]
+def test_noise_field_shared_by_overlapping_tiles():
+    import torch
+    from uhdd.adapters.noisefield import NoiseField, gaussian_color_fix
+    nf = NoiseField(4, 0.5, seed=3)
+    a, b = nf.crop([(0, 0, 32, 32), (0, 16, 32, 32)], (40, 60), "cpu")
+    assert a.shape == (4, 16, 16) and torch.equal(a[:, :, 8:], b[:, :, :8])      # overlap -> same noise
+    nf.reset()
+    assert torch.equal(nf.crop([(0, 0, 32, 32)], (40, 60), "cpu")[0], a)          # seeded per image
+    y, src = torch.rand(1, 3, 64, 64), torch.rand(1, 3, 64, 64)
+    flat = torch.full_like(src, 0.4)
+    out = gaussian_color_fix(flat, src)                                            # low band from src
+    assert torch.allclose(out, gaussian_color_fix(torch.full_like(src, 0.7), src), atol=1e-5)
+
+
+def test_run_tiled_calls_prepare_once_with_whole_image():
+    import torch
+    from uhdd.tiling import TileSpec, run_tiled
+    seen = []
+
+    def fn(t, boxes=None, full_hw=None):
+        return t
+    fn.positional = True
+    fn.prepare = lambda x: seen.append(tuple(x.shape))
+    run_tiled(fn, torch.rand(1, 3, 50, 70), TileSpec(32, 4, 2, "linear", 0))
+    assert seen == [(1, 3, 50, 70)]

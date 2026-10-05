@@ -21,8 +21,8 @@ the table says which. Legend: ✅ done · 🔶 priority · ⏳ todo · [S] secur
 | **C2** | Anchor + HAT-L (classical) / Real-HAT-GAN ×4 | strongest regression SR | registry `hat_l_x4`, `hat_x4_real` | ✅ code + sanity, 🔶 [S] run |
 | **C3** | Anchor + OSEDiff ×4 (one-step diffusion SR) | closest prior to variant B | registry `osediff_x4` | ✅ code (CUDA only), 🔶 [S] run |
 | **C4** | Anchor + SUPIR or SeeSR (multi-step generative SR) | strongest generative prior | external scripts | ⏳ [S] |
-| **C5** | Anchor + S3Diff (one-step, SD-Turbo + degradation-guided LoRA) | recent one-step diffusion SR | `launch.sh upsample ours_x4 <anchor> s3diff` (`code/external/s3diff_run.py`) | 🔶 [S] manual |
-| **C6** | Anchor + VOSR 2.0 (one-step 1.4B DiT, CVPR 2026) | latest one-step DiT SR (closest to variant B) | `launch.sh upsample ours_x4 <anchor> vosr2` | 🔶 [S] manual |
+| **C5** | Anchor + S3Diff (one-step, SD-Turbo + degradation-guided LoRA) | recent one-step diffusion SR | registry `s3diff_x4` (`uhdd/adapters/s3diff.py`) | ✅ code (CPU smoke test, tiny models); 🔶 [S] run |
+| **C6** | Anchor + VOSR 2.0 (one-step 1.4B DiT, CVPR 2026) | latest one-step DiT SR (closest to variant B) | registry `vosr2_x4`, `vosr_0.5b_x4` (`uhdd/adapters/vosr.py`) | ✅ code (CPU smoke test, tiny models); 🔶 [S] run |
 | **D1** | Anchor + DATSR (reference-based SR, ref = blurry native input) | closest prior to the exemplar memory | `refsr_baseline.py` | ✅ code + sanity, 🔶 [S] run |
 | **D2** | ReFIR (SeeSR + retrieval augmentation, NeurIPS 2024) | reference-grounded diffusion restoration | — | ✗ not planned (multi-step, ~50 steps via SeeSR/SUPIR; user 2026-10-05) |
 | **D3** | iRAG (retrieval-augmented RefSR diffusion, ICCV 2025) | recent diffusion RefSR | — | ✗ not planned (multi-step, 50 DDIM steps; user 2026-10-05) |
@@ -114,28 +114,46 @@ input source** or **one ×4 anchor + one ×4 upsampler** by hand, into the resul
 (`$UHDD_RESULTS/dpdd/deblur/<src>/…`, `…/upsample/<src>/<anchor>@whole/<sr>@<tiling>/`; PNGs, `meta.json`,
 `launch.json`, `metrics_dpdd4.*`). Anchors for the upsampler study (user's visual pick): **DRBNet** and **Bokehlicious**.
 Source `official_x4` takes the anchor from the original DPDD images (diagnostic: scored against our native targets).
-Registry upsamplers run through `run_model.py`; S3Diff and VOSR run their own code in their own Python environments
-(pinned, mutually incompatible versions) on 8-bit copies of the anchor. Fresh start for all runs (user, 2026-10-05):
+Every model, S3Diff and VOSR included, is a registry model run by `run_model.py` in the one main environment with
+its paper tiling (overlap tile/8, linear blending) — same treatment for all upsamplers. Fresh start for all runs (user, 2026-10-05):
 `fresh` re-runs the standard set, `compare` checks it against the legacy results.
 
 ```bash
 code/experiments/launch.sh setup inputs --protect-legacy          # once: link + verify inputs (required)
-code/experiments/launch.sh setup vosr && code/experiments/launch.sh check
+code/experiments/launch.sh setup s3diff && code/experiments/launch.sh setup vosr && code/experiments/launch.sh check
 code/experiments/launch.sh deblur official_x4 drbnet 0                     # Table 1 row on the original images
 code/experiments/launch.sh upsample ours_x4 drbnet vosr2 0 --scenes 1P0A1046   # smoke test
 code/experiments/launch.sh study ours_x4 vosr2 0                           # drbnet + bokehlicious, scored
 code/experiments/launch.sh fresh 0                                # standard set from scratch, then compare
 code/experiments/launch.sh summary
 ```
-Setup [S] (one environment per tool, as in their READMEs):
-- **S3Diff** (`github.com/ArcticHare105/S3Diff`, Apache-2.0): `S3DIFF_REPO`, `S3DIFF_PY` (its env: torch 2.1, diffusers 0.25.1,
-  peft 0.10, xformers), `S3DIFF_SD` = snapshot of `stabilityai/sd-turbo`, `S3DIFF_PKL` = `s3diff.pkl` from
-  `huggingface.co/zhangap/S3Diff`; `de_net.pth` ships in the repo. Inference = official loop (bilinear ×4, latent tiles
-  96/32, wavelet colour fix) without the official end-of-run pyiqa scoring.
-- **VOSR** (`github.com/cswry/VOSR`, Apache-2.0, CVPR 2026): `VOSR_REPO`, `VOSR_PY` (its env: torch 2.5.1, diffusers 0.35),
-  `VOSR_CKPTS` = `preset/ckpts` from `huggingface.co/CSWRY/VOSR` (VOSR2/, Qwen-Image-vae-2d/, torch_cache/ DINOv2, …).
-  Official `inference_vosr_onestep.py -u 4 --tile_size 512 --tile_overlap 64` (DiT tiles in output pixels; overlap = tile/8),
-  wavelet colour fix, deterministic VAE posterior.
+**S3Diff and VOSR in our pipeline** (2026-10-05; one Python env, `code/requirements.txt`: diffusers ≥ 0.35,
+transformers, peft, fairscale). Both adapters follow the OSEDiff pattern — per tile exactly the official one-step path,
+with the authors' own tiling replaced by ours — and add a per-image `prepare` hook (`uhdd/tiling.py`) for state the
+official scripts compute once per image:
+- **S3Diff** (`github.com/ArcticHare105/S3Diff`, Apache-2.0; `uhdd/adapters/s3diff.py`, registry `s3diff_x4`). Code
+  `$UHDD_REPOS/S3Diff` (`de_net.pth` in `assets/mm-realsr/`), weights `$UHDD_WEIGHTS/sd-turbo` (stabilityai/sd-turbo),
+  `$UHDD_WEIGHTS/s3diff/s3diff.pkl` (zhangap/S3Diff). Tile 192 LR px = 768 HR = the official latent tile 96, overlap 24.
+  Per tile: bilinear ×4 → VAE posterior sample → UNet at t = 999 with CFG 1.07 between the official positive / negative
+  prompts → one DDPM step → decode → wavelet colour fix (StableSR) to the upsampled tile. Degradation score: DEResNet on the
+  whole LR image (as official). Their LoRA forward is replaced by an equivalent one independent of peft internals
+  (checked equal to theirs under peft 0.21); basicsr helpers shimmed. fp32 (official).
+- **VOSR** (`github.com/cswry/VOSR`, Apache-2.0, CVPR 2026; `uhdd/adapters/vosr.py`, registry `vosr2_x4`,
+  `vosr_0.5b_x4`). Code `$UHDD_REPOS/VOSR`, weights `$UHDD_WEIGHTS/vosr` = CSWRY/VOSR (VOSR2/, VOSR_0.5B_os/,
+  Qwen-Image-vae-2d/, stable-diffusion-2-1-base/, sd21_lwdecoder.pth, torch_cache/ with the DINOv2 hub code and weights,
+  loaded offline). Model config from the checkpoint's `args.json`. Tile 128 LR px = 512 output px = the official DiT tile
+  (= training resolution), overlap 16. Per tile: bicubic ×4 → VAE posterior mode → DINOv2 features of the tile (448) →
+  one flow step from noise → decode → Gaussian (σ 5) colour fix (official `wavelet_color_fix`). fp32 (official).
+- **Noise shared across tiles**: both draw noise (S3Diff: VAE posterior sample; VOSR: the flow's starting noise). The
+  official scripts draw one noise tensor per image; here a seeded per-image latent noise field is cropped per tile
+  (`uhdd/adapters/noisefield.py`), so overlapping tiles see the same noise and results are reproducible.
+- **Differences to the official scripts**: tiling / blending (ours, standard for all methods; official: latent-space
+  Gaussian-blended tiles), VAE encode/decode per tile instead of once per image, float inputs instead of 8-bit PNGs,
+  torch bicubic instead of PIL bicubic (VOSR). Optional fidelity check: `code/external/s3diff_run.py` reproduces the
+  official S3Diff script (run in an env with its pins) — compare on a few crops that fit one tile.
+- Verified outside: CPU smoke test with tiny random-weight models through `run_tiled` (diffusers 0.40, peft 0.21,
+  transformers 5.18): correct output size, finite, deterministic; VOSR non-square whole-image path. Not run with the real
+  weights (CUDA, secure).
 
 ## C. Low-res deblur + upsampler (G2)
 

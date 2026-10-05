@@ -202,3 +202,51 @@ models:
     precision: fp16
     scale: 4
     multiple: 8
+
+  s3diff_x4:           # S3Diff one-step SR (SD-Turbo + degradation-guided LoRA, NeurIPS 2024). CUDA only
+    paper_tile: 192             # tiling default (LR px): official latent tile 96 = 768 HR px (s3diff_tile.py)
+    repo: ${UHDD_REPOS}/S3Diff                                        # github.com/ArcticHare105/S3Diff (de_net.pth in assets/)
+    factory: uhdd.adapters.s3diff:build
+    adapter: uhdd.adapters.s3diff:wrap
+    weights_in_factory: true
+    weights: ${UHDD_WEIGHTS}/s3diff/s3diff.pkl                        # huggingface.co/zhangap/S3Diff
+    sd_path: ${UHDD_WEIGHTS}/sd-turbo                                 # HF snapshot of stabilityai/sd-turbo
+    guidance: 1.07       # official (s3diff_tile.py)
+    color_fix: wavelet   # official default (--align_method)
+    seed: 0              # VAE posterior noise field (official: unseeded)
+    precision: fp32      # official inference runs fp32
+    tile_batch: 1
+    scale: 4
+    multiple: 16         # HR multiple of 64 (official pads to 64)
+
+  vosr2_x4:            # VOSR 2.0 one-step (1.4B LightningDiT, Qwen-Image VAE, DINOv2-L; CVPR 2026). CUDA
+    paper_tile: 128             # tiling default (LR px): official DiT tile 512 output px = training resolution
+    repo: ${UHDD_REPOS}/VOSR                                          # github.com/cswry/VOSR
+    ckpts: ${UHDD_WEIGHTS}/vosr                                       # HF snapshot of CSWRY/VOSR (= the repo's preset/ckpts)
+    variant: VOSR2       # checkpoint folder; model config from its args.json
+    factory: uhdd.adapters.vosr:build
+    adapter: uhdd.adapters.vosr:wrap
+    weights_in_factory: true
+    infer_steps: 1
+    color_fix: wavelet   # official default
+    seed: 42             # official default
+    precision: fp32
+    tile_batch: 1
+    scale: 4
+    multiple: 4          # HR multiple of 16 (VAE /8 x DiT patch 2)
+
+  vosr_0.5b_x4:        # VOSR 0.5B one-step (SD2 VAE + light decoder, DINOv2-B)
+    paper_tile: 128
+    repo: ${UHDD_REPOS}/VOSR
+    ckpts: ${UHDD_WEIGHTS}/vosr
+    variant: VOSR_0.5B_os
+    factory: uhdd.adapters.vosr:build
+    adapter: uhdd.adapters.vosr:wrap
+    weights_in_factory: true
+    infer_steps: 1
+    color_fix: wavelet
+    seed: 42
+    precision: fp32
+    tile_batch: 1
+    scale: 4
+    multiple: 4
