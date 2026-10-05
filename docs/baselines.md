@@ -115,11 +115,15 @@ what exists, `--summary` tables everything scored, `--dry-run` prints the exact 
 (user's visual pick): **DRBNet** and **Bokehlicious**. Registry upsamplers run through `run_model.py`; S3Diff and VOSR run
 their own code in their own Python environments (pinned, mutually incompatible versions) on 8-bit copies of the anchor:
 
+Shell wrapper with all setup notes in its header (`help`, `env`, `setup s3diff|vosr`, `check`, `list`, `dry`, `run`,
+`study`, `summary`): `code/experiments/launch_sr.sh`.
+
 ```bash
-python code/scripts/launch_sr.py --list
-python code/scripts/launch_sr.py --anchor drbnet --sr vosr2 --gpu 0 --eval
-python code/scripts/launch_sr.py --anchor bokehlicious --sr s3diff --gpu 1 --eval
-python code/scripts/launch_sr.py --summary
+code/experiments/launch_sr.sh setup vosr && code/experiments/launch_sr.sh check
+code/experiments/launch_sr.sh run drbnet vosr2 0 --scenes 1P0A1046   # smoke test
+code/experiments/launch_sr.sh study vosr2 0                          # drbnet + bokehlicious, scored
+code/experiments/launch_sr.sh summary
+# same via python: launch_sr.py --anchor drbnet --sr vosr2 --gpu 0 --eval / --list / --summary
 ```
 Setup [S] (one environment per tool, as in their READMEs):
 - **S3Diff** (`github.com/ArcticHare105/S3Diff`, Apache-2.0): `S3DIFF_REPO`, `S3DIFF_PY` (its env: torch 2.1, diffusers 0.25.1,
