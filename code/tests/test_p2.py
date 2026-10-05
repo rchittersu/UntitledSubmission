@@ -294,3 +294,15 @@ def test_ref_builder_counts_tiles_without_candidate():
     rb = RefBuilder(x, a4, np.full((64, 96), 5.0, np.float32), 32, "mosaic_focus")   # nothing in focus
     rb((0, 0, 32, 32))
     assert (rb.tiles, rb.no_candidate) == (1, 1)
+
+
+def test_launch_sr_external_commands(monkeypatch, tmp_path):
+    import launch_sr
+    for k, v in {"S3DIFF_PY": "/e/s3/python", "S3DIFF_REPO": "/r/S3Diff", "S3DIFF_SD": "/w/sd", "S3DIFF_PKL": "/w/s.pkl",
+                 "VOSR_PY": "/e/vosr/python", "VOSR_REPO": "/r/VOSR", "VOSR_CKPTS": "/w/vosr"}.items():
+        monkeypatch.setenv(k, v)
+    cmd, extra = launch_sr.external_cmd("vosr2", tmp_path / "lr", tmp_path / "out", None)
+    s = " ".join(map(str, cmd))
+    assert "/w/vosr/VOSR2" in s and "--tile_size 512 --tile_overlap 64" in s and "-u 4" in s and extra["PYTHONPATH"] == "/r/VOSR"
+    cmd, _ = launch_sr.external_cmd("s3diff", tmp_path / "lr", tmp_path / "out", "a,b")
+    assert cmd[0] == "/e/s3/python" and cmd[-2:] == ["--only", "a,b"] and "/w/s.pkl" in map(str, cmd)

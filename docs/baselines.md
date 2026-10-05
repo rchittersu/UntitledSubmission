@@ -21,8 +21,12 @@ the table says which. Legend: ✅ done · 🔶 priority · ⏳ todo · [S] secur
 | **C2** | Anchor + HAT-L (classical) / Real-HAT-GAN ×4 | strongest regression SR | registry `hat_l_x4`, `hat_x4_real` | ✅ code + sanity, 🔶 [S] run |
 | **C3** | Anchor + OSEDiff ×4 (one-step diffusion SR) | closest prior to variant B | registry `osediff_x4` | ✅ code (CUDA only), 🔶 [S] run |
 | **C4** | Anchor + SUPIR or SeeSR (multi-step generative SR) | strongest generative prior | external scripts | ⏳ [S] |
+| **C5** | Anchor + S3Diff (one-step, SD-Turbo + degradation-guided LoRA) | recent one-step diffusion SR | `launch_sr.py --sr s3diff` (`code/external/s3diff_run.py`) | 🔶 [S] manual |
+| **C6** | Anchor + VOSR 2.0 (one-step 1.4B DiT, CVPR 2026) | latest one-step DiT SR (closest to variant B) | `launch_sr.py --sr vosr2` | 🔶 [S] manual |
 | **D1** | Anchor + DATSR (reference-based SR, ref = blurry native input) | closest prior to the exemplar memory | `refsr_baseline.py` | ✅ code + sanity, 🔶 [S] run |
-| **D2** | C2-Matching / MASA-SR / TTSR | other Ref-SR | — | ⏳ (weights on Google Drive, CUDA DCN) |
+| **D2** | ReFIR (SeeSR + retrieval augmentation, NeurIPS 2024) | reference-grounded diffusion restoration | — | ⏳ candidate (weights: SeeSR/SD2-base, Google Drive) |
+| **D3** | iRAG (retrieval-augmented RefSR diffusion, ICCV 2025) | recent diffusion RefSR | — | ⏳ candidate (weights on Google Drive) |
+| **D4** | C2-Matching / MASA-SR / TTSR | classic Ref-SR | — | ⏳ (weights on Google Drive, CUDA DCN) |
 | **E1** | Native patch-wise: Restormer, LaKDNet-L, DRBNet, Bokehlicious | existing defocus models at native res | registry | ✅ [S] P1 |
 | **E2** | IFAN native patch-wise | — | registry `ifan` | 🔶 [S] runbook step 7 |
 | **E3** | NRKNet, GKMNet, UHD-restoration models (e.g. UHDformer), DPDNet-dual (DP oracle) | completeness | — | ⏳ [V weights] |
@@ -102,6 +106,30 @@ DP blur level `b` (DP px at 1680, `evaluation.md` §2.4). `ramp(b; a, c) = clip(
 ### B — local preview (✅ [O], 8 images, DRBNet anchor, provisional parameters)
 See [§B-results](#b-results) at the end of this file: B1 composite is the strongest on fidelity (27.83 dB, = ×4 + bicubic,
 no in-focus damage); B2–B5 lose 0.14–0.37 dB.
+
+## Manual SR launcher (2026-10-05)
+
+`code/scripts/launch_sr.py` runs **one anchor × one upsampler** by hand and writes to
+`$UHDD_RESULTS/dpdd_v2/sr/<anchor>@x4+<upsampler>/` (PNGs + `meta.json`; `--eval` adds `metrics_dpdd4.*`); `--list` shows
+what exists, `--summary` tables everything scored, `--dry-run` prints the exact commands. Anchors for the upsampler study
+(user's visual pick): **DRBNet** and **Bokehlicious**. Registry upsamplers run through `run_model.py`; S3Diff and VOSR run
+their own code in their own Python environments (pinned, mutually incompatible versions) on 8-bit copies of the anchor:
+
+```bash
+python code/scripts/launch_sr.py --list
+python code/scripts/launch_sr.py --anchor drbnet --sr vosr2 --gpu 0 --eval
+python code/scripts/launch_sr.py --anchor bokehlicious --sr s3diff --gpu 1 --eval
+python code/scripts/launch_sr.py --summary
+```
+Setup [S] (one environment per tool, as in their READMEs):
+- **S3Diff** (`github.com/ArcticHare105/S3Diff`, Apache-2.0): `S3DIFF_REPO`, `S3DIFF_PY` (its env: torch 2.1, diffusers 0.25.1,
+  peft 0.10, xformers), `S3DIFF_SD` = snapshot of `stabilityai/sd-turbo`, `S3DIFF_PKL` = `s3diff.pkl` from
+  `huggingface.co/zhangap/S3Diff`; `de_net.pth` ships in the repo. Inference = official loop (bilinear ×4, latent tiles
+  96/32, wavelet colour fix) without the official end-of-run pyiqa scoring.
+- **VOSR** (`github.com/cswry/VOSR`, Apache-2.0, CVPR 2026): `VOSR_REPO`, `VOSR_PY` (its env: torch 2.5.1, diffusers 0.35),
+  `VOSR_CKPTS` = `preset/ckpts` from `huggingface.co/CSWRY/VOSR` (VOSR2/, Qwen-Image-vae-2d/, torch_cache/ DINOv2, …).
+  Official `inference_vosr_onestep.py -u 4 --tile_size 512 --tile_overlap 64` (DiT tiles in output pixels; overlap = tile/8),
+  wavelet colour fix, deterministic VAE posterior.
 
 ## C. Low-res deblur + upsampler (G2)
 
