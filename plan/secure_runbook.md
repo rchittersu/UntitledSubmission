@@ -31,7 +31,7 @@ Read first: `code/experiments/launch.sh help`, `docs/evaluation.md` §5.0 (resul
 ## 0. Update and test
 ```bash
 git pull && git checkout -b handoff/h4        # base = origin/main
-pytest -q code/tests                          # expect 69 passed
+pytest -q code/tests                          # expect 71 passed
 ```
 
 ## 1. Inputs: link, verify, protect legacy
