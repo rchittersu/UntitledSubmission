@@ -84,6 +84,13 @@ pipelines:
       - {model: "{m}", scale: 4}
       - {model: "{up}", tile_batch: 1}
 
+  - group: g2_lowres_upsample_bokeh_real   # Bokehlicious x4 + Real-HAT (requested for manual inspection)
+    name: "{m} @x4 + {up}"
+    for: {m: [bokehlicious_deblur], up: [hat_x4_real]}
+    steps:
+      - {model: "{m}", scale: 4}
+      - {model: "{up}", tile_batch: 1}
+
   - group: g2_lowres_upsample_diffusion
     name: "{m} @x4 + {up}"
     for: {m: [restormer_dpdd, drbnet_single], up: [osediff_x4]}
