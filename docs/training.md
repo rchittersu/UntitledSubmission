@@ -13,6 +13,7 @@ Canonical description of the training setup: data, cache, code, commands. Design
 | Simulated anchors | ✅ code; ranges to calibrate (M3) |
 | v0 network (HAT-L backbone + native-input encoder + exemplar cross-attention + refinement + anchor lock) | ✅ code, CPU-tested with the tiny backbone |
 | Trainer (torchrun, bf16, EMA, resume, val tiles, CSV + TensorBoard) | ✅ code, CPU-tested |
+| Manual launcher `code/experiments/train.sh` + `train_status.py` (progress / ETA / val table) | ✅ tested on CPU (start, stop, resume, status) |
 | Inference as a registry model (`ours_v0`) through the launcher, global anchor lock after blending | ✅ code, CPU-tested |
 | v1 (slim U-Net), GAN stage, predicted blur map | ⏳ after v0 |
 
@@ -87,24 +88,31 @@ Loss: L1 on the validity mask + 0.1 × contextual loss (VGG19 relu3_1, `$UHDD_WE
 1024 defocused positions per tile. Validation at step 0 (untrained = locked HAT-L, the reference row) and every 2k steps on 256 fixed val tiles (EMA): PSNR, defocused-region
 PSNR, ×4 PSNR, and the same for bicubic (reference). Model selection on full val images: launcher on `val_x4`.
 
-## 6. Commands (secure)
+## 6. Commands (secure): `code/experiments/train.sh`
 
+One human-readable command per step, run by hand; `train.sh help` lists them in order. Every step is safe to re-run
+(finished work is skipped, training resumes from `last.pt`).
 ```bash
-# 1. sources + DP maps of train / val (once)
-code/experiments/launch.sh setup inputs --sources train_x1,train_x4,val_x1,val_x4
-# 2. real anchors on train / val (x4, whole image)
-for s in train_x4 val_x4; do for m in bokehlicious drbnet restormer; do code/experiments/launch.sh deblur $s $m all; done; done
-# 3. cache (+ M1, M2)
-python code/scripts/build_train_cache.py --split train --gpus all --compare-pixels
-python code/scripts/build_train_cache.py --split val --gpus all --compare-pixels
-# 4. smoke run, then v0 with oracle and with retrieved exemplars
-torchrun --nproc_per_node 8 code/scripts/train.py --config code/configs/train/v0.yaml --set optim.steps=300 --out <tmp>
-torchrun --nproc_per_node 8 code/scripts/train.py --config code/configs/train/v0_oracle.yaml
-torchrun --nproc_per_node 8 code/scripts/train.py --config code/configs/train/v0.yaml
-# 5. full-image evaluation (val for selection, then test)
-code/experiments/launch.sh upsample val_x4 bokehlicious ours_v0 all
-code/experiments/launch.sh upsample ours_x4 bokehlicious ours_v0 all
+code/experiments/train.sh inputs                 # 1 train / val sources + DP maps
+code/experiments/train.sh check                  # 2 offline weights (DINOv2-L, VGG19, HAT-L), GPUs, inputs, caches
+code/experiments/train.sh anchors all            # 3 x4 anchors on train_x4 / val_x4 (bokehlicious, drbnet, restormer)
+code/experiments/train.sh cache val all          # 4 caches (+ M1 / M2, pixel-feature ablation)
+code/experiments/train.sh cache train all
+code/experiments/train.sh step0                  # 5 untrained model = locked HAT-L (reference val row)
+code/experiments/train.sh overfit auto           # 6 2 most defocused train scenes, 3k steps
+code/experiments/train.sh smoke                  # 7 300 steps: it/s, memory, projected time
+code/experiments/train.sh start v0_oracle        # 8 background runs (all visible GPUs; NGPU as 2nd argument)
+code/experiments/train.sh start v0
+code/experiments/train.sh eval v0 val_x4 bokehlicious all     # 9 full images via the launcher (test: ours_x4, at the end)
 ```
+Watching: `train.sh status` (one line per run: state, progress, it/s, ETA, latest val PSNR vs bicubic), `train.sh
+status v0` (detail: ETA + finish time, loss, lr, grad norm, peak GPU memory, checkpoints, val table vs bicubic and vs
+step 0), `train.sh watch v0` (refreshes every 60 s), `train.sh log v0` (raw output), TensorBoard on `dpdd/train`.
+`train.sh stop v0` stops a background run; `train.sh start v0` resumes it with the run's saved `config.yaml`.
+Overrides: `--set k=v ...` (e.g. `train.sh start v0 --set name=v0_noex model.exemplars=false` = new run folder).
+Underneath: `train.py --config … --set … --out dpdd/train/<name>` (torchrun for > 1 GPU), `build_train_cache.py`,
+`train_status.py`.
+
 Weights needed offline: HAT-L (`$UHDD_WEIGHTS/hat/…`, already used), DINOv2-L hub cache (shipped with VOSR), VGG19
 (torchvision `vgg19-dcbb9e9d.pth`, to copy over).
 

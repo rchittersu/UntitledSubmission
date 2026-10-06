@@ -66,6 +66,7 @@ REGISTRY_SR = {  # every upsampler runs through run_model.py with its paper tili
     "swinir_real": "swinir_x4_real", "osediff": "osediff_x4",
     "s3diff": "s3diff_x4", "vosr2": "vosr2_x4", "vosr_0.5b": "vosr_0.5b_x4",
     "ours_v0": "ours_v0",                                   # the method (configs/models.yaml, adapters/ours.py)
+    "ours_v0_oracle": "ours_v0_oracle",                     # v0 trained with oracle exemplars
 }
 METRICS_NATIVE = "psnr,ssim,lpips,dists,musiq,clipiqa,msres,hb,blurbins,percbins,noharm,apsnr"
 METRICS_LOWRES = "psnr,ssim,lpips,dists,musiq,clipiqa,hb,blurbins,percbins,noharm,apsnr"

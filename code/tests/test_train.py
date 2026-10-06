@@ -144,6 +144,10 @@ def test_train_then_infer(caches, tmp_path):
                       "--set", f"data.cache={caches['train'][0]}", f"val.cache={caches['val'][0]}"])
     assert (out / "model_ema.pt").exists() and (out / "log.csv").exists() and (out / "val.csv").exists()
     assert open(out / "val.csv").readlines()[1].startswith("0,")          # step-0 row = the untrained model
+    import train_status
+    d = train_status.detail(out)
+    assert "DONE" in d and "step 3 / 3" in d and "vs s0" in d
+    assert train_status.one_line(out).split()[:2] == ["run", "DONE"]
     # resume: a second call with more steps continues from last.pt
     out = train.main(["--config", cfg, "--out", str(tmp_path / "run"), "--cpu",
                       "--set", f"data.cache={caches['train'][0]}", f"val.cache={caches['val'][0]}", "optim.steps=4"])

@@ -118,7 +118,7 @@ def validate(model, loader, dev, amp) -> dict:
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--config", required=True)
-    ap.add_argument("--set", nargs="*", default=[], help="dotted overrides, e.g. optim.steps=200")
+    ap.add_argument("--set", nargs="*", action="extend", default=[], help="dotted overrides, e.g. optim.steps=200 (repeatable)")
     ap.add_argument("--out")
     ap.add_argument("--cpu", action="store_true")
     a = ap.parse_args(argv)
@@ -210,7 +210,7 @@ def main(argv=None):
         run_val(0)
 
     model.train()
-    t0, it = time.time(), iter(dl)
+    t0, s0, it = time.time(), step, iter(dl)
     while step < o["steps"]:
         b = to(next(it), dev)
         f = lr_at(step, o)
@@ -232,7 +232,8 @@ def main(argv=None):
         step += 1
         if rank == 0 and (step % cfg.get("log_every", 50) == 0 or step == 1):
             row = {"step": step, "lr": round(opt.param_groups[1]["lr"], 8), "grad_norm": round(float(gn), 4),
-                   "it_s": round(step / max(time.time() - t0, 1e-6), 3), **{k: round(float(v), 6) for k, v in logs.items()}}
+                   "it_s": round((step - s0) / max(time.time() - t0, 1e-6), 3),
+                   "mem_gb": round(torch.cuda.max_memory_allocated(dev) / 2**30, 2) if cuda else 0.0, **{k: round(float(v), 6) for k, v in logs.items()}}
             if logw is None:
                 logw = csv.DictWriter(logf, fieldnames=list(row) + ["cx"], extrasaction="ignore")
                 if logf.tell() == 0:

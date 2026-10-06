@@ -201,6 +201,7 @@ Full description: `docs/evaluation.md` (metrics, how to run) and `docs/baselines
 - Helpers: `scripts/pair_official.py` (name-paired official splits), `scripts/vae_ceiling.py` (variant B backbone).
 - Manual runs in the results layout `$UHDD_RESULTS/dpdd/` (`uhdd/layout.py`, `docs/evaluation.md` §5.0): inputs linked and
   verified by `scripts/setup_inputs.py`; `scripts/launch.py deblur|upsample|list|summary|compare` (anchors from `official_x4`); wrapper + setup notes: `experiments/launch.sh help`.
+- Training (method v0): `experiments/train.sh help` — inputs, check, anchors, cache, step0, overfit, smoke, start / stop / status / watch / log, eval; `scripts/train_status.py` (progress, ETA, val table). See `docs/training.md` §6.
 - Method training (`docs/training.md`): `scripts/build_train_cache.py` (cache + M1/M2), `scripts/train.py` (torchrun),
   `uhdd/train/` (memory, data, simulated anchors, losses), `uhdd/net/ours.py` (v0, anchor lock), registry `ours_v0`
   (`uhdd/adapters/ours.py`), configs `configs/train/`.

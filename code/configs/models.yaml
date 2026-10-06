@@ -251,7 +251,7 @@ models:
     scale: 4
     multiple: 4
 
-  ours_v0:             # the method, v0 (plan/method_plan.md §4): trained with code/scripts/train.py (configs/train/v0.yaml)
+  ours_v0: &ours_v0    # the method, v0 (plan/method_plan.md §4): trained with code/scripts/train.py (configs/train/v0.yaml)
     paper_tile: 128             # LR px = 512 native px (training tile)
     factory: uhdd.adapters.ours:build
     adapter: uhdd.adapters.ours:wrap
@@ -268,3 +268,6 @@ models:
     tile_batch: 4
     scale: 4
     multiple: 16
+  ours_v0_oracle:      # v0 trained with oracle exemplars (configs/train/v0_oracle.yaml); inference uses retrieval as ours_v0
+    <<: *ours_v0
+    weights: ${UHDD_RESULTS}/dpdd/train/v0_oracle/model_ema.pt

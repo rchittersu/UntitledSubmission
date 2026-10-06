@@ -3,7 +3,10 @@
 **One runbook per handoff.** Replaces the handoff-4 runbook (in git history). Your handoff-4 patch was applied and
 reviewed outside (`handoff/LOG.md`, `docs/evaluation.md` §7.8).
 
-Audience: the Claude agent in the secure environment (the user triggers the long runs by hand).
+Audience: the Claude agent in the secure environment. **The user runs the steps by hand with
+`code/experiments/train.sh`** (`train.sh help` lists them in order) and watches them (`train.sh status`, `watch`,
+`log`); you check each step's outputs against its pass criterion, as in handoff 4. Do not replace the script calls with
+your own command lines; if a step needs different settings, give the user the `train.sh … --set k=v` line.
 Read first: `docs/training.md` (canonical: data flow, cache, sample, network, trainer, commands), `plan/method_plan.md`
 §4 / §8b (design and why), `Template/sec/3_method.tex` + Fig. 2 (`fig/method.tex`).
 
@@ -25,6 +28,9 @@ Read first: `docs/training.md` (canonical: data flow, cache, sample, network, tr
   build_train_cache.py`, `code/scripts/train.py`, configs `code/configs/train/{v0,v0_oracle,tiny}.yaml`, registry model
   `ours_v0` (adapter `code/uhdd/adapters/ours.py`, aux inputs native + DP passed by the launcher).
 - `uhdd/dualpixel.py`: `load_dp_input` (network DP input: |d| box 3 + confidence).
+- **`code/experiments/train.sh`**: one human-readable command per step (inputs, check, anchors, cache, step0, overfit,
+  smoke, start / stop / status / watch / log, eval); background runs, resume with the run's saved settings;
+  `code/scripts/train_status.py` prints progress, ETA, loss and the val table (vs bicubic, vs step 0).
 - `train.py` validates at step 0 (`val.at_start`, default on): the untrained model is HAT-L ×4 + anchor lock.
   It now expands `${UHDD_*}` in config values (before: the default cache / VGG paths were taken literally) and
   prints the parameter count.
@@ -41,7 +47,7 @@ pytest -q code/tests                          # expect 83 passed, 1 skipped outs
 
 ## 1. Train / val inputs and DP maps (V1)
 ```bash
-code/experiments/launch.sh setup inputs --sources train_x1,train_x4,val_x1,val_x4
+code/experiments/train.sh inputs
 code/experiments/launch.sh list
 ```
 Pass: 350 train / 74 val scenes; inputs / targets / masks / DP maps carry the same names; ×4 sources are native / 4;
@@ -59,12 +65,12 @@ confidence channel. Same check for a test scene against the handoff-2/3 DP maps 
 - VGG19: `$UHDD_WEIGHTS/vgg/vgg19-dcbb9e9d.pth` (torchvision). If it is missing, ask the user to copy it in; do not
   download from inside unless that is allowed. `uhdd.train.losses.VGGFeatures` must load it without network.
 - HAT-L ×4: the registry weights already used for the baselines.
-Pass: all three load with networking off.
+`code/experiments/train.sh check` loads all three (plus GPUs, inputs, caches) and prints ok / FAIL per item.
+Pass: all ok with networking off.
 
 ## 3. Real anchors on train / val (V3)
 ```bash
-for s in train_x4 val_x4; do for m in bokehlicious drbnet restormer; do
-  code/experiments/launch.sh deblur $s $m all; done; done
+code/experiments/train.sh anchors all       # bokehlicious, drbnet, restormer on train_x4 and val_x4, scored, then a summary
 ```
 Metrics are computed by the launcher as for test. Report the ×4 PSNR / SSIM of each anchor on **train vs val vs
 test (ours_x4, handoff 4)**. Expected: DRBNet / Restormer (trained on DPDD) higher on train than val/test — that is the
@@ -73,9 +79,9 @@ train-val gap for Bokehlicious would mean something else is wrong (data, names).
 
 ## 4. Cache + M1 / M2 (V4)
 ```bash
-python code/scripts/build_train_cache.py --split val --gpus all --compare-pixels --limit 4     # smoke first
-python code/scripts/build_train_cache.py --split val --gpus all --compare-pixels --overwrite
-python code/scripts/build_train_cache.py --split train --gpus all --compare-pixels
+code/experiments/train.sh cache val all --limit 4                # smoke first (4 scenes)
+code/experiments/train.sh cache val all --overwrite
+code/experiments/train.sh cache train all
 ```
 Report: time per scene, size per scene and total (expected ≈ 155 GB train + val), the printed manifest summary.
 - **M1** (pixel share per blur bin b0–b3, train and val): tells how much of the image is copy / deconvolve /
@@ -90,8 +96,7 @@ Report: time per scene, size per scene and total (expected ≈ 155 GB train + va
 
 ## 5. Step-0 check (V5)
 ```bash
-torchrun --nproc_per_node 8 code/scripts/train.py --config code/configs/train/v0.yaml \
-  --set optim.steps=0 --out $UHDD_RESULTS/dpdd/scratch/v0_step0
+code/experiments/train.sh step0             # -> train/_step0 (val.csv, printed table)
 ```
 `val.csv` step 0 is the untrained model = HAT-L ×4 + anchor lock on Bokehlicious anchors. Pass: `psnr_x4` ≈ the
 anchor itself (lock exact → ×4 PSNR of the anchor vs target), `psnr` within ~0.1 dB of HAT-L on the same tiles
@@ -100,38 +105,35 @@ Also report the parameter count (total / trainable) printed at start.
 
 ## 6. Overfit (V6)
 ```bash
-torchrun --nproc_per_node 8 code/scripts/train.py --config code/configs/train/v0.yaml \
-  --set optim.steps=3000 optim.warmup=200 data.names=[<scene A>,<scene B>] \
-        val.cache='${UHDD_RESULTS}/dpdd/cache/train' val.names=[<scene A>,<scene B>] val.every=500 val.tiles=64 \
-  --out $UHDD_RESULTS/dpdd/scratch/v0_overfit
-```
-(Pick two train scenes with a large defocused share from M1.) Pass: train loss falls steadily, val PSNR on the same
+code/experiments/train.sh overfit auto      # 3k steps on the 2 most defocused train scenes (M1), val on the same scenes
+``` Pass: train loss falls steadily, val PSNR on the same
 scenes rises well above step 0 (several dB on defocused tiles), no NaN / inf, grad norm sane. If the loss does not
 move, check the zero-init paths actually receive gradient (`grad_norm`), then the LR groups.
 
 ## 7. Smoke run: throughput (V7)
 ```bash
-torchrun --nproc_per_node 8 code/scripts/train.py --config code/configs/train/v0.yaml \
-  --set optim.steps=300 val.every=300 --out $UHDD_RESULTS/dpdd/scratch/v0_smoke
+code/experiments/train.sh smoke                         # 300 steps; status shows it/s, peak memory, projected ETA
+code/experiments/train.sh smoke --set workers=12        # dataloader check
 ```
-Report it/s, peak GPU memory, GPU utilisation, whether the dataloader is the bottleneck (try `workers` 4 / 8 / 12),
+Report it/s, peak GPU memory, GPU utilisation (`nvidia-smi`), whether the dataloader is the bottleneck (workers 4 / 8 / 12),
 and the projected wall time of 100k steps. If memory does not fit batch 4 at 512, report and use the largest batch
 that fits (record it); do not shrink the tile. If 100k steps take more than ~3 days, propose a step count.
 
 ## 8. Training runs (user launches; check them)
 In this order — the oracle run is the go / no-go for the exemplar path:
 ```bash
-torchrun --nproc_per_node 8 code/scripts/train.py --config code/configs/train/v0_oracle.yaml
-torchrun --nproc_per_node 8 code/scripts/train.py --config code/configs/train/v0.yaml
+code/experiments/train.sh start v0_oracle    # background; then: train.sh watch v0_oracle
+code/experiments/train.sh start v0           # after v0_oracle (or on other GPUs: CUDA_VISIBLE_DEVICES=... train.sh start v0 4)
 ```
-While they run: `log.csv`, `val.csv` (EMA, every 2k): PSNR / defocused PSNR / ×4 PSNR, each vs bicubic of the same
+While they run: `train.sh status` / `status v0` (the val table is `val.csv`: EMA, every 2k): PSNR / defocused PSNR / ×4 PSNR, each vs bicubic of the same
 anchor. Report curves as tables (step, val metrics) for both runs.
-Full-image evaluation of v0 (registry `ours_v0` reads `dpdd/train/v0/model_ema.pt`):
+Full-image evaluation (registry `ours_v0` / `ours_v0_oracle` read `dpdd/train/<name>/model_ema.pt`):
 ```bash
-code/experiments/launch.sh upsample val_x4 bokehlicious ours_v0 all --scenes <3 val scenes>   # V8: full-image smoke
-code/experiments/launch.sh upsample val_x4 bokehlicious ours_v0 all
-code/experiments/launch.sh upsample ours_x4 bokehlicious ours_v0 all       # test, once, at the end
-code/experiments/launch.sh upsample ours_x4 drbnet ours_v0 all             # plug-in, other anchor
+code/experiments/train.sh eval v0 val_x4 bokehlicious all --scenes <3 val scenes>   # V8: full-image smoke
+code/experiments/train.sh eval v0 val_x4 bokehlicious all
+code/experiments/train.sh eval v0_oracle val_x4 bokehlicious all
+code/experiments/train.sh eval v0 ours_x4 bokehlicious all       # test, once, at the end
+code/experiments/train.sh eval v0 ours_x4 drbnet all             # plug-in, other anchor
 ```
 V8 pass: no seams, `down4(output) = anchor` (the run's `meta.json` / a check by hand: ×4 PSNR vs the anchor > 60 dB),
 time and memory per 30 MP image. Look at the images: tile seams, exemplar copy artifacts (repeated patches), in-focus
@@ -140,7 +142,8 @@ V9: v0_oracle vs v0 on val (tiles + full images). Interpretation for the report 
 retrieval is the bottleneck; oracle ≈ v0 ≈ no gain over HAT-L → the exemplar path is not used (check the attention to
 the null tokens); both ≫ HAT-L → go.
 
-If time remains (lower priority): the ablation `--set model.exemplars=false` (same steps as v0) on val only.
+If time remains (lower priority): the ablation without exemplars on val only —
+`code/experiments/train.sh start v0 --set name=v0_noex model.exemplars=false` (its own run folder `train/v0_noex`; compare on the val tiles in `train.sh status v0_noex`).
 
 ## 9. Handoff
 Report `handoff/from_secure/<date>_h5.md` (template in CLAUDE.md): steps 0–8 with pass / fail per V-check, the
