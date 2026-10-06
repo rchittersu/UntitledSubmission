@@ -2,7 +2,8 @@
 
 A sample is one 512-px native tile (positions are multiples of 4, so its anchor tile is exact):
   a (3,T,T) anchor tile -- a real anchor (cache anchor_<model>.npy) or a simulated one (sim_anchor), per `anchors`
-  x (3,4T,4T) native input, y (3,4T,4T) target, m (1,4T,4T) validity mask, d (1,T,T) blur map (|DP disparity|)
+  x (3,4T,4T) native input, y (3,4T,4T) target, m (1,4T,4T) validity mask,
+  d (2,T,T) DP input: lightly smoothed |disparity| + confidence (cache dp.npy)
   ex (M,3,P,P) exemplar crops of the native input, tok_map (T,T), tok_scores (n_tok_max, M) -- see memory.tile_exemplars;
   exemplars overlapping the tile are dropped (training: transfer, not copy in place)
   regime (1,4T,4T) defocus weight for masked losses (1 where blur >= defocus_thr)
@@ -43,6 +44,7 @@ class Scene:
         self.y = np.load(d / "y.npy", mmap_mode="r")
         self.mask = np.load(d / "mask.npy", mmap_mode="r")
         self.blur = np.load(d / "blur.npy").astype(np.float32)
+        self.dp = np.load(d / "dp.npy").astype(np.float32)
         self.anchors = {m: np.load(d / f"anchor_{m}.npy", mmap_mode="r") for m in anchors if (d / f"anchor_{m}.npy").exists()}
         z = np.load(d / "mem.npz")
         self.key_box, self.grid, self.tok_native = z["key_box"], tuple(z["grid"]), int(z["tok_native"])
@@ -91,7 +93,8 @@ class TileDataset(torch.utils.data.IterableDataset):
         x = _t(s.x[y0:y0 + T, x0:x0 + T], s.maxv)
         y = _t(s.y[y0:y0 + T, x0:x0 + T], s.maxv)
         m = torch.from_numpy(np.ascontiguousarray(s.mask[y0:y0 + T, x0:x0 + T])).float()[None]
-        d = torch.from_numpy(s.blur[y4:y4 + T4, x4:x4 + T4].copy())[None]
+        d = torch.from_numpy(s.dp[:, y4:y4 + T4, x4:x4 + T4].copy())
+        bl = torch.from_numpy(s.blur[y4:y4 + T4, x4:x4 + T4].copy())[None]
         if anchor == "sim":
             mg = 4                                                   # anchor-px margin for the blur
             ys, xs = max(0, y4 - mg), max(0, x4 - mg)
@@ -117,7 +120,7 @@ class TileDataset(torch.utils.data.IterableDataset):
                                                      for cr in crops])
         tsp = np.full((TOK_MAX * TOK_MAX, len(keys)), -np.inf, np.float32)
         tsp[:ts.shape[0]] = ts
-        r = (F.interpolate(d[None], scale_factor=4, mode="nearest")[0] >= c.get("defocus_thr", 0.4)).float()
+        r = (F.interpolate(bl[None], scale_factor=4, mode="nearest")[0] >= c.get("defocus_thr", 0.4)).float()
         out = {"a": a, "x": x, "y": y, "m": m, "d": d, "ex": ex, "tok_map": torch.from_numpy(tmap),
                "tok_scores": torch.from_numpy(tsp), "regime": r}
         if aug:

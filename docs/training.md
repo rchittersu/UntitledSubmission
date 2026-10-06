@@ -37,7 +37,8 @@ Per scene under `$UHDD_RESULTS/dpdd/cache/<split>/<scene>/`:
 |---|---|---|
 | `x.npy`, `y.npy` | native input / target, H×W×3, native bit depth, memory-mapped (random 512 crops without PNG decoding) | 2 × 180 MB |
 | `mask.npy` | validity mask (uint8) | 30 MB |
-| `blur.npy` | |DP disparity| at the anchor resolution, confidence-weighted, box 15 (float16) | 4 MB |
+| `blur.npy` | |DP disparity| at the anchor resolution, confidence-weighted, box 15 (float16): regimes, tile weights, memory keys, loss masks | 4 MB |
+| `dp.npy` | network input, 2 channels: |DP disparity| box 3 (keeps depth edges) + DP confidence (float16) | 8 MB |
 | `anchor_<model>.npy` | ×4 anchors of each deblurrer (default Bokehlicious, DRBNet, Restormer) | 3 × 11 MB |
 | `mem.npz` | memory on the **primary anchor** (Bokehlicious): key boxes (native) and scales, top-32 retrieval per query token, oracle top-4 | ≈ 2 MB |
 | `meta.json` | per-scene M1 / M2 numbers | — |
@@ -66,14 +67,17 @@ not among the token's top-16). Same random flip / transpose on everything, inclu
 ## 4. Network (`uhdd/net/ours.py`, config `code/configs/train/v0.yaml`)
 
 - Backbone: HAT-L ×4 (registry `hat_l_x4` weights) on the anchor tile.
-- `CondEncoder`: native tile (pixel-unshuffled ×4) + blur → backbone features after `conv_first` (zero-init).
+- Conditioning trunk (`CondEncoder`): [native tile pixel-unshuffled ×4, DP input (|d| box 3, confidence)] → features
+  added after `conv_first` (zero-init) **and an SFT (per-pixel scale + shift, zero-init) after every backbone stage**
+  (HAT-L: all 12 residual groups), so the regime information reaches every depth. Untrained, the model is exactly
+  HAT-L ×4 + anchor lock (checked in the tests on the real HAT architecture).
 - `ExemplarAttention` after the backbone body: anchor-grid positions attend to exemplar tokens (4×4 per crop) and 4
   null tokens; bias = α · retrieval score of the position's token, −∞ otherwise; zero-init output.
-- Refinement at native resolution (NAF blocks) on [backbone output, native input, blur↑] (zero-init).
+- Refinement at native resolution (NAF blocks) on [backbone output, native input, DP input↑] (zero-init).
 - **Anchor lock** `y = Δ + U(a − down4(Δ))` with `down4` = area, `U` = bicubic + nearest-neighbour correction so that
   `down4(U(e)) = e` exactly → `down4(y) = a` to float precision. At inference the lock is applied again to the
   blended image (`finalize`), alternated with clamping to [0, 1].
-- Ablation switches in the model config: `exemplars`, `native_input`, `anchor_lock`; data: `oracle`, anchor mix,
+- Ablation switches in the model config: `exemplars`, `native_input`, `anchor_lock`, `sft` (off = additive only); data: `oracle`, anchor mix,
   `drop_colocated`, `tile`.
 
 ## 5. Training (`code/scripts/train.py`)

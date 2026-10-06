@@ -130,7 +130,7 @@ def test_dataset_sample_shapes(caches):
     it = iter(ds)
     for _ in range(4):
         b = next(it)
-        assert b["a"].shape == (3, 32, 32) and b["x"].shape == (3, 128, 128) and b["d"].shape == (1, 32, 32)
+        assert b["a"].shape == (3, 32, 32) and b["x"].shape == (3, 128, 128) and b["d"].shape == (2, 32, 32)
         assert b["ex"].shape == (8, 3, 64, 64) and b["tok_map"].shape == (32, 32)
         assert b["tok_map"].max() < b["tok_scores"].shape[0]
 
@@ -165,5 +165,34 @@ def test_train_then_infer(caches, tmp_path):
 def test_model_without_exemplars_and_input():
     m = build_model({"backbone": "plain", "width": 16, "blocks": 1, "exemplars": False, "native_input": False,
                      "anchor_lock": False, "cond_width": 8, "cond_blocks": 1, "refine_width": 8, "refine_blocks": 1})
-    y = m(torch.rand(1, 3, 16, 16), torch.rand(1, 3, 64, 64), torch.rand(1, 1, 16, 16))
+    y = m(torch.rand(1, 3, 16, 16), torch.rand(1, 3, 64, 64), torch.rand(1, 2, 16, 16))
     assert y.shape == (1, 3, 64, 64)
+
+
+def test_sft_starts_as_identity_and_reaches_every_stage():
+    from uhdd.net.ours import modulated_features
+    m = build_model({"backbone": "plain", "width": 16, "blocks": 3, "cond_width": 8, "cond_blocks": 1,
+                     "refine_width": 8, "refine_blocks": 1, "exemplars": False})
+    assert len(m.cond.sft) == 3
+    f = torch.rand(1, 16, 16, 16)
+    c = m.cond(torch.rand(1, 3, 64, 64), torch.rand(1, 2, 16, 16))
+    assert torch.allclose(modulated_features(m.sr, f, c, m.cond.sft), m.sr.forward_features(f))   # zero-init
+    torch.nn.init.normal_(m.cond.sft[1].net[-1].weight, std=0.1)
+    assert not torch.allclose(modulated_features(m.sr, f, c, m.cond.sft), m.sr.forward_features(f))
+
+
+def test_sft_on_hat_matches_forward_features():
+    import os
+    repo = Path(os.environ.get("UHDD_REPOS", "/nonexistent")) / "HAT"
+    if not (repo / "hat" / "archs" / "hat_arch.py").exists():
+        pytest.skip("HAT repo not available ($UHDD_REPOS/HAT)")
+    from uhdd.adapters import hat
+    from uhdd.net.ours import SFT, modulated_features
+    sr = hat.build({"repo": str(repo), "kwargs": {"upscale": 4, "in_chans": 3, "img_size": 16, "window_size": 8,
+                    "compress_ratio": 3, "squeeze_factor": 4, "conv_scale": 0.01, "overlap_ratio": 0.5, "img_range": 1.0,
+                    "depths": [1, 1], "embed_dim": 24, "num_heads": [2, 2], "mlp_ratio": 2, "upsampler": "pixelshuffle",
+                    "resi_connection": "1conv"}}).eval()
+    f = torch.rand(1, 24, 16, 16)
+    sfts = torch.nn.ModuleList([SFT(8, 24) for _ in range(2)])
+    with torch.no_grad():
+        assert torch.allclose(modulated_features(sr, f, torch.rand(1, 8, 16, 16), sfts), sr.forward_features(f), atol=1e-5)

@@ -31,7 +31,7 @@ def build(spec: dict):
 
 
 def wrap(holder: OursNet, spec: dict):
-    from uhdd.dualpixel import load_blur_map
+    from uhdd.dualpixel import load_blur_map, load_dp_input
     from uhdd.io import read_image, to_tensor
     net = holder.net
     dev = next(net.parameters()).device
@@ -55,11 +55,12 @@ def wrap(holder: OursNet, spec: dict):
         b = load_blur_map(st["aux"]["dp"], n, hw=(h, w), win=spec.get("blur_win", 15))
         if b is None:
             raise FileNotFoundError(f"{n}: no DP map in {st['aux']['dp']}")
-        blur = torch.from_numpy(b)[None, None].to(anchor.device)
+        blur = torch.from_numpy(b)[None, None].to(anchor.device)          # memory keys (as in the cache)
+        dp = torch.from_numpy(load_dp_input(st["aux"]["dp"], n, hw=(h, w), win=spec.get("dp_win", 3)))[None]
         mem = mem_mod.build_memory(anchor.float(), blur, feats, scales, spec.get("focus_thr", 0.4),
                                    spec.get("tex_pct", 30.0), spec.get("value_px", 64))
         idx, sc = mem_mod.retrieve(mem, spec.get("topk", 32))
-        st.update(x=x, blur=blur, mem=mem, idx=idx, sc=sc)
+        st.update(x=x, dp=dp.to(anchor.device), mem=mem, idx=idx, sc=sc)
 
     def padded(t: torch.Tensor, H: int, W: int, mode: str) -> torch.Tensor:
         ph, pw = H - t.shape[-2], W - t.shape[-1]
@@ -71,7 +72,7 @@ def wrap(holder: OursNet, spec: dict):
         Hp = max(b[0] + b[2] for b in boxes)
         Wp = max(b[1] + b[3] for b in boxes)
         x = padded(st["x"], 4 * Hp, 4 * Wp, "reflect")
-        d = padded(st["blur"], Hp, Wp, "replicate")
+        d = padded(st["dp"], Hp, Wp, "replicate")
         mem = st["mem"]
         m, k, P = spec.get("m", 32), spec.get("k", 16), net.cfg.get("ex_px", 64)
         xs, ds, exs, tms, tss = [], [], [], [], []

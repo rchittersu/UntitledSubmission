@@ -63,6 +63,26 @@ def focus_mask(disp: torch.Tensor, conf: torch.Tensor, max_abs: float = 0.35, mi
     return (disp.abs() <= max_abs) & (conf >= min_conf)
 
 
+def load_dp_input(dp_dir, name: str, hw=None, win: int = 3):
+    """Network input from dp_maps.py outputs: 2 x H x W float32 = [confidence-weighted |disparity| (DP px at
+    1680x1120), mean confidence], both box-smoothed over a small `win` (keeps depth edges; the network smooths),
+    optionally resized (bilinear) to hw. None if missing."""
+    from pathlib import Path
+    import cv2
+    import numpy as np
+    p = Path(dp_dir) / f"{name}_disp.png"
+    if not p.exists():
+        return None
+    d = (cv2.imread(str(p), cv2.IMREAD_UNCHANGED).astype(np.float32) - 32768) / 1000
+    c = cv2.imread(str(Path(dp_dir) / f"{name}_conf.png"), cv2.IMREAD_UNCHANGED).astype(np.float32) / 255
+    cs = cv2.boxFilter(c, -1, (win, win))
+    k = cv2.boxFilter(np.abs(d) * c, -1, (win, win)) / (cs + 1e-6)
+    out = np.stack([k, cs])
+    if hw is not None and out.shape[1:] != tuple(hw):
+        out = np.stack([cv2.resize(m, (hw[1], hw[0]), interpolation=cv2.INTER_LINEAR) for m in out])
+    return out
+
+
 def load_blur_map(dp_dir, name: str, hw=None, win: int = 31):
     """Blur level from dp_maps.py outputs: confidence-weighted |disparity| (DP px at 1680x1120) box-smoothed
     over `win` px, optionally resized (bilinear) to hw = (H, W). float32 numpy array, or None if missing.

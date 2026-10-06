@@ -47,7 +47,8 @@ deconvolution, a regime that neither native deblurring nor the low-resolution pi
 Under \emph{strong defocus} it is gone, and must come from elsewhere: from in-focus exemplars of the
 same image when they exist (\cref{sec:memory}), and from the network's prior otherwise. $G$ receives
 the blur map so that it can tell these regimes apart. We use the dual-pixel disparity directly as $d$,
-which is monotonic in the defocus and needs no calibration; converting it to a circle-of-confusion
+which is monotonic in the defocus and needs no calibration, only lightly smoothed so that depth edges stay sharp,
+together with its matching confidence, which separates ``in focus'' from ``no texture to measure''; converting it to a circle-of-confusion
 radius or to per-band availability maps is evaluated as an ablation. When dual-pixel data are
 unavailable, $d$ is predicted from the agreement between the anchor and the downscaled
 observation~\cite{zhuo2011defocusmap}. \todo{predicted-map head and its training.}
@@ -80,6 +81,9 @@ in place.
 
 \subsection{Network and training}
 \label{sec:variants}
+\paragraph{Conditioning.} The native input, rearranged onto the anchor grid, and $d$ are encoded by a small
+trunk whose features modulate every stage of the network through spatial feature
+transforms~\cite{wang2018sft}, since the regime has to be known at every depth.
 \paragraph{Network.} $G$ is a four-level U-Net. The two finest levels use convolutional NAFNet-style
 blocks~\cite{chen2022nafnet}; at $1/4$ resolution channel attention~\cite{zamir2022restormer} mixes
 information across the tile at linear cost; at $1/8$ resolution ($64\times64$ tokens per tile) spatial

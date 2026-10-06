@@ -4,7 +4,9 @@
 Per scene, under $UHDD_RESULTS/dpdd/cache/<split>/<name>/:
   x.npy, y.npy        native input / target, HxWx3 in native bit depth (memory-mapped random 512 crops)
   mask.npy            HxW uint8 validity mask
-  blur.npy            H4xW4 float16 |DP disparity| (confidence-weighted, box `--blur-win`), DP px at the anchor res
+  blur.npy            H4xW4 float16 |DP disparity| (confidence-weighted, box `--blur-win`), DP px at the anchor res:
+                      regimes, tile weights, memory keys, loss masks
+  dp.npy              2xH4xW4 float16 network input: lightly smoothed |disparity| (box `--dp-win`) + DP confidence
   anchor_<model>.npy  H4xW4x3 x4 anchors of every deblurrer given (from deblur/<split>_x4/<model>@whole)
   mem.npz             exemplar memory on the primary anchor: key boxes / scales, query grid, top-K retrieval
                       (idx, score), oracle exemplars (idx, score)
@@ -32,7 +34,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import torch  # noqa: E402
 
 from uhdd import layout  # noqa: E402
-from uhdd.dualpixel import load_blur_map  # noqa: E402
+from uhdd.dualpixel import load_blur_map, load_dp_input  # noqa: E402
 from uhdd.io import list_images, read_image, read_mask, to_tensor  # noqa: E402
 from uhdd.parallel import launch, parse_gpus, shard  # noqa: E402
 from uhdd.train import memory as mem_mod  # noqa: E402
@@ -83,6 +85,7 @@ def worker(rank, world, device, a, names, dirs):
         save(od / "y.npy", y)
         save(od / "mask.npy", mask.astype(np.uint8))
         save(od / "blur.npy", blur.astype(np.float16))
+        save(od / "dp.npy", load_dp_input(dirs["dp"], n, hw=(H4, W4), win=a.dp_win).astype(np.float16))
         for m, d in dirs["anchors"].items():
             an = read_image(d / f"{n}.png")
             if an.shape[:2] != (H4, W4):
@@ -149,6 +152,7 @@ def main(argv=None):
     ap.add_argument("--k-eval", type=int, default=16)
     ap.add_argument("--oracle-k", type=int, default=4)
     ap.add_argument("--blur-win", type=int, default=15)
+    ap.add_argument("--dp-win", type=int, default=3, help="smoothing of the network's DP input (keeps depth edges)")
     ap.add_argument("--compare-pixels", action="store_true", help="M2 also for pixel features (ablation)")
     ap.add_argument("--gpus", default="all")
     ap.add_argument("--limit", type=int, default=0)
