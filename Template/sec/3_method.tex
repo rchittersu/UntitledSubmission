@@ -2,76 +2,106 @@
 \section{Method}
 \label{sec:method}
 % =====================================================================
-% DRAFT: structure and equations follow plan/method_plan.md; details (architecture sizes,
-% losses, schedules) are filled in once variant A trains. Keep in sync with the code.
+% DRAFT: follows plan/method_plan.md (revised 2026-10-06). Architecture sizes, losses and schedules are
+% filled in once v0/v1 train. Keep in sync with the code.
 
 Given a native-resolution defocused image $x \in \mathbb{R}^{H\times W\times 3}$, an existing deblurring
 method $\mathcal{D}$ is applied to its $4\times$ downscaled version and yields the \emph{anchor}
 $a = \mathcal{D}(x{\downarrow_4})$, which has the structure of the all-in-focus image but no native
-detail. \method produces the native all-in-focus estimate $\hat{y}$ from $x$, $a$ and a blur map
-$b$ that gives the local amount of defocus. It operates on tiles $T$ of $x$ with overlap and
-border-aware blending, but every tile has access to a memory $\mathcal{M}$ built once per image:
+detail. \method produces the native all-in-focus estimate $\hat{y}$ from $x$, $a$ and a blur map $d$
+giving the local amount of defocus. It operates on $512\times512$ tiles $T$ with overlap and blending,
+but every tile has access to a memory $\mathcal{M}$ of in-focus exemplars built once per image
+(\cref{sec:memory}).
+
+\subsection{Anchor-locked upsampling}
+\label{sec:lock}
+The baselines show that the anchor's structure is worth keeping exactly: bicubic upsampling preserves
+it (the result, downscaled again, scores like the anchor itself), whereas generative upsamplers alter
+it and lose fidelity even at the anchor's resolution (\cref{sec:exp_results}). We therefore let the
+network contribute only what the anchor cannot express. With $G$ the network, $a{\uparrow}$ the
+bicubically upsampled anchor, ${\downarrow_4}$ the area downscaling used throughout and ${\uparrow}$
+bicubic upsampling,
 \begin{equation}
-  \hat{y}_T = g_T \odot x_T + (1-g_T) \odot G\big(x_T,\, a{\uparrow}_T,\, b_T;\, \mathcal{M}\big),
+  \begin{aligned}
+    \Delta_T &= G\big(x_T,\, a{\uparrow}_T,\, d_T;\, \mathcal{M}\big),\\
+    \hat{y}_T &= a{\uparrow}_T + \Delta_T - (\Delta_T{\downarrow_4}){\uparrow},
+  \end{aligned}
   \label{eq:output}
 \end{equation}
-where $a{\uparrow}$ is the bicubically upsampled anchor, $G$ is the generator (\cref{sec:variants})
-and $g$ a learned copy gate.
+so that $\hat{y}{\downarrow_4} = a$ up to the resampling filters, as in iterative
+back-projection~\cite{irani1991backprojection}. The output is as faithful as the anchor at the
+benchmark resolution by construction, any improvement of the anchor carries over directly, and the
+network is free to spend its capacity on the native high band. The price is that structural errors of
+the anchor are inherited; we leave correcting them to the low-resolution method.
 
-\subsection{Copy path and blur map}
-\label{sec:copy}
-In focal-plane regions the observation \emph{is} the answer, and any re-synthesis can only damage it
-(\cref{sec:exp_results}). The gate $g$ is predicted from the blur map and the features of $G$ and
-initialized to the in-focus probability. The blur map $b$ measures the local defocus in pixels. When
-dual-pixel views are available it is obtained from their disparity, which is proportional to the
-signed defocus; we use this as an oracle. Otherwise $b$ is predicted by a small head from the
-agreement between the anchor and the downscaled observation: re-blurring a faithful anchor with the
-correct local kernel reproduces the observation~\cite{zhuo2011defocusmap}, so the best-fitting kernel
-radius estimates the defocus that was removed, and the residual flags unreliable anchors.
-\todo{equations for the re-blur sweep and the head; training with DP supervision and random
-oracle/predicted swaps.}
+\subsection{Where native detail comes from}
+\label{sec:regimes}
+Defocus varies across the image, and with it the source of the missing high band. \emph{In focus}, the
+observation already holds it: the network should reproduce $x$, lightly denoised (the f/22 targets
+are less noisy than the f/4 inputs). Under \emph{mild and moderate defocus}, the circle of confusion
+attenuates but does not remove the frequencies above the anchor's band (the first zero of a disc
+blur of radius $\rho$ native pixels lies at $0.61/\rho$ cycles per pixel, above the anchor's Nyquist
+frequency of $1/8$ for $\rho \lesssim 5$): the detail can be recovered from $x$ itself by local
+deconvolution, a regime that neither native deblurring nor the low-resolution pipelines exploit.
+Under \emph{strong defocus} it is gone, and must come from elsewhere: from in-focus exemplars of the
+same image when they exist (\cref{sec:memory}), and from the network's prior otherwise. $G$ receives
+the blur map so that it can tell these regimes apart. We use the dual-pixel disparity directly as $d$,
+which is monotonic in the defocus and needs no calibration; converting it to a circle-of-confusion
+radius or to per-band availability maps is evaluated as an ablation. When dual-pixel data are
+unavailable, $d$ is predicted from the agreement between the anchor and the downscaled
+observation~\cite{zhuo2011defocusmap}. \todo{predicted-map head and its training.}
 
 \subsection{In-focus exemplar memory}
 \label{sec:memory}
-Inside a defocused tile, the observation carries no native detail, and the anchor carries none above
-its own Nyquist frequency. The memory supplies it from the in-focus parts of the whole image.
-\emph{Construction.} Native cells of $64\times64$ pixels whose blur map indicates focus, and whose
-downscaled version agrees with the anchor, are ranked by texture energy; the top $K$ form the memory,
-optionally at several scales to account for perspective. Each cell $j$ has a key $k_j$, computed by an
-encoder $E_k$ from its $4\times$ downscaled version, and a value $v_j$, a set of tokens computed by an
-encoder $E_v$ from the native cell.
-\emph{Retrieval.} Keys live in the anchor domain: the downscaled in-focus observation and the anchor
-are both sharp at low resolution, so a defocused region and its in-focus counterpart elsewhere have
-similar keys even though their native observations differ completely. A tile queries the memory with
-$q = E_k(a_T)$ and attends to its top-$k$ cells and a learned null entry,
+Inside a strongly defocused tile neither the observation nor the anchor carries native texture, but
+the same material is often in focus elsewhere in the photograph~\cite{glasner2009single,zontak2011internal}.
+\emph{Features.} Defocused regions and their in-focus counterparts cannot be matched at native
+resolution, where one is blurred and the other sharp. In the anchor they are comparable, since the
+anchor is deblurred everywhere. We compute DINOv2~\cite{oquab2024dinov2} features once on the whole
+anchor; at the anchor resolution each token covers about $56\times56$ native pixels.
+\emph{Memory.} Keys are the anchor tokens of in-focus regions (small $|d|$), excluding flat ones; the
+corresponding values are the native observation crops under them, encoded at three scales to account
+for perspective.
+\emph{Retrieval.} The tokens of the defocused part of a tile are the queries. For each, the $K$ most
+similar keys by cosine similarity, their similarity scores and a learned null entry are passed to $G$,
+which attends to them,
 \begin{equation}
-  r = \operatorname{softmax}\!\big(q^\top [k_{j_1},\dots,k_{j_k}, k_\varnothing] / \tau\big),
+  r = \operatorname{softmax}\!\big(q^\top [k_{j_1},\dots,k_{j_K}, k_\varnothing] / \tau\big),
   \label{eq:relevance}
 \end{equation}
-which yields the transferred features $\sum_i r_i v_{j_i}$ and a relevance map $\max_i r_i$ used for
-gating and analysis. The null entry lets $G$ fall back to its prior where nothing relevant is in focus.
-During training the memory is built from the whole image while the loss is computed on a crop, and
-cells overlapping the crop are dropped with probability $0.5$ so that the model learns to transfer
-rather than copy in place.
+and receives the transferred features $\sum_i r_i v_{j_i}$. Retrieval therefore needs recall rather
+than precision; relevance is learned. The null entry lets $G$ abstain and fall back to its prior where
+nothing relevant is in focus, and $\max_i r_i$ is a relevance map that we use for analysis. Because
+the memory is global, every tile draws on the whole image, and the result does not depend on the tile
+size. During training the memory is built from the whole image while the loss is computed on a crop,
+and exemplars overlapping the crop are dropped so that the model learns to transfer rather than copy
+in place.
 
-\subsection{Generator variants}
+\subsection{Network and training}
 \label{sec:variants}
-\paragraph{Feed-forward.} A U-Net with NAFNet-style blocks~\cite{chen2022nafnet} takes
-$[x_T, a{\uparrow}_T, b_T]$ and predicts a residual over $a{\uparrow}_T$; memory features enter through
-cross-attention at $1/4$ and $1/8$ resolution. It is trained with $\ell_1$, perceptual and frequency
-losses and, in a second stage, a light adversarial loss restricted to defocused pixels.
-\paragraph{One-step diffusion transformer.} A pretrained latent diffusion
-transformer~\cite{peebles2023dit,esser2024sd3} is adapted with LoRA to predict the clean latent in
-one step from the noised anchor latent, conditioned on the latents of $x_T$ and on $b_T$; memory
-tokens are appended to the joint-attention context. Since a VAE does not reproduce in-focus native
-texture exactly, the copy path of \cref{eq:output} stays in pixel space.
-\todo{backbone, distillation objective, training schedule.}
+\paragraph{Network.} $G$ is a four-level U-Net. The two finest levels use convolutional NAFNet-style
+blocks~\cite{chen2022nafnet}; at $1/4$ resolution channel attention~\cite{zamir2022restormer} mixes
+information across the tile at linear cost; at $1/8$ resolution ($64\times64$ tokens per tile) spatial
+self-attention provides tile-wide context and cross-attention reads the exemplar memory.
+\todo{sizes; whether a larger model initialized from a pretrained super-resolution network~\cite{chen2023hat}
+is reported (used to validate the formulation).}
+\paragraph{Losses.} An $\ell_1$ loss on the full output dominates in focus. The f/22 target is slightly
+misregistered and has its own noise, so pixel losses alone would favor the mean and treat transferred
+texture as noise; in defocused regions we add an alignment-tolerant texture
+loss~\cite{mechrez2018contextual} and, in a second stage, a light adversarial loss.
+\todo{weights, schedule.}
+\paragraph{Generative variant.} Where the memory abstains under strong defocus, a generative prior
+can fill in. We adapt a one-step super-resolution model~\cite{wu2026vosr}, the only generative
+upsampler in our study that leaves in-focus regions intact, with LoRA, conditioned on $x_T$, $d_T$ and
+the exemplar tokens, inside the anchor lock of \cref{eq:output}, with the noise shared across tiles.
+\todo{only if the feed-forward model leaves a visible gap in such regions; otherwise an ablation.}
 
 \subsection{Training data and plug-in anchors}
 \label{sec:training}
-We train on DPDD at native resolution ($350$ scenes, \cref{sec:exp_data}). Anchors are produced by a
-pool of existing deblurring methods and by simulation (the downscaled target degraded by residual blur
-proportional to $b$, noise and ringing), which prevents overfitting to one method; the published
-methods were trained on DPDD at the anchor resolution, so their training-set anchors are better than
-their test-set anchors, and the simulated anchors compensate. Held-out methods test the plug-in claim.
-\todo{anchor gap numbers (train vs.\ test) from the secure run.}
+We train on DPDD at native resolution ($350$ scenes, \cref{sec:exp_data}). The upsampler sees $\mathcal{D}$
+only through the anchor, so any deblurring method can be plugged in at test time. Most published
+methods were trained on DPDD at exactly the anchor resolution, which makes their training-set anchors
+unrealistically good; Bokehlicious~\cite{seizinger2025bokehlicious} was not, and provides our main
+training anchors. They are complemented by anchors of other methods and by simulated anchors (the
+downscaled target degraded by residual blur that grows with $d$, ringing and noise). Methods held out
+of training test the plug-in claim.
