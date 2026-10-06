@@ -116,7 +116,7 @@ PY="${PY:-python}"
 STUDY_ANCHORS=(drbnet bokehlicious)
 FRESH_DEBLUR=(input drbnet bokehlicious restormer lakdnet ifan)
 FRESH_SRC=(ours_x4 official_x4 ours_x1)
-FRESH_SR=(bicubic hat_l hat_real swinir_real osediff)
+FRESH_SR=(bicubic hat_l hat_real swinir_real)   # osediff: needs the old-library overlay; left out for now (see report)
 
 usage() { sed -n '3,/^# =====/p' "${BASH_SOURCE[0]}" | sed '$d; s/^# \{0,1\}//'; }
 die() { echo "error: $*" >&2; exit 1; }
