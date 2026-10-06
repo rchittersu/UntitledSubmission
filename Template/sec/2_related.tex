@@ -42,9 +42,10 @@ one-step super-resolution without a text-to-image backbone~\cite{wu2026vosr}. Th
 models are blind to the native observation: they generate detail consistent with the low-resolution
 input, which at native resolution is the anchor rather than the photograph. Our experiments show the
 consequence, invented text and texture and damaged in-focus regions, in line with the
-perception--distortion trade-off~\cite{blau2018perception}. Our diffusion-transformer variant uses
-the same one-step recipe but is conditioned on the native observation and restricted to regions
-where neither the observation nor the exemplars provide detail.
+perception--distortion trade-off~\cite{blau2018perception}. \method instead keeps
+the low-resolution result fixed and takes native detail from the observation itself; a generative
+prior, if used, is conditioned on the observation and restricted to regions where neither the
+observation nor the exemplars provide detail.
 
 \paragraph{Reference-based and internal texture transfer.}
 Reference-based super-resolution transfers texture from a separate high-resolution reference through

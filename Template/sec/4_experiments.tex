@@ -135,8 +135,8 @@ resolution}: Restormer and DRBNet fine-tuned on native training crops. \todo{ret
     & S3Diff~\cite{zhang2024s3diff} & 23.50 & 0.607 & 0.427 & 0.255 & \textbf{48.4} & \textbf{0.524} & 25.31 & 0.775 \\
     & VOSR~\cite{wu2026vosr} & 24.53 & 0.658 & 0.522 & 0.289 & 40.1 & 0.459 & 25.93 & 0.797 \\
     \midrule
-    & \method (feed-forward) & \todo{--} & & & & & & & \\
-    & \method (one-step DiT) & \todo{--} & & & & & & & \\
+    & \method, Bokehlicious anchor & \todo{--} & & & & & & & \\
+    & \method, DRBNet anchor & \todo{--} & & & & & & & \\
     \bottomrule
   \end{tabular}
   \caption{\textbf{Native-resolution DPDD ($76$ test scenes, $6720\times4480$).} Anchors are deblurred at
@@ -251,7 +251,95 @@ texture exists in focus. \todo{full-set numbers for random/oracle; relevance-map
 
 \subsection{Ablations}
 \label{sec:exp_ablation}
-\todo{On the feed-forward variant: without the memory; random instead of retrieved exemplars; without
-the blur map; dual-pixel vs.\ predicted blur map; without the native input (anchor-only upsampling);
-tile size $256/512/1024$ (the memory should make it irrelevant); plug-in with held-out anchors.
-Human study (2AFC).}
+
+\begin{table}[t]
+  \centering
+  \footnotesize
+  \setlength{\tabcolsep}{2pt}
+  \begin{tabular}{@{}lccccc@{}}
+    \toprule
+    & \multicolumn{2}{c}{native} & \multicolumn{2}{c}{$\Delta$PSNR} & $\times4$ \\
+    \cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(l){6-6}
+    Variant & PSNR\up & DISTS\dn & focal & $b_3$ & PSNR\up \\
+    \midrule
+    $\times4$ + bicubic & 24.79 & 0.289 & $+0.44$ & $+2.43$ & 26.10 \\
+    \method (full) & \todo{--} & & & & \\
+    \midrule
+    \multicolumn{6}{@{}l}{\textit{components}} \\
+    \quad w/o anchor lock & \todo{--} & & & & \\
+    \quad w/o native input & \todo{--} & & & & \\
+    \quad w/o blur map & \todo{--} & & & & \\
+    \quad w/o exemplar memory & \todo{--} & & & & \\
+    \midrule
+    \multicolumn{6}{@{}l}{\textit{exemplars}} \\
+    \quad random in-focus exemplars & \todo{--} & & & & \\
+    \quad pixel features, not DINOv2 & \todo{--} & & & & \\
+    \quad oracle exemplars & \todo{--} & & & & \\
+    \midrule
+    \multicolumn{6}{@{}l}{\textit{blur map}} \\
+    \quad CoC radius, not disparity & \todo{--} & & & & \\
+    \quad per-band maps & \todo{--} & & & & \\
+    \quad predicted, not dual-pixel & \todo{--} & & & & \\
+    \midrule
+    \multicolumn{6}{@{}l}{\textit{training and inference}} \\
+    \quad simulated anchors only & \todo{--} & & & & \\
+    \quad real anchors only & \todo{--} & & & & \\
+    \quad tile $256$ / $1024$ & \todo{--} & & & & \\
+    \quad + generative prior & \todo{--} & & & & \\
+    \bottomrule
+  \end{tabular}
+  \caption{\textbf{Ablations} ($76$ test scenes, Bokehlicious anchor). $\Delta$PSNR: paired change over the input
+  in the in-focus bin (focal) and the most defocused dual-pixel bin ($b_3$).
+  \todo{fill from the ablation runs.}}
+  \label{tab:ablation}
+\end{table}
+
+\paragraph{Components (\cref{tab:ablation}).} Each ablation removes one source of information or one
+constraint. Without the anchor lock the network is free to alter the anchor's structure, which the
+$\times4$ column exposes. Without the native input the model becomes an anchor-only super-resolver and
+loses both the copy and the deconvolution regime. Without the blur map it cannot tell the regimes apart.
+Without the memory, texture under strong defocus must come from the network's prior alone.
+\todo{results.}
+
+\paragraph{Exemplars.} Random in-focus exemplars test whether retrieval matters, pixel features test
+the choice of DINOv2 for matching across focus, and exemplars chosen with the target's high band bound
+what retrieval could achieve. \todo{results; retrieval recall against the oracle.}
+
+\paragraph{Blur map.} The dual-pixel disparity is used as is; converting it to a circle-of-confusion
+radius or to per-band availability maps tests whether making the physics explicit helps. Replacing it
+by the predicted map measures the cost of not having dual-pixel data. \todo{results.}
+
+\paragraph{Training anchors and tiles.} Training on simulated or on real anchors only isolates the role
+of the anchor mix. Because every tile reads the same global memory, the tile size should matter
+little. \todo{results; whether the generative prior adds anything in regions where the memory
+abstains.}
+
+\begin{table}[t]
+  \centering
+  \footnotesize
+  \setlength{\tabcolsep}{3pt}
+  \begin{tabular}{@{}lcccc@{}}
+    \toprule
+    & \multicolumn{2}{c}{$\times4$ + bicubic} & \multicolumn{2}{c}{\method} \\
+    \cmidrule(lr){2-3}\cmidrule(l){4-5}
+    Anchor & PSNR\up & DISTS\dn & PSNR\up & DISTS\dn \\
+    \midrule
+    Bokehlicious~\cite{seizinger2025bokehlicious} & 24.79 & 0.289 & \todo{--} & \\
+    DRBNet~\cite{ruan2022drbnet} & 24.58 & 0.292 & \todo{--} & \\
+    Restormer~\cite{zamir2022restormer} & 24.48 & 0.319 & \todo{--} & \\
+    LaKDNet-L~\cite{ruan2023lakdnet} & 24.65 & 0.280 & \todo{--} & \\
+    IFAN~\cite{lee2021ifan} & 24.40 & 0.296 & \todo{--} & \\
+    \bottomrule
+  \end{tabular}
+  \caption{\textbf{Plug-in.} \method on the anchors of different deblurring methods ($76$ scenes, native
+  resolution). \todo{mark the anchors held out of training.}}
+  \label{tab:plugin}
+\end{table}
+
+\paragraph{Plug-in (\cref{tab:plugin}).} The upsampler sees the deblurring method only through its
+anchor. Applying it unchanged to the anchors of all five methods, including methods held out of
+training, tests whether the gains transfer and whether a better anchor yields a better result.
+\todo{results.}
+
+\paragraph{Human study.} \todo{2AFC preference against the strongest baselines on native-resolution
+crops.}

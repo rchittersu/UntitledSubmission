@@ -66,18 +66,20 @@ regions, improves perceptual quality at almost no fidelity cost (\cref{sec:exp_a
 
 We build on this observation with \method, a blur-guided upsampler that lifts any low-resolution
 deblurring method to native resolution. It takes the native blurry image, the low-resolution
-deblurred \emph{anchor}, and a \emph{blur map}, and works patch-wise. Three mechanisms shape the
-output. (i)~A \emph{copy path} reproduces the observation where it is sharp, so in-focus content is
-never re-synthesized. (ii)~An \emph{in-focus exemplar memory}, built once per image from sharp
-regions anywhere in the photograph, is queried by every patch through the anchor, in which sharp and
-defocused regions are comparable; relevant exemplars supply native texture, and a learned
-``no match'' option lets the model abstain. Because the memory is global, each patch draws on the
-whole image, and patch-wise inference is no longer limited by its tile. (iii)~A generator fills in
-what neither path provides. We present a strong feed-forward variant and a one-step
-diffusion-transformer variant that adds a generative prior while keeping the copy path in pixel
-space. Because the upsampler depends on the low-resolution stage only through the anchor and the
-blur map, any existing deblurring method can be plugged in without retraining; the blur map can be
-taken from dual-pixel data when available or predicted from the anchor and the input otherwise.
+deblurred \emph{anchor}, and a \emph{blur map}, and works patch-wise. Three ideas shape the output.
+(i)~An \emph{anchor lock}: the network only adds content above the anchor's frequency band, so the
+result downscales exactly to the anchor and can never be less faithful than it at the benchmark
+resolution, unlike generative upsamplers. (ii)~\emph{The observation is used wherever it still holds
+detail}: guided by the blur map, the network reproduces it in focus and recovers the attenuated high
+frequencies under mild defocus, a regime that neither native deblurring nor low-resolution pipelines
+exploit. (iii)~An \emph{in-focus exemplar memory}, built once per image from sharp regions anywhere in
+the photograph, is queried by every patch through self-supervised features of the anchor, in which
+sharp and defocused regions are comparable; relevant exemplars supply native texture where defocus has
+erased it, and a learned ``no match'' option lets the model abstain. Because the memory is global, each
+patch draws on the whole image, and patch-wise inference is no longer limited by its tile. Because the
+upsampler depends on the low-resolution stage only through the anchor and the blur map, any existing
+deblurring method can be plugged in without retraining; the blur map can be taken from dual-pixel data
+when available or predicted from the anchor and the input otherwise.
 
 Evaluating at native resolution raises its own difficulties. The full-resolution DPDD data exist only
 as raw captures, so we develop them and calibrate each capture to the official rendering
@@ -92,9 +94,9 @@ In summary, our contributions are:
   \item An analysis of defocus deblurring at native sensor resolution, showing on $30$\,MP data that
         native inference is close to the identity and that low-resolution deblurring followed by
         (generative) super-resolution either loses or invents detail, and why.
-  \item \method, a blur-guided upsampler with a copy path and a global in-focus exemplar memory that
-        transfers real texture across the whole image, in a feed-forward and a one-step
-        diffusion-transformer variant, which lifts any low-resolution method to native resolution.
+  \item \method, an anchor-locked, blur-guided upsampler that recovers native detail from the
+        observation where it survives and transfers real texture from a global in-focus exemplar memory
+        where it does not, and lifts any low-resolution method to native resolution.
         \todo{headline numbers: +X dB / DISTS / human preference over the strongest baseline; N
         methods lifted, incl.\ held-out ones; no change in focal-plane regions.}
   \item A native-resolution DPDD benchmark rebuilt from raw ($76$ test, $74$ validation, $350$

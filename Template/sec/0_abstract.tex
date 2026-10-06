@@ -13,10 +13,10 @@ low-resolution result perceptually without losing fidelity. We observe that the 
 present elsewhere in the same photograph: defocus is spatially varying, so the in-focus regions of
 the native observation contain real texture of the very materials that are blurred elsewhere.
 We propose \method, a blur-guided upsampler that lifts any low-resolution deblurring method to native
-resolution. It copies the observation where it is sharp, and in defocused regions transfers texture
-from relevant in-focus exemplars retrieved anywhere in the image through a global memory, so that the
-patch-wise inference is not limited by its tile. We present a feed-forward variant and a one-step
-diffusion-transformer variant. To evaluate at native resolution, we rebuild the DPDD benchmark at
+resolution. It keeps the structure of the low-resolution result exactly by construction and adds only
+native detail: taken from the observation where it is sharp or mildly defocused, and, where defocus
+has erased it, transferred from relevant in-focus exemplars retrieved anywhere in the image through a
+global memory, so that the patch-wise inference is not limited by its tile. To evaluate at native resolution, we rebuild the DPDD benchmark at
 $6720\times4480$ from the raw captures and define a protocol with standard metrics, registration and
 blur-stratified diagnostics. \todo{Results sentence: \method improves N methods by X while not
 altering in-focus regions.}
