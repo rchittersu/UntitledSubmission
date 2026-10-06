@@ -1,152 +1,166 @@
-# Method plan — native-resolution guided upsampler (2026-10-02)
+# Method plan — native-resolution guided upsampler (revised 2026-10-06)
 
-Decided with the user on 2026-10-02 after the local study (`docs/evaluation.md` §7.2):
-- **Deadline**: CVPR 2027, mid-November 2026 (exact date + paper-registration deadline to verify when
-  announced). About 6 weeks from today.
-- **Two variants, both in the paper**: **A** a strong feed-forward model; **B** a one-step DiT prior.
-- **Inputs (both)**: the blurry native-resolution input, the low-res deblurred anchor (any off-the-shelf
-  deblurrer at 1/4), and a blur map. **Plus in-focus exemplar guidance** (below): Stage 2 is still limited by
-  the tile size, so texture and structure for defocused regions (walls, fabric, repeated structure) are
-  taken from *in-focus regions anywhere in the image*, selected by a relevance map.
-- **Blur map**: dual-pixel disparity = oracle / upper bound; the method proper uses a predicted /
-  re-blur-surrogate map (works for any camera). Both are reported.
-- **Training in the secure env** on DPDD-native pairs built from the raw CR2s (≈ 60 GB).
-- **Headline metrics**: PSNR / SSIM overall and as per-blur-bin gains over the input, DISTS, per-bin LPIPS,
-  plus a small human study. LPIPS alone is not a headline metric (it ranks the blurry input best at native res).
+Replaces the 2026-10-02 plan (in git history). Decided with the user on 2026-10-06 after handoffs 2–4
+(baseline study complete on all 76 test scenes; ceilings in `docs/evaluation.md` §7 and the paper's
+"Ceilings" paragraph / frontier figure).
 
-## 1. What the local study says the method must do
+- **Deadline**: CVPR 2027, mid-November 2026 (≈ 5½ weeks from today).
+- **Training in the secure env** on DPDD-native pairs (350 train / 74 val scenes, built from raw).
+- **Evaluation**: frozen protocol `dpdd4` (out-of-the-box PSNR, SSIM, LPIPS, DISTS at native, MUSIQ, CLIPIQA,
+  PSNR/SSIM at ×4; diagnostics never rank). All 76 test scenes.
 
-| Observation (37 indoor native pairs, DRBNet) | Consequence for the design |
+## 0. Decisions (2026-10-06)
+
+| Topic | Decision |
 |---|---|
-| Native patch-wise deblurring ≈ identity (+0.04 dB) | Do not deblur at native res; deblur at 1/4 (anchor) and *upsample with guidance*. |
-| Anchor + bicubic: +1.7 dB but LPIPS 0.31 → 0.55 | Anchor gives structure; native texture must come from elsewhere. |
-| Generative SR (SwinIR-real) hallucinates and destroys in-focus detail, worse than bicubic at ×2 | Never re-synthesize where the input is sharp → **copy path**; generate only where needed, and from evidence, not from a generic prior alone. |
-| DP composite (copy input where in focus): keeps PSNR, LPIPS 0.52 → 0.44 | Blur-aware copy/generate is necessary; the remaining gap is texture in *defocused* regions. |
-| No tile seams / tile-dependent texture found | Cross-patch attention is not sold on seams; it is sold on **where texture comes from** (in-focus exemplars) and consistency of the same material across tiles. |
+| Unit of work | **512×512 native tiles** (overlap tile/8, linear blend, `uhdd.tiling`) |
+| Inputs | native blurry crop `x` · bicubic-upsampled ×4 anchor `a↑` · blur map · same-image in-focus exemplars |
+| Blur map input | **DP disparity map directly** (no calibration). CoC radius / per-band MTF availability maps = **ablation** |
+| Blur map at test | DP oracle first; predicted map = the deployable version, later |
+| Exemplars | **same image only**; retrieved with **DINOv2** features in the anchor domain (§3) |
+| Anchors for training | **Bokehlicious = primary** (not trained on DPDD → its train-set anchors are test-like) + DPDD-trained deblurrers + simulated anchors |
+| Structural errors of the ×4 deblur | **out of scope** (inherited by design through the anchor lock, §2) |
+| Base model | **validate the formulation with a big pretrained model first (v0), then slim** (§4) |
+| Variant B (one-step DiT) | **conditional** on the post-v0 measurement of what is left to generate (§6) |
 
-Target region (8-image subset numbers): PSNR ≥ 27.8 dB **and** LPIPS ≲ 0.35, with DISTS and per-bin LPIPS
-better than every baseline in the defocused bins b2/b3.
+## 1. What the baselines say the method must do
 
-## 2. Shared formulation
+| Finding (76 scenes, handoffs 2–4) | Consequence |
+|---|---|
+| Native inference ≈ identity (4/5 networks < 0.2 dB; Bokehlicious +0.64) | Deblur at ×4 (anchor), upsample with guidance |
+| ×4 deblur + bicubic = fidelity ceiling (24.79 dB, Bokehlicious), perceptually worse than the input | Keep the anchor's structure exactly; add native detail on top |
+| Bicubic keeps the anchor at ×4 (26.10 vs anchor 26.08); generative SR loses there (S3Diff −0.8 dB) | **Lock the low band to the anchor** (§2) |
+| SD-based one-step SR damages the focal plane (OSEDiff −1.1/−1.6, S3Diff −1.0 dB); VOSR safe but ≈ bicubic | Never re-synthesize where the input is sharp; generation only where nothing real exists |
+| Non-learned exemplar transfer: DISTS 0.232 (better than every generative upsampler) within 0.2 dB of bicubic, focal plane untouched | Real same-image texture is the main source of detail |
+| Bicubic gains +0.44 dB in the focal plane (f/22 target less noisy than f/4 input) | Copy path = copy **+ light denoise**, not a hard copy |
 
-Inputs at native resolution H×W (6720×4480): blurry `x`; anchor `a` = deblurrer(`x`↓4) at H/4×W/4;
-blur map `b` (|CoC| proxy in native px, from DP or predicted); focus confidence `f` = P(b < τ).
+**Target region**: PSNR ≥ the fidelity ceiling of the same anchor (24.79 dB for Bokehlicious) **and** DISTS at or
+below the exemplar transfer (≤ 0.232), focal-plane change ≥ 0, ×4 PSNR = anchor. Empty for every baseline.
 
-Output, per tile T (512–1024 native px, overlap, border-aware blend as in `uhdd.tiling`):
+## 2. Formulation
 
-    y_T = g ⊙ x_T + (1 − g) ⊙ G(x_T, a↑_T, b_T, f_T ; M)
+Per 512 native tile T; `x_T` native input crop, `a↑_T` = bicubic ×4 of the 128-px anchor crop, `d_T` DP disparity,
+memory `M` (§3):
 
-- `g` = learned copy gate (initialized from `f`): copy real detail where it survives.
-- `G` = the generator (variant A or B), conditioned on the tile and on a **global exemplar memory M**.
-- `a↑` = bicubic-upsampled anchor (structure / colour reference, residual base).
+    Δ = G(x_T, a↑_T, d_T ; M)
+    y_T = a↑_T + (Δ − up(down(Δ)))          # anchor lock (back-projection): down(y_T) = anchor exactly
 
-### 2.1 In-focus exemplar memory (the new component)
+- `down` = the area ×4 downscale used everywhere in the protocol, `up` = bicubic. The network only adds content
+  in the null space of the downscaler → ×4 fidelity is guaranteed, native PSNR depends only on the added high
+  band, and any better anchor directly gives a better result (plug-in by construction).
+- Copy behaviour is learned (no hard gate): where `x` is sharp the best high band is `x`'s own (lightly denoised).
+- Three regimes the model should learn (stated in disparity terms; the CoC/MTF version is the ablation):
+  in focus → **copy**; mild/moderate defocus (high frequencies attenuated, not gone) → **deconvolve from `x`
+  itself** (no baseline uses this regime); strong defocus (high frequencies gone) → **exemplar transfer**, then
+  the prior.
+- Inherits structural errors of the anchor by design (decision: out of scope). Possible later extension: soft
+  lock with a per-pixel predicted lock strength.
 
-Why: inside a 512-px tile of a defocused wall there is no native texture to copy, and the anchor only has
-it at 1/4 res. The same material is often in focus elsewhere in the image (another part of the wall,
-the same fabric nearer the focal plane). Texture transfer from those regions is evidence-based, unlike
-SwinIR-style synthesis.
+## 3. Exemplar memory (same image, DINOv2)
 
-Built once per image (global, independent of the tile grid):
-1. **Candidate cells**: native 64×64 cells with high focus confidence `f` *and* agreement between `x`↓4 and
-   the anchor (the cell really is sharp), ranked by texture energy; keep top K (K ≈ 512–2048), at scales
-   {1, 0.75, 0.5} to cover perspective changes of texture scale.
-2. **Keys** in the *anchor domain*: encode the cell's 4× downscaled version with the same low-res encoder that
-   encodes the anchor (both are deblurred / in focus at 1/4, so matching is reliable across focus).
-3. **Values** in the *native domain*: features of the full-res input cell (tokens, e.g. 8×8 per cell).
+Built once per image:
+1. **DINOv2 on the whole ×4 anchor** (1680×1120; patch 14 → ≈ 120×80 token grid, each token ≈ 56×56 native px).
+   Weights: DINOv2-L, already shipped for VOSR (`$UHDD_WEIGHTS/vosr/torch_cache`).
+2. **Keys** = anchor tokens in in-focus regions (DP disparity below a threshold), minus flat / low-texture tokens.
+   Keys and queries both come from the anchor → same domain (comparing smooth deblurred regions with sharp native
+   texture would be a domain gap).
+3. **Values** = the native input crops under the key tokens (64–128 px), at scales {1, 0.75, 0.5} for perspective.
+4. **Queries** = anchor tokens covering the defocused part of the current tile.
+5. **Retrieval**: top-K by cosine similarity (K ≈ 16) + the similarity scores + a learned **null** token. Retrieval
+   only needs recall@K; the model's cross-attention learns relevance (precision).
+6. **Training**: exemplars overlapping the tile's own location are dropped (p = 0.5–1) so the model learns to
+   transfer, not copy in place. Memory built from the whole training image, loss on the crop.
 
-Per tile: queries = anchor features at the tile; relevance r = softmax(q·k/τ) over top-k candidates plus a
-learned **"no match"** token (so it can abstain and fall back to the prior). The **relevance map**
-(max similarity per location) is an output: used for gating, visualization and analysis.
-Injection: cross-attention at 1/4 and 1/8 native feature scales (A) or extra joint-attention context
-tokens (B, MMDiT). Every tile sees the same memory → same material gets the same texture source across
-tiles (consistency without explicit tile-to-tile attention).
+Relevance (max attention / similarity) is an output map: used for analysis and figures.
+Risk: DINO is partly semantic (same class, wrong texture scale) → multi-scale values, scores, null; measured by
+recall (§5, M2). Related work to position against: reference-based SR (TTSR, C2-Matching, MASA-SR, DATSR — our
+DATSR baseline uses the observation as reference), internal self-similarity SR.
 
-This replaces the "Stage-1 affinity map routes cross-patch attention" idea of the draft with a concrete,
-measurable version: affinity = anchor-domain relevance, restricted to in-focus sources.
-Related work to position against: reference-based SR (TTSR, C2-Matching, MASA-SR, DATSR, ...) — here the
-reference is internal and selected by focus; internal / self-similarity SR (ZSSR, cross-scale
-self-similarity); exemplar-guided restoration. [V: verify citations]
+## 4. Models
 
-Training details: memory sampled from the **whole** training image while the loss is on a crop; with
-p = 0.5 cells overlapping the crop are removed (forces transfer instead of copying from itself).
+### v0 — validate the formulation (big, pretrained)
+- **Backbone**: HAT-L initialised from its pretrained ×4 SR weights (`hat_l_x4`), which already maps a 128-px
+  low-res image to 512 px = the anchor → native path. Added: an encoder for [`x`, `d`] injected into the HAT
+  features (per stage, zero-initialised), and cross-attention to the exemplar tokens at the deepest stages. Output
+  through the anchor lock.
+- Slow (HAT-L ≈ 140 s per 30 MP image in our runs): acceptable for v0.
+- Two runs: **oracle exemplars** (chosen with the target's high band) and **retrieved exemplars** → the gap says
+  whether to work on retrieval or on the model.
 
-### 2.2 Blur map
+### v1 — slim (after v0 works)
+- U-Net, 4 levels, ≈ 20–40 M params:
+  - full and 1/2 resolution: NAFNet-style conv blocks (no attention);
+  - 1/4 (128²): conv + Restormer-style channel attention (global over the tile, linear cost);
+  - 1/8 (64² = 4096 tokens): full spatial self-attention + **cross-attention to the exemplar memory**.
+- No window attention: it only adds local mixing that convolutions already provide; global context and exemplars
+  are cheap at the coarse levels.
+- Optionally distilled from v0.
 
-- Oracle: DP disparity (`dp_maps.py`), smoothed |d| → native px.
-- Method: tiny head predicting the blur bin / level from re-blur agreement between `x`↓4 and the anchor
-  (+ local input sharpness), supervised by the DP map on DPDD train. At train time the DP and predicted
-  maps are swapped at random (p = 0.5) so the generator is robust to the predicted one.
+### Losses (both)
+- L1 on the full output (dominates in focus and in the low band — the lock already fixes the ×4 band).
+- Alignment-tolerant texture loss (contextual / DISTS-like) and, in a second stage, a light patch-GAN **only where
+  the disparity is large** (the target is slightly misregistered and noisier; pixel losses alone teach the mean and
+  make exemplar texture look like noise).
+- Exemplar contribution scales with relevance: wrong high-band energy costs PSNR roughly by its power.
 
-### 2.3 Anchors (plug-in)
+### Training data
+- Real pairs: 512 crops of the 350 native train scenes (≈ 40k distinct tiles), val 74.
+- Anchors: Bokehlicious ×4 on train inputs (primary), the DPDD-trained deblurrers (diversity), simulated anchors
+  (target ↓4 + residual blur ∝ disparity + ringing + noise, matched to real anchor error statistics per bin).
+- Optional pretraining: synthetic native pairs (f/22 target re-blurred with a spatially varying disc from the DP
+  map) — exactly aligned, teaches the deconvolution regime; then fine-tune on real pairs.
+- Blur map at train: DP; later mix DP and predicted (p = 0.5) for robustness to the predicted map.
 
-Training anchors from {Restormer, DRBNet, IFAN, LaKDNet, Bokehlicious} at 1/4, plus synthetic anchors
-(target↓4 degraded by residual blur ∝ blur map, noise, mild ringing). One model held out at test time
-for the plug-in claim.
-**Risk**: those deblurrers were trained on DPDD train at 1680×1120 = exactly our ×4 level, so train-set
-anchors are better than test-set anchors. Measure anchor PSNR train vs test (runbook step 5); the
-synthetic-anchor mix is the mitigation; fallback: 2-fold retraining of one Stage-1 model.
+## 5. Measurements before training (secure, cheap)
 
-## 3. Variant A — feed-forward
+- **M1 — regime shares**: fraction of pixels per regime (in focus / mild–moderate / strong defocus) on train and
+  test, from a rough disparity → CoC factor (analysis only; fitted from the existing sharpness-loss correlation and
+  focal-plane MTF data). If most defocused pixels are mild–moderate, the deconvolution regime dominates.
+- **M2 — exemplar retrieval recall**: per defocused cell, oracle exemplar = in-focus native crop whose high band
+  best matches the target's; recall@K of DINO retrieval vs random vs the pixel-feature matching of the non-learned
+  exemplar transfer; coverage (fraction of strong-defocus cells with a relevant match).
+- **M3 — anchor check (light)**: same model, real vs simulated anchors on val; no formal train/test gap study needed
+  (Bokehlicious is not DPDD-trained).
 
-- U-Net (NAFNet-style blocks), 4 levels, input concat [`x`, `a↑`, `b`, `f`] → residual over `a↑`, copy gate
-  `g`; exemplar cross-attention at levels 3–4; ≈ 20–40 M params.
-- Losses: L1 + 0.1·LPIPS(vgg) + FFT-L1; stage 2 of training adds a light patch-GAN (weight ≈ 5e-3) only on
-  pixels with `f` < 0.5 (do not invent texture where the input is sharp).
-- Crops 512 native, batch ≥ 8/GPU, AdamW 2e-4 cosine, ~100k iters; tiles 1024 at inference.
+## 6. Variant B (one-step DiT) — conditional
 
-## 4. Variant B — one-step DiT prior
+After v0: measure the error left in strong-defocus regions with low exemplar relevance ("nothing to transfer").
+- Large and visible → B: **VOSR as the prior** (the one generative baseline that did not damage the focal plane),
+  LoRA, conditioned on [`x`, `d`] + exemplar tokens; anchor lock and copy path in pixel space, so the prior only acts
+  on the high band of the "nothing to transfer" region. Shared per-image noise across tiles (as in the adapters).
+- Small → B is an ablation or dropped; the paper is A. (Saves the VAE-ceiling question.)
 
-- Backbone choice by **VAE ceiling** (deferred; not in handoff 2): reconstruct native DPDD targets through each
-  candidate VAE and keep the one that preserves in-focus texture best. Candidates: SD3.5-Medium (MMDiT,
-  16-ch f8 VAE), FLUX.1-schnell VAE (16-ch f8), PixArt-Σ (SDXL 4-ch f8), Sana / Sana-Sprint (DC-AE f32,
-  one-step natively, likely too lossy). Licences to check before use.
-- One-step: start latent = anchor latent (`a↑` encoded) noised to a fixed t*; predict x0 in one step
-  (OSEDiff-style); LoRA (rank 64) + condition embedder for [`x` latent, `b`, `f`]; exemplar tokens appended
-  to the joint-attention context. Losses: latent L2 + LPIPS/DISTS on decoded crops + adversarial / VSD
-  regularizer for realism (masked to defocused pixels, as in A).
-- Final pixel-space copy fusion with `g` (VAE cannot reproduce in-focus grain exactly).
-- Prior work to check for one-step DiT SR: OSEDiff, TSD-SR, DiT4SR, DreamClear, HYPIR, PiSA-SR [V].
+## 7. Experiments
 
-## 5. Experiments
+- Main table (latest-run convention): input, native deblurrers, Bokehlicious / DRBNet ×4 + {bicubic, Real-HAT,
+  S3Diff, VOSR}, **ours (v1, and v0 if different)**; both ×4 renderings tracked (decision 2026-10-06).
+- Plug-in: ours with every anchor (Bokehlicious, DRBNet, Restormer, LaKDNet, IFAN), at least one held out of
+  training.
+- Ablations: no exemplars · random exemplars · oracle exemplars · DINO vs pixel features for retrieval · no blur
+  map · disparity vs CoC radius / MTF maps · no native input (anchor-only SR) · no anchor lock · tile 256/512/1024 ·
+  DP vs predicted blur map · real vs simulated training anchors.
+- Figures: frontier with our points; per-regime gains; relevance maps with arrows to in-focus sources; teaser crops.
+- Runtime from a warm, idle-GPU pass.
 
-Main table (76 native test pairs once outdoor raws are in; 37 indoor until then), protocol v2:
-blurry input · native patch-wise (best model) · anchor + bicubic · anchor + SwinIR-real · DP composite ·
-**A** · **B**, each with DRBNet and Restormer anchors (+ held-out anchor).
-Ablations (on A, cheap): no exemplar memory · random exemplars (no relevance) · no blur map · DP vs predicted
-map · no blurry input (anchor-only SR) · tile 256/512/1024 (memory should make tile size irrelevant) ·
-anchor model swap.
-Figures: teaser (input / bicubic / SwinIR / ours with relevance arrows from in-focus source), relevance
-maps, per-bin gain plot, runtime and memory at 6720×4480.
-Human study: 2AFC, ≈ 15 raters × 40 crop pairs, ours vs {composite, SwinIR, native patch-wise}.
+## 8. Checkpoints and timeline (from 2026-10-06)
 
-## 6. Go / no-go checkpoints
-
-1. **Exemplar pilot (local, non-learned, by Oct 6)**: on the 37 indoor native pairs, transfer the high
-   band of the best-matching in-focus input cell (match in the anchor domain) onto `a↑` in defocused cells.
-   Report LPIPS / DISTS / HB / PSNR in bins b2–b3 vs bicubic and SwinIR, plus an **oracle** (match on the
-   target's high band) = how much usable texture exists in-focus at all, and match coverage. If the oracle
-   does not help in b2/b3 the memory is not worth it → A without memory, B carries texture.
-2. **A v0 (by ≈ Oct 16)**: beats the DP composite on PSNR *and* LPIPS on the indoor set; memory ablation
-   shows a significant b2/b3 DISTS/LPIPS gain.
-3. **B v0 (by ≈ Oct 30)**: better perceptual metrics than A at ≤ 0.5 dB PSNR cost, no hallucinated text
-   (checked on the crops of `code/analysis/comparison_crops.py`).
-
-## 7. Timeline (from 2026-10-02)
-
-| Week | Outside (code + paper) | Secure (data + GPUs) |
+| When | Outside (code + paper) | Secure (data + GPUs) |
 |---|---|---|
-| 1 (Oct 2–9) | exemplar pilot; training code A (data cache, memory, model, DDP trainer) + CPU tests; this plan | **handoff 2** (`plan/secure_runbook.md`): native train/val sets, DP maps, anchors, anchor gap, VAE ceiling |
-| 2 (Oct 9–16) | B code (backbone per VAE ceiling); intro reframing | A v0 training + ablations |
-| 3 (Oct 16–23) | analysis of A; related work + bib | B training; A plug-in anchors; outdoor test raws |
-| 4 (Oct 23–30) | figures; method section | B tuning; full evaluation on 76; human-study crops |
-| 5 (Oct 30–Nov 6) | experiments section; supplement | final ablations, runtime |
-| 6 (Nov 6–deadline) | polish | reruns for reviewers' obvious questions |
+| Oct 6–10 | data pipeline (tiles, anchors, DP, DINO memory), v0 model + trainer, CPU tests | M1–M3; anchors on train/val (Bokehlicious + others), DINO features cached |
+| Oct 10–17 | v1 code; method section | **v0** training: oracle vs retrieved exemplars → go/no-go 1 |
+| Oct 17–24 | analysis; figures | v1 training + ablations; plug-in anchors → go/no-go 2 |
+| Oct 24–31 | experiments section | B only if §6 says so; full 76-scene evaluation; human-study crops |
+| Oct 31–Nov 7 | supplement | final ablations, warm timing pass |
+| Nov 7–deadline | polish | reruns |
 
-## 8. Open items
+- **Go/no-go 1** (≈ Oct 17): v0 with oracle exemplars inside the target region on val; retrieved within a clear
+  margin of oracle. If oracle does not help → exemplars are not the story; fall back to deconvolution + prior.
+- **Go/no-go 2** (≈ Oct 24): v1 reaches v0's numbers (or close) at practical runtime; plug-in works with a held-out
+  anchor.
 
-- GPU budget in the secure env (number and type) → sets batch sizes and whether B uses SD3.5-Medium.
-- Storage for the native training set: ≈ 90 GB PNG (x1+x2+x4 of 350+74 scenes) + ≈ 130 GB uncompressed
-  training cache (can be the cache only).
-- Synthetic defocus training data (sharp HR photos + rendered defocus): not needed for v0; consider if
-  DPDD-native (350 scenes) overfits.
+## 9. Open items
+
+- GPU budget per run (80 GB-class GPUs available; how many for training).
+- Predicted blur map (deployable version): small head on [`x`↓4, anchor] supervised by DP; when.
+- Whether to report v0 (HAT-based) or only v1 in the paper.
+- Human study (2AFC) logistics.
