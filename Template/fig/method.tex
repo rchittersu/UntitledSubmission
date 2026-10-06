@@ -1,0 +1,57 @@
+% Method overview (Sec. 3). TikZ on an explicit grid; frozen = grey, trained = blue, data = white.
+\begin{tikzpicture}[
+  font=\scriptsize, >=Latex,
+  data/.style={draw, rounded corners=1pt, fill=white, align=center, inner sep=2pt, minimum height=7mm},
+  frozen/.style={draw, rounded corners=2pt, fill=gray!15, align=center, inner sep=2pt, minimum height=7mm},
+  train/.style={draw=blue!60!black, rounded corners=2pt, fill=blue!8, align=center, inner sep=2pt, minimum height=8mm},
+  op/.style={draw, circle, inner sep=1pt, fill=white},
+  lab/.style={font=\scriptsize\itshape, text=black!70, fill=white, inner sep=1pt},
+  ar/.style={->, thick, black!75},
+]
+% ------------------------------------------------------------------ per image
+\node[font=\scriptsize\bfseries, anchor=west] at (-1.0, 1.0) {per image};
+\node[data, minimum width=18mm] (x) at (0, 0) {native input $x$\\[-1pt]{\tiny $6720{\times}4480$}};
+\node[frozen] (D) at (2.7, 0) {deblurrer $\mathcal{D}$\\[-1pt]{\tiny any method, at $\times4$}};
+\node[data] (a) at (5.3, 0) {anchor $a$\\[-1pt]{\tiny $1680{\times}1120$}};
+\node[frozen] (dino) at (7.8, 0) {DINOv2\\[-1pt]{\tiny tokens of $a$}};
+\node[data, minimum width=44mm] (mem) at (12.3, 0) {in-focus exemplar memory $\mathcal{M}$\\[-1pt]
+  {\tiny keys: anchor tokens in focus \;$\cdot$\; values: native crops of $x$}};
+\node[data, minimum width=18mm] (d) at (0, -1.3) {DP map $d$\\[-1pt]{\tiny $|$disparity$|$, confidence}};
+\draw[ar] (x) -- node[above, lab] {$\downarrow_4$} (D);
+\draw[ar] (D) -- (a);
+\draw[ar] (a) -- (dino);
+\draw[ar] (dino) -- node[above, lab] {keys} (mem);
+\draw[ar] (x.north) -- ++(0, 0.35) -| node[pos=0.25, above, lab] {native values} ([xshift=-12mm]mem.north);
+\draw[ar] (d.east) -- node[pos=0.5, above, lab] {in-focus regions select the keys} ([xshift=-12mm]mem.south |- d.east)
+  -- ([xshift=-12mm]mem.south);
+% ------------------------------------------------------------------ per tile
+\node[font=\scriptsize\bfseries, anchor=west] at (-1.0, -2.35) {per $512{\times}512$ tile $T$};
+\node[data, minimum width=18mm] (xt) at (0, -3.3) {$x_T$, $d_T$, $a_T$\\[-1pt]{\tiny crops of $x$, $d$, $a$}};
+\draw[ar] (d.south) -- (xt.north);
+\node[train] (cond) at (2.5, -3.3) {conditioning\\trunk};
+\node[train, minimum width=36mm, minimum height=13mm] (bb) at (5.9, -3.3) {};
+\node[anchor=north, align=center] at (bb.north) {$\times4$ backbone on $a_T$ {\tiny (HAT-L init.)}};
+\foreach \i in {1,...,6} {\node[draw=blue!60!black, fill=white, minimum width=3.6mm, minimum height=3.2mm, inner sep=0pt]
+  (s\i) at ([xshift={(\i-3.5)*5.4mm}, yshift=-1.0mm]bb.center) {};}
+\node[font=\tiny, anchor=south] at (bb.south) {SFT after every stage};
+\node[train] (xa) at (9.5, -3.3) {exemplar\\cross-attention\\[-1pt]{\tiny top-$K$ + null}};
+\node[train] (ref) at (11.9, -3.3) {native\\refinement};
+\node[op] (lock) at (13.55, -3.3) {$\Pi_a$};
+\node[data] (yt) at (14.55, -3.3) {$\hat y_T$};
+\node[data] (y) at (16.0, -3.3) {$\hat y$\\[-1pt]{\tiny blend, then $\Pi_a$}};
+\draw[ar] (xt) -- (cond);
+\draw[ar] (cond) -- node[above=1mm, lab] {add, SFT} (bb);
+\draw[ar] (bb) -- (xa);
+\draw[ar] (xa) -- (ref);
+\draw[ar] (ref) -- node[above, lab] {$\Delta_T$} (lock);
+\draw[ar] (lock) -- (yt);
+\draw[ar] (yt) -- (y);
+\draw[ar, blue!60!black] ([xshift=12mm]mem.south) |- ([yshift=4mm]xa.north) node[pos=0.75, above, lab] {exemplars retrieved for the tile's tokens} -- (xa.north);
+\draw[ar] ([xshift=-3mm]xt.south) -- ++(0, -0.55) -| node[pos=0.25, below, lab] {$x_T$, $d_T$: copy / deconvolve} (ref.south);
+\draw[ar] ([xshift=3mm]xt.south) -- ++(0, -0.95) -| node[pos=0.25, below, lab] {$a_T$} (lock.south);
+% ------------------------------------------------------------------ legend
+\node[frozen, minimum height=3mm, minimum width=6mm, inner sep=1pt, font=\tiny, anchor=west] (l1) at (-1.0, -5.0) {frozen};
+\node[train, minimum height=3mm, minimum width=6mm, inner sep=1pt, font=\tiny, right=2mm of l1] (l2) {trained};
+\node[font=\tiny, right=4mm of l2, anchor=west] {$\Pi_a$: anchor lock $\Delta + U(a - \Delta{\downarrow_4})$ with
+  $(e{\uparrow}){\downarrow_4}=e$, so that $\hat y{\downarrow_4} = a$};
+\end{tikzpicture}

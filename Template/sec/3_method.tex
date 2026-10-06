@@ -5,11 +5,23 @@
 % DRAFT: follows plan/method_plan.md (revised 2026-10-06). Architecture sizes, losses and schedules are
 % filled in once v0/v1 train. Keep in sync with the code.
 
+\begin{figure*}[t]
+  \centering
+  \resizebox{\textwidth}{!}{\input{fig/method}}
+  \caption{\textbf{Overview.} \emph{Per image:} any deblurring method $\mathcal{D}$ produces the anchor $a$ at
+  $4\times$ lower resolution; DINOv2 features of the anchor index the in-focus regions (from the dual-pixel map $d$)
+  into a memory whose values are native crops of the observation $x$. \emph{Per tile:} the native crop $x_T$ and
+  $d_T$ condition every stage of a $\times4$ network applied to the anchor tile; exemplars retrieved for the tile's
+  tokens enter through cross-attention (with a null option); a native refinement sees $x_T$ directly. The anchor lock
+  $\Pi_a$ keeps the result's $\times4$ band equal to the anchor, per tile and again after blending.}
+  \label{fig:method}
+\end{figure*}
+
 Given a native-resolution defocused image $x \in \mathbb{R}^{H\times W\times 3}$, an existing deblurring
 method $\mathcal{D}$ is applied to its $4\times$ downscaled version and yields the \emph{anchor}
 $a = \mathcal{D}(x{\downarrow_4})$, which has the structure of the all-in-focus image but no native
 detail. \method produces the native all-in-focus estimate $\hat{y}$ from $x$, $a$ and a blur map $d$
-giving the local amount of defocus. It operates on $512\times512$ tiles $T$ with overlap and blending,
+giving the local amount of defocus (\cref{fig:method}). It operates on $512\times512$ tiles $T$ with overlap and blending,
 but every tile has access to a memory $\mathcal{M}$ of in-focus exemplars built once per image
 (\cref{sec:memory}).
 
