@@ -84,7 +84,7 @@ not among the token's top-16). Same random flip / transpose on everything, inclu
 
 AdamW (2e-4; backbone 5e-5), warm-up 2k, cosine to 1e-6, 100k steps, batch 4 / GPU × 8, bf16, grad clip 1, EMA 0.999.
 Loss: L1 on the validity mask + 0.1 × contextual loss (VGG19 relu3_1, `$UHDD_WEIGHTS/vgg/vgg19-dcbb9e9d.pth`) on
-1024 defocused positions per tile. Validation every 2k steps on 256 fixed val tiles (EMA): PSNR, defocused-region
+1024 defocused positions per tile. Validation at step 0 (untrained = locked HAT-L, the reference row) and every 2k steps on 256 fixed val tiles (EMA): PSNR, defocused-region
 PSNR, ×4 PSNR, and the same for bicubic (reference). Model selection on full val images: launcher on `val_x4`.
 
 ## 6. Commands (secure)

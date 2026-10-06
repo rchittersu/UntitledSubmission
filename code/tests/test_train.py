@@ -143,6 +143,7 @@ def test_train_then_infer(caches, tmp_path):
     out = train.main(["--config", cfg, "--out", str(tmp_path / "run"), "--cpu",
                       "--set", f"data.cache={caches['train'][0]}", f"val.cache={caches['val'][0]}"])
     assert (out / "model_ema.pt").exists() and (out / "log.csv").exists() and (out / "val.csv").exists()
+    assert open(out / "val.csv").readlines()[1].startswith("0,")          # step-0 row = the untrained model
     # resume: a second call with more steps continues from last.pt
     out = train.main(["--config", cfg, "--out", str(tmp_path / "run"), "--cpu",
                       "--set", f"data.cache={caches['train'][0]}", f"val.cache={caches['val'][0]}", "optim.steps=4"])
@@ -160,6 +161,20 @@ def test_train_then_infer(caches, tmp_path):
         y, info = run_tiled(model, a, TileSpec(32, 4, 2, "linear", 0), model.multiple, model.scale)
     assert y.shape == (1, 3, H, W) and info["n_tiles"] > 1 and torch.isfinite(y).all()
     assert (down4(y) - a).abs().mean() < 1e-4 and (down4(y) - a).abs().max() < 5e-3   # lock holds on the blended image
+
+
+def test_configs_expand_env(monkeypatch):
+    import train
+    d = Path(__file__).resolve().parents[1] / "configs" / "train"
+    monkeypatch.setenv("UHDD_RESULTS", "/r")
+    monkeypatch.setenv("UHDD_WEIGHTS", "/w")
+    c = train.load_config(str(d / "v0_oracle.yaml"), ["val.cache=${UHDD_RESULTS}/x", "data.names=[a,b]"])
+    assert c["name"] == "v0_oracle" and c["data"]["oracle"] and c["model"]["backbone"] == "hat"
+    assert c["data"]["cache"] == "/r/dpdd/cache/train" and c["val"]["cache"] == "/r/x"
+    assert c["loss"]["vgg_weights"].startswith("/w/") and c["data"]["names"] == ["a", "b"]
+    monkeypatch.delenv("UHDD_WEIGHTS")
+    with pytest.raises(KeyError):
+        train.load_config(str(d / "v0.yaml"), [])
 
 
 def test_model_without_exemplars_and_input():

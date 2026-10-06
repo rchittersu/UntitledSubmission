@@ -1,100 +1,149 @@
-# Secure-env runbook — handoff 4: new results layout, fresh runs through the launcher, S3Diff / VOSR
+# Secure-env runbook — handoff 5: training data, cache, validation of the setup, first v0 runs
 
-**One runbook per handoff.** Replaces the handoff-3 runbook (in git history). Your handoff-3 patch was applied and
-reviewed outside (review notes: `handoff/LOG.md`, `docs/evaluation.md` §7.7).
+**One runbook per handoff.** Replaces the handoff-4 runbook (in git history). Your handoff-4 patch was applied and
+reviewed outside (`handoff/LOG.md`, `docs/evaluation.md` §7.8).
 
-Audience: the Claude agent in the secure environment (the user triggers the long runs by hand with the launcher).
-Read first: `code/experiments/launch.sh help`, `docs/evaluation.md` §5.0 (results layout), `docs/baselines.md`
-("Manual launcher").
+Audience: the Claude agent in the secure environment (the user triggers the long runs by hand).
+Read first: `docs/training.md` (canonical: data flow, cache, sample, network, trainer, commands), `plan/method_plan.md`
+§4 / §8b (design and why), `Template/sec/3_method.tex` + Fig. 2 (`fig/method.tex`).
 
 ## Standing rules
-- **All 76 test scenes**, always. **Evaluation only**, no training. **Protocol frozen** (dpdd4, decision log).
-- Report results; keep interpretation short. Same rules as always: outcome of every step, deviations table, no
-  internal paths / hostnames, hand off early if blocked.
+- This handoff is the first one **with training**. The test set (76) is **never** used for training, tuning or model
+  selection: selection on val (74), test only at the end of §8.
+- Evaluation protocol unchanged (dpdd4, frozen). Same rules as always: outcome of every step, deviations table, no
+  internal paths / hostnames / proprietary names, hand off early if blocked.
+- **Validate before you scale.** Each step below has a pass criterion; if one fails, investigate, report, and do not
+  start the 100k-step runs on a broken setup. A short, well-diagnosed report beats a long training run on a bug.
+- Code fixes are welcome in `code/` (with a CPU test where possible); describe each in the report.
 
 ## What changed outside
-- **New results root `$UHDD_RESULTS/dpdd/`**, organised by stage → input source → chain (`code/uhdd/layout.py`):
-  `inputs/<src>/` (symlinks + `manifest.json`), `deblur/<src>/<model>@<tiling>/`,
-  `upsample/<src>/<anchor>@whole/<sr>@<tiling>/`, `fusion/…`, `scratch/`. Metrics stay next to the images; every run
-  folder gets a `launch.json` (command, commit, scenes). Sources: `ours_x1`, `ours_x4`, `official_x4`, `ours_x2`.
-- **Fresh start** (user decision): everything is re-run into the new root with `code/scripts/launch.py`
-  (wrapper `code/experiments/launch.sh`). `launch_sr.py/.sh` were renamed to `launch.py/.sh` and now also run
-  deblurrers. CLI: `launch.sh deblur SRC MODEL`, `launch.sh upsample SRC MODEL SR`; `upsample official_x4 …` upsamples an anchor
-  computed on the original DPDD images (diagnostic).
-- **Legacy roots** (`dpdd_v2`, `dpdd_official_x4`, `dpdd_p1`) are kept as they are and never written; they are only
-  read by `launch.py compare`.
-- `run_matrix.py`, `run_baselines_bd.sh`, `refsr_baseline.py` still write the legacy layout — **do not use them in
-  this handoff** (fusion and DATSR are not ported to the new layout yet).
+- Results layout gains train / val sources: `train_x1`, `train_x4`, `val_x1`, `val_x4`, per-split DP maps
+  (`inputs/{train,val}_dp_maps`), `cache/<split>/`, `train/<name>/` (`code/uhdd/layout.py` SOURCES / SPLITS). If the
+  secure folder names differ from the defaults, put the real relative paths in `$UHDD_DATA/uhdd_sources.json`
+  (format: `docs/training.md` §1) — do not edit `layout.py` with internal names.
+- New code: `code/uhdd/train/` (memory, data, sim_anchor, losses), `code/uhdd/net/ours.py` (v0), `code/scripts/
+  build_train_cache.py`, `code/scripts/train.py`, configs `code/configs/train/{v0,v0_oracle,tiny}.yaml`, registry model
+  `ours_v0` (adapter `code/uhdd/adapters/ours.py`, aux inputs native + DP passed by the launcher).
+- `uhdd/dualpixel.py`: `load_dp_input` (network DP input: |d| box 3 + confidence).
+- `train.py` validates at step 0 (`val.at_start`, default on): the untrained model is HAT-L ×4 + anchor lock.
+  It now expands `${UHDD_*}` in config values (before: the default cache / VGG paths were taken literally) and
+  prints the parameter count.
 
 ---
 
 ## 0. Update and test
 ```bash
-git pull && git checkout -b handoff/h4        # base = origin/main
-pytest -q code/tests                          # expect 72 passed
+git pull && git checkout -b handoff/h5        # base = origin/main
+pip install -r code/requirements.txt
+pytest -q code/tests                          # expect 83 passed, 1 skipped outside; here the HAT test should RUN
 ```
+`test_sft_on_hat_arch` skips outside (no `$UHDD_REPOS/HAT`); in the secure env it must pass (84 passed). Report if not.
 
-## 1. Inputs: link, verify, protect legacy
+## 1. Train / val inputs and DP maps (V1)
 ```bash
-code/experiments/launch.sh setup inputs --protect-legacy      # = python code/scripts/setup_inputs.py
+code/experiments/launch.sh setup inputs --sources train_x1,train_x4,val_x1,val_x4
+code/experiments/launch.sh list
 ```
-Checks (all must pass; a source that fails is refused by the launcher):
-- 76 scenes per source; inputs / targets / masks / DP maps carry the same names;
-- **names agree across sources** — the user believes the official and our scene names match; this is the check.
-  It also verifies content: official vs ours ×4 per-scene PSNR (expected ≈ 39 dB, the calibration) and a nearest-
-  thumbnail check that catches swapped names. If it fails, do not rename anything: report the mismatching names and
-  the PSNR table, and stop at this step (the user decides);
-- sizes: ours_x4 = native / 4, official_x4 = ours_x4.
-Report: the printed summary + `checks` from `inputs/manifest.json` (PSNR median / min per kind, mismatches).
-`--protect-legacy` removes write permission from the legacy roots (undo: `chmod -R u+w <dir>`).
+Pass: 350 train / 74 val scenes; inputs / targets / masks / DP maps carry the same names; ×4 sources are native / 4;
+the manifest merges (the test sources are still listed). **No overlap** of scene names (or near-identical thumbnails)
+between train, val and test — check and report explicitly.
+DP map check: for 3 train and 3 val scenes, overlay |d| (as `blur.npy` will see it, `load_blur_map(..., win=15)`) on
+the input and describe: in-focus regions low, defocused high, orientation / registration correct (no transpose,
+flip, offset), units (DP px at 1680; typical range). Give the per-scene 5/50/95th percentiles of |d| and of the
+confidence channel. Same check for a test scene against the handoff-2/3 DP maps (must be identical).
 
-## 2. S3Diff and VOSR 2.0 (registry models in the main env)
-S3Diff and VOSR are now registry models (`s3diff_x4`, `vosr2_x4`, `vosr_0.5b_x4`; adapters in `code/uhdd/adapters/`)
-run by `run_model.py` in the **one main env** with our tiling, like OSEDiff (docs/baselines.md, "S3Diff and VOSR in our
-pipeline"). Update the main env and fetch code + weights:
-```bash
-pip install -r code/requirements.txt          # diffusers >= 0.35, transformers, peft, fairscale, ...
-code/experiments/launch.sh setup s3diff       # $UHDD_REPOS/S3Diff, $UHDD_WEIGHTS/{sd-turbo,s3diff}
-code/experiments/launch.sh setup vosr         # $UHDD_REPOS/VOSR, $UHDD_WEIGHTS/vosr
-code/experiments/launch.sh check
-```
-Upgrading diffusers/transformers/peft can affect OSEDiff: re-run one OSEDiff scene and compare with its legacy output
-(`compare` after step 3 covers it). If one library version cannot serve all three, report the conflict (versions,
-error) — do not create separate envs without telling the user.
-Smoke test, one scene each, then look at the output image (and `meta.json`: time, peak memory, tiling):
-```bash
-code/experiments/launch.sh upsample ours_x4 drbnet s3diff 0 --scenes <one test scene>
-code/experiments/launch.sh upsample ours_x4 drbnet vosr2 0 --scenes <one test scene>
-```
+## 2. Offline weights (V2)
+- DINOv2-L: `$UHDD_WEIGHTS/vosr/torch_cache/facebookresearch_dinov2_main` + `checkpoints/dinov2_vitl14_pretrain.pth`
+  (shipped with VOSR). Load it with `uhdd.train.memory.Features("dinov2", hub_dir=...)` on one anchor; report token
+  grid and time.
+- VGG19: `$UHDD_WEIGHTS/vgg/vgg19-dcbb9e9d.pth` (torchvision). If it is missing, ask the user to copy it in; do not
+  download from inside unless that is allowed. `uhdd.train.losses.VGGFeatures` must load it without network.
+- HAT-L ×4: the registry weights already used for the baselines.
+Pass: all three load with networking off.
 
-## 3. Fresh standard set (the user may launch these; check them)
+## 3. Real anchors on train / val (V3)
 ```bash
-code/experiments/launch.sh fresh 0          # deblur {input + 5} on ours_x4, official_x4, ours_x1; drbnet/bokehlicious x 5 upsamplers; then compare
-code/experiments/launch.sh study ours_x4 s3diff 0
-code/experiments/launch.sh study ours_x4 vosr2 1
-code/experiments/launch.sh upsample official_x4 drbnet vosr2 0          # diagnostic
+for s in train_x4 val_x4; do for m in bokehlicious drbnet restormer; do
+  code/experiments/launch.sh deblur $s $m all; done; done
 ```
-Multi-GPU: give a GPU list (`0,1,2,3` or `all`) as the GPU argument; the scenes are split over the GPUs (one
-process per GPU; each loads its own model copy). Independent commands on disjoint GPUs also work (runs resume).
+Metrics are computed by the launcher as for test. Report the ×4 PSNR / SSIM of each anchor on **train vs val vs
+test (ours_x4, handoff 4)**. Expected: DRBNet / Restormer (trained on DPDD) higher on train than val/test — that is the
+train/test gap the anchor mix must cover; Bokehlicious (not trained on DPDD) should be similar on all three. A large
+train-val gap for Bokehlicious would mean something else is wrong (data, names).
 
-## 4. Correctness re-check
+## 4. Cache + M1 / M2 (V4)
 ```bash
-code/experiments/launch.sh compare
+python code/scripts/build_train_cache.py --split val --gpus all --compare-pixels --limit 4     # smoke first
+python code/scripts/build_train_cache.py --split val --gpus all --compare-pixels --overwrite
+python code/scripts/build_train_cache.py --split train --gpus all --compare-pixels
 ```
-Fresh vs legacy (handoff 2/3) for PSNR / SSIM / LPIPS / DISTS. Same harness, same weights, same tiling → expect
-agreement to ~0.01 dB (identity, bicubic, deblurrers at ×4) and small differences for tiled / stochastic models.
-For every row that differs by more than 0.05 dB PSNR or 0.005 LPIPS: find out why (tiling tag, input source,
-inputs bit depth, weights) and report. In particular re-check the handoff-3 anomaly: **LaKDNet / Bokehlicious ×4 +
-HAT-L** (in-focus −1.0 dB, SSIM drop) — does it reproduce? Look at the images.
+Report: time per scene, size per scene and total (expected ≈ 155 GB train + val), the printed manifest summary.
+- **M1** (pixel share per blur bin b0–b3, train and val): tells how much of the image is copy / deconvolve /
+  exemplar regime.
+- **M2**: keys per scene, coverage of defocused tokens, recall@16 of the oracle top-1 vs chance, DINOv2 vs pixel
+  features. Pass: DINOv2 recall clearly above chance and above pixels. If DINOv2 is not better than pixels, say so —
+  it changes a paper claim.
+- **Visual check of retrieval** (most important): for 3 val scenes, pick 5 defocused query tokens each and describe
+  the anchor patch, the top-4 retrieved native exemplars and the oracle top-1 (same material? same scale? plausible
+  source of detail?). Describe in words; put the token coordinates in the report so outside can refer to them.
+  Note failure modes (e.g. retrieval of edges instead of texture, wrong scale, sky / flat keys).
 
-## 5. Results
+## 5. Step-0 check (V5)
 ```bash
-code/experiments/launch.sh summary
+torchrun --nproc_per_node 8 code/scripts/train.py --config code/configs/train/v0.yaml \
+  --set optim.steps=0 --out $UHDD_RESULTS/dpdd/scratch/v0_step0
 ```
-Tables per stage / source with CIs (all 76): deblur at ×4 (ours and official, Table 1 both renderings), native
-deblur, upsample (all anchors × upsamplers incl. S3Diff / VOSR 2.0), the official-anchor diagnostic. Runtime per
-image and GPU type.
+`val.csv` step 0 is the untrained model = HAT-L ×4 + anchor lock on Bokehlicious anchors. Pass: `psnr_x4` ≈ the
+anchor itself (lock exact → ×4 PSNR of the anchor vs target), `psnr` within ~0.1 dB of HAT-L on the same tiles
+(and ≥ `psnr_bicubic` is NOT required — handoff 3 saw HAT-L below bicubic on some anchors; report what you get).
+Also report the parameter count (total / trainable) printed at start.
 
-## 6. Handoff
-Report `handoff/from_secure/<date>_h4.md` (template in CLAUDE.md): steps 0–5, the manifest checks, deviations,
-compare table, summary tables. Update `docs/evaluation.md` §7 and `docs/baselines.md` status. `handoff/make_patch.sh`.
+## 6. Overfit (V6)
+```bash
+torchrun --nproc_per_node 8 code/scripts/train.py --config code/configs/train/v0.yaml \
+  --set optim.steps=3000 optim.warmup=200 data.names=[<scene A>,<scene B>] \
+        val.cache='${UHDD_RESULTS}/dpdd/cache/train' val.names=[<scene A>,<scene B>] val.every=500 val.tiles=64 \
+  --out $UHDD_RESULTS/dpdd/scratch/v0_overfit
+```
+(Pick two train scenes with a large defocused share from M1.) Pass: train loss falls steadily, val PSNR on the same
+scenes rises well above step 0 (several dB on defocused tiles), no NaN / inf, grad norm sane. If the loss does not
+move, check the zero-init paths actually receive gradient (`grad_norm`), then the LR groups.
+
+## 7. Smoke run: throughput (V7)
+```bash
+torchrun --nproc_per_node 8 code/scripts/train.py --config code/configs/train/v0.yaml \
+  --set optim.steps=300 val.every=300 --out $UHDD_RESULTS/dpdd/scratch/v0_smoke
+```
+Report it/s, peak GPU memory, GPU utilisation, whether the dataloader is the bottleneck (try `workers` 4 / 8 / 12),
+and the projected wall time of 100k steps. If memory does not fit batch 4 at 512, report and use the largest batch
+that fits (record it); do not shrink the tile. If 100k steps take more than ~3 days, propose a step count.
+
+## 8. Training runs (user launches; check them)
+In this order — the oracle run is the go / no-go for the exemplar path:
+```bash
+torchrun --nproc_per_node 8 code/scripts/train.py --config code/configs/train/v0_oracle.yaml
+torchrun --nproc_per_node 8 code/scripts/train.py --config code/configs/train/v0.yaml
+```
+While they run: `log.csv`, `val.csv` (EMA, every 2k): PSNR / defocused PSNR / ×4 PSNR, each vs bicubic of the same
+anchor. Report curves as tables (step, val metrics) for both runs.
+Full-image evaluation of v0 (registry `ours_v0` reads `dpdd/train/v0/model_ema.pt`):
+```bash
+code/experiments/launch.sh upsample val_x4 bokehlicious ours_v0 all --scenes <3 val scenes>   # V8: full-image smoke
+code/experiments/launch.sh upsample val_x4 bokehlicious ours_v0 all
+code/experiments/launch.sh upsample ours_x4 bokehlicious ours_v0 all       # test, once, at the end
+code/experiments/launch.sh upsample ours_x4 drbnet ours_v0 all             # plug-in, other anchor
+```
+V8 pass: no seams, `down4(output) = anchor` (the run's `meta.json` / a check by hand: ×4 PSNR vs the anchor > 60 dB),
+time and memory per 30 MP image. Look at the images: tile seams, exemplar copy artifacts (repeated patches), in-focus
+regions unchanged vs input.
+V9: v0_oracle vs v0 on val (tiles + full images). Interpretation for the report (do not overclaim): oracle ≫ v0 →
+retrieval is the bottleneck; oracle ≈ v0 ≈ no gain over HAT-L → the exemplar path is not used (check the attention to
+the null tokens); both ≫ HAT-L → go.
+
+If time remains (lower priority): the ablation `--set model.exemplars=false` (same steps as v0) on val only.
+
+## 9. Handoff
+Report `handoff/from_secure/<date>_h5.md` (template in CLAUDE.md): steps 0–8 with pass / fail per V-check, the
+deviations table, M1 / M2 tables, anchor table (train / val / test), retrieval descriptions, throughput, training
+curves (tables), val / test results with CIs, visual notes. Update `docs/training.md` §0 status and `docs/evaluation.md`
+results if test rows exist. Nothing from the cache or checkpoints leaves the environment. `handoff/make_patch.sh`.

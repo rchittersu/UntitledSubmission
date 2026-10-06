@@ -43,9 +43,11 @@ def merge(a: dict, b: dict) -> dict:
 
 
 def load_config(path: str, sets: list[str]) -> dict:
-    cfg = yaml.safe_load(Path(path).read_text())
-    if "base" in cfg:
-        cfg = merge(load_config(str(Path(path).parent / cfg.pop("base")), []), cfg)
+    """YAML with `base:` inheritance, then the --set overrides, then environment variables."""
+    def read(p: str) -> dict:
+        c = yaml.safe_load(Path(p).read_text())
+        return merge(read(str(Path(p).parent / c.pop("base"))), c) if "base" in c else c
+    cfg = read(path)
     for s in sets:
         k, v = s.split("=", 1)
         d = cfg
@@ -53,7 +55,21 @@ def load_config(path: str, sets: list[str]) -> dict:
         for kk in ks:
             d = d.setdefault(kk, {})
         d[last] = yaml.safe_load(v)
-    return cfg
+    return expand(cfg)
+
+
+def expand(v):
+    """${UHDD_RESULTS} / ${UHDD_WEIGHTS} / ... in config strings; an unset variable is an error, not a silent path."""
+    if isinstance(v, dict):
+        return {k: expand(x) for k, x in v.items()}
+    if isinstance(v, list):
+        return [expand(x) for x in v]
+    if isinstance(v, str) and "$" in v:
+        e = os.path.expandvars(v)
+        if "$" in e:
+            raise KeyError(f"unset environment variable in config value {v!r}")
+        return e
+    return v
 
 
 def psnr(a, b, m=None):
@@ -133,6 +149,10 @@ def main(argv=None):
                             betas=tuple(o.get("betas", (0.9, 0.99))), weight_decay=o.get("wd", 0.0))
     base_lr = [g["lr"] for g in opt.param_groups]
     ema = copy.deepcopy(model).eval()
+    if rank == 0:
+        n_all = sum(p.numel() for p in model.parameters())
+        n_bb = sum(p.numel() for p in bb)
+        print(f"params: {n_all / 1e6:.2f} M (backbone {n_bb / 1e6:.2f} M, new {(n_all - n_bb) / 1e6:.2f} M)", flush=True)
     for p in ema.parameters():
         p.requires_grad_(False)
     step = 0
@@ -171,6 +191,24 @@ def main(argv=None):
     logf = open(out / "log.csv", "a", newline="") if rank == 0 else None
     logw = None
 
+    def run_val(step: int) -> None:
+        v = {"step": step, **validate(ema, vl, dev, amp)}
+        new = not (out / "val.csv").exists()
+        with open(out / "val.csv", "a", newline="") as fv:
+            w = csv.DictWriter(fv, fieldnames=list(v))
+            if new:
+                w.writeheader()
+            w.writerow(v)
+        if tb:
+            for k, x in v.items():
+                if k not in ("step", "n") and x is not None:
+                    tb.add_scalar(f"val/{k}", x, step)
+        print("val", json.dumps(v), flush=True)
+
+    # step 0: the untrained model is the locked backbone (HAT-L x4 + anchor lock) -> its val row is the reference
+    if rank == 0 and vl is not None and step == 0 and vcfg.get("at_start", True):
+        run_val(0)
+
     model.train()
     t0, it = time.time(), iter(dl)
     while step < o["steps"]:
@@ -207,18 +245,7 @@ def main(argv=None):
                         tb.add_scalar(f"train/{k}", v, step)
             print(json.dumps(row), flush=True)
         if rank == 0 and vl is not None and (step % vcfg.get("every", 2000) == 0 or step == o["steps"]):
-            v = {"step": step, **validate(ema, vl, dev, amp)}
-            new = not (out / "val.csv").exists()
-            with open(out / "val.csv", "a", newline="") as fv:
-                w = csv.DictWriter(fv, fieldnames=list(v))
-                if new:
-                    w.writeheader()
-                w.writerow(v)
-            if tb:
-                for k, x in v.items():
-                    if k not in ("step", "n") and x is not None:
-                        tb.add_scalar(f"val/{k}", x, step)
-            print("val", json.dumps(v), flush=True)
+            run_val(step)
         if rank == 0 and (step % cfg.get("ckpt_every", 5000) == 0 or step == o["steps"]):
             ck = {"model": model.state_dict(), "ema": ema.state_dict(), "opt": opt.state_dict(), "step": step, "cfg": cfg}
             torch.save(ck, out / f"ckpt_{step}.pt")
