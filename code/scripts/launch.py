@@ -143,7 +143,8 @@ def run(cmd: list, dry: bool, extra_env: dict | None = None) -> float:
     if dry:
         return 0.0
     t = time.time()
-    subprocess.run([str(c) for c in cmd], check=True, env={**os.environ, **(extra_env or {})})
+    # UHDD_FAST_EXIT: finished workers exit immediately (a CUDA event-handler thread can segfault at interpreter exit and mp.spawn then kills the siblings)
+    subprocess.run([str(c) for c in cmd], check=True, env={"UHDD_FAST_EXIT": "1", **os.environ, **(extra_env or {})})
     return time.time() - t
 
 

@@ -124,8 +124,9 @@ def main():
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     imgs = list_images(a.inputs)
+    # resume: an output counts as done only if it decodes (a crashed run can leave truncated PNGs)
     todo = [{"name": k, "input": p} for k, p in imgs.items()
-            if not (a.skip_existing and (out / f"{k}.png").exists())]
+            if not (a.skip_existing and (out / f"{k}.png").exists() and not missing_outputs(out, [k]))]
     if a.limit:
         todo = todo[: a.limit]
     gpus = parse_gpus(a.gpus)
