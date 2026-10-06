@@ -41,6 +41,11 @@ class Restorer:
     def __call__(self, x: torch.Tensor, **kw) -> torch.Tensor:
         return self.fn(x, **kw)
 
+    @property
+    def finalize(self):
+        """Adapter's optional whole-image post-processing `fn.finalize(y, x)` after tiling (None if absent)."""
+        return getattr(self.fn, "finalize", None)
+
     def prepare(self, x: torch.Tensor) -> None:
         """Per-image state before tiling (adapter's optional `fn.prepare(whole image)`, e.g. a global degradation
         score or a latent noise field shared by all tiles)."""

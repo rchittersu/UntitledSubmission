@@ -93,10 +93,12 @@ def run_tiled(fn: Callable[[torch.Tensor], torch.Tensor], x: torch.Tensor, spec:
     def call(t: torch.Tensor, boxes: list[tuple[int, int, int, int]]) -> torch.Tensor:
         return (fn(t, boxes=boxes, full_hw=(H, W)) if positional else fn(t)).float()
 
+    finalize = getattr(fn, "finalize", None)      # whole-image post-processing of the model (e.g. the anchor lock)
+
     if spec.tile <= 0:
         xp, hw = pad_to_multiple(x, multiple)
-        y = call(xp, [(0, 0, *xp.shape[-2:])])
-        return crop(y, hw, scale), {"mode": "whole", "padded": list(xp.shape[-2:]), "scale": scale}
+        y = crop(call(xp, [(0, 0, *xp.shape[-2:])]), hw, scale)
+        return (finalize(y, x) if finalize else y), {"mode": "whole", "padded": list(xp.shape[-2:]), "scale": scale}
 
     T = round_up(spec.tile, max(multiple, 1))
     O = min(spec.overlap, T - 1)
@@ -131,7 +133,8 @@ def run_tiled(fn: Callable[[torch.Tensor], torch.Tensor], x: torch.Tensor, spec:
     out.div_(wsum)
     info = {**asdict(spec), "mode": "tiled", "tile": T, "overlap": O, "ys": ys, "xs": xs,
             "padded": [Hp, Wp], "scale": scale, "n_tiles": len(coords)}
-    return crop(out, (H, W), scale), info
+    out = crop(out, (H, W), scale)
+    return (finalize(out, x) if finalize else out), info
 
 
 OVERLAP_RATIO = 0.125      # standard overlap = tile / 8 for every method (P1: 512 / 64)

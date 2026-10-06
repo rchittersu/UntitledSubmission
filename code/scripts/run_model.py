@@ -54,6 +54,9 @@ def worker(rank: int, world: int, device: torch.device, a: argparse.Namespace, t
         if cuda:
             torch.cuda.reset_peak_memory_stats(device)
             torch.cuda.synchronize(device)
+        set_image = getattr(model.fn, "set_image", None)
+        if set_image is not None:     # per-image auxiliary inputs (native input, DP map) by scene name
+            set_image(rec["name"], dict(s.split("=", 1) for s in a.aux))
         tile, overlap = default_tiling(model.spec, x.shape[-2:], a.overlap_ratio)
         if a.tile is not None:
             tile, overlap = a.tile, round(a.tile * a.overlap_ratio / 2) * 2
@@ -119,6 +122,9 @@ def main():
     ap.add_argument("--write-threads", type=int, default=4)
     ap.add_argument("--skip-existing", action="store_true")
     ap.add_argument("--limit", type=int, default=0, help="only the first N images (debugging)")
+    ap.add_argument("--aux", action="append", default=[],
+                    help="key=dir: per-image auxiliary inputs by scene name (registry models with `aux`, e.g. the "
+                         "method: native=<native inputs>, dp=<DP maps>)")
     a = ap.parse_args()
 
     out = Path(a.out)

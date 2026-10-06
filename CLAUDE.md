@@ -20,7 +20,7 @@ Research project: **ultra-high-resolution (native sensor resolution, ~30 MP+) si
 - `code/` — evaluation harness (`uhdd` package + scripts, see `code/README.md`). Written outside, run in the secure env; outside can only test on CPU (`pytest code/tests`).
   Results layout (`$UHDD_RESULTS/dpdd/`: inputs / deblur / upsample / fusion, by source) and the manual launcher
   (`code/experiments/launch.sh`): `docs/evaluation.md` §5.0.
-- `docs/` — **canonical evaluation and baseline documentation**: `docs/evaluation.md` (protocol, every metric with definition + code, how to run, results, done / priority / todo) and `docs/baselines.md` (every baseline: purpose, setup, weights, commands, status, results). Keep them current when results arrive (both envs may edit them in patches).
+- `docs/` — **canonical evaluation and baseline documentation**: `docs/evaluation.md` (protocol, every metric with definition + code, how to run, results, done / priority / todo), `docs/baselines.md` (every baseline: purpose, setup, weights, commands, status, results) and `docs/training.md` (the method's training setup: data, cache, code, commands). Keep them current when results arrive (both envs may edit them in patches).
 - `plan/` — research plans shared by both envs: `plan/method_plan.md` (the method, variants A/B, timeline). **`plan/secure_runbook.md` is the single runbook for the current handoff** — one runbook per handoff, replaced by outside after the secure patch is applied (older runbooks live in git history).
 - Build: `cd Template && latexmk -pdf main.tex`.
 

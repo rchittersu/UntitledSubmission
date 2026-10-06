@@ -19,8 +19,8 @@ The baselines show that the anchor's structure is worth keeping exactly: bicubic
 it (the result, downscaled again, scores like the anchor itself), whereas generative upsamplers alter
 it and lose fidelity even at the anchor's resolution (\cref{sec:exp_results}). We therefore let the
 network contribute only what the anchor cannot express. With $G$ the network, $a{\uparrow}$ the
-bicubically upsampled anchor, ${\downarrow_4}$ the area downscaling used throughout and ${\uparrow}$
-bicubic upsampling,
+bicubically upsampled anchor, ${\downarrow_4}$ the area downscaling used throughout and ${\uparrow}$ an
+upsampling with $(e{\uparrow}){\downarrow_4} = e$ (bicubic, corrected by its own nearest-neighbour residual),
 \begin{equation}
   \begin{aligned}
     \Delta_T &= G\big(x_T,\, a{\uparrow}_T,\, d_T;\, \mathcal{M}\big),\\
@@ -28,8 +28,9 @@ bicubic upsampling,
   \end{aligned}
   \label{eq:output}
 \end{equation}
-so that $\hat{y}{\downarrow_4} = a$ up to the resampling filters, as in iterative
-back-projection~\cite{irani1991backprojection}. The output is as faithful as the anchor at the
+so that $\hat{y}{\downarrow_4} = a$ exactly, as in one step of iterative
+back-projection~\cite{irani1991backprojection}; after tiles are blended, the same projection is applied once more
+to the whole image. The output is as faithful as the anchor at the
 benchmark resolution by construction, any improvement of the anchor carries over directly, and the
 network is free to spend its capacity on the native high band. The price is that structural errors of
 the anchor are inherited; we leave correcting them to the low-resolution method.

@@ -65,6 +65,7 @@ REGISTRY_SR = {  # every upsampler runs through run_model.py with its paper tili
     "bicubic": "bicubic_x4", "hat_l": "hat_l_x4", "hat_real": "hat_x4_real",
     "swinir_real": "swinir_x4_real", "osediff": "osediff_x4",
     "s3diff": "s3diff_x4", "vosr2": "vosr2_x4", "vosr_0.5b": "vosr_0.5b_x4",
+    "ours_v0": "ours_v0",                                   # the method (configs/models.yaml, adapters/ours.py)
 }
 METRICS_NATIVE = "psnr,ssim,lpips,dists,musiq,clipiqa,msres,hb,blurbins,percbins,noharm,apsnr"
 METRICS_LOWRES = "psnr,ssim,lpips,dists,musiq,clipiqa,hb,blurbins,percbins,noharm,apsnr"
@@ -193,7 +194,7 @@ def evaluate(out: Path, src: str, label: str, gpu: str, dry: bool, native_target
         print(f"  scored: {out / f'metrics_{TAG}.json'} (current; --rescore to redo)")
         return
     if native_targets:
-        s, scale, metrics = layout.NATIVE, 1, METRICS_NATIVE
+        s, scale, metrics = layout.native_of(src), 1, METRICS_NATIVE
     else:
         s, scale = src, layout.source(src)["scale"]
         metrics = METRICS_OFFICIAL if layout.source(src)["masks"] is None else METRICS_LOWRES
@@ -201,14 +202,14 @@ def evaluate(out: Path, src: str, label: str, gpu: str, dry: bool, native_target
            "--crop", layout.CROP_NATIVE // scale, "--metrics", metrics, "--tag", TAG, "--label", label, "--gpus", gpu]
     if layout.source(s)["masks"]:
         cmd += ["--masks", layout.input_dir(s, "masks"), "--inputs", layout.input_dir(s, "inputs"),
-                "--dp-maps", layout.dp_maps_dir()]
+                "--dp-maps", layout.dp_maps_dir(layout.split_of(s))]
     run(cmd, dry)
 
 
 # ---------------------------------------------------------------- stages
 def deblur(model: str, src: str, names: list[str], gpu: str, dry: bool, ev: bool,
            tile: int | None = None, overlap: int | None = None, force: bool = False) -> Path:
-    man = require(src, layout.NATIVE)
+    man = require(src, layout.native_of(src))
     t, tile, overlap = step_tag(model, hw_of(man, src), tile, overlap)
     out = layout.deblur_dir(src, t)
     label = f"{model} deblur ({src})"
@@ -233,7 +234,7 @@ def upsample(src: str, anchor: str, sr: str, names: list[str], gpu: str, dry: bo
     if layout.source(src)["scale"] != 4:
         sys.exit(f"upsample needs an x4 source (x4 upsamplers), got {src}")
     official = src.startswith("official")
-    man = require(src, layout.NATIVE)
+    man = require(src, layout.native_of(src))
     a_out = deblur(anchor, src, names, gpu, dry, ev=False)
     a_tag = a_out.name
     s_tag = step_tag(REGISTRY_SR[sr], hw_of(man, src))[0]
@@ -247,6 +248,9 @@ def upsample(src: str, anchor: str, sr: str, names: list[str], gpu: str, dry: bo
         inp = a_out if len(left) == len(scene_names(src, None)) else subset(a_out, left, f"up_{src}_{a_tag}", dry)
         cmd = [PY, HERE / "run_model.py", "--model", REGISTRY_SR[sr], "--inputs", inp, "--out", out, "--gpus", gpu,
                "--tile", tile, "--overlap", overlap, "--skip-existing"]
+        if registry()[REGISTRY_SR[sr]].get("aux"):   # the method: native input + DP maps of the same split
+            cmd += ["--aux", f"native={layout.input_dir(layout.native_of(src))}",
+                    "--aux", f"dp={layout.dp_maps_dir(layout.split_of(src))}"]
         run(cmd, dry)
         provenance(out, {**rec, "tile": tile, "overlap": overlap, "cmd": " ".join(map(str, cmd))}, dry)
     if ev:

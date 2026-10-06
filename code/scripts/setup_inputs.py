@@ -101,8 +101,9 @@ def protect(d: Path) -> None:
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--sources", default="ours_x1,ours_x4,official_x4")
-    ap.add_argument("--expect", type=int, default=76)
+    ap.add_argument("--sources", default="ours_x1,ours_x4,official_x4",
+                    help="sources to (re)check; train / val: train_x1,train_x4 / val_x1,val_x4")
+    ap.add_argument("--expect", type=int, default=None, help="scenes per source (default: the split's count)")
     ap.add_argument("--min-psnr", type=float, default=30.0, help="official vs ours x4, per scene (dB)")
     ap.add_argument("--protect-legacy", action="store_true")
     a = ap.parse_args()
@@ -110,8 +111,11 @@ def main():
     data, root = layout.data_root(), layout.root()
     srcs = a.sources.split(",")
     problems: list[str] = []
-    man = {"created": time.strftime("%Y-%m-%d %H:%M:%S"), "root": layout.ROOT_NAME, "expect": a.expect,
-           "sources": {}, "checks": {}}
+    man = {"created": time.strftime("%Y-%m-%d %H:%M:%S"), "root": layout.ROOT_NAME, "sources": {}, "checks": {}}
+    splits = sorted({layout.split_of(s) for s in srcs})
+    for sp in splits:    # the native source of a split is always (re)checked with it
+        if layout.SPLITS[sp]["native"] not in srcs:
+            srcs.insert(0, layout.SPLITS[sp]["native"])
 
     def flag(src: str, msg: str) -> None:   # every problem belongs to a source: launch.py refuses that source
         rec = man["sources"].get(src)
@@ -139,8 +143,9 @@ def main():
             rec["problems"] += names_report(kinds, f"{s}/inputs")
             names[s] = kinds[f"{s}/inputs"]
             rec["n"] = len(names[s])
-            if rec["n"] != a.expect:
-                rec["problems"].append(f"{rec['n']} scenes, expected {a.expect}")
+            expect = a.expect or layout.SPLITS[layout.split_of(s)]["n"]
+            if rec["n"] != expect:
+                rec["problems"].append(f"{rec['n']} scenes, expected {expect}")
             sizes = {n: size_of(p) for n, p in files[s]["inputs"].items()}
             rec["sizes"] = sorted({f"{w}x{h}" for h, w in sizes.values()})
             for kind in ("targets", "masks"):
@@ -150,32 +155,35 @@ def main():
             rec["_hw"] = sizes
         man["sources"][s] = rec
 
-    dp = data / layout.DP_MAPS
-    if dp.is_dir():
-        link(layout.dp_maps_dir(), dp)
-        have = {p.name[: -len("_disp.png")] for p in dp.glob("*_disp.png")}
-        miss = sorted(names.get(layout.NATIVE, set()) - have)
-        man["checks"]["dp_maps"] = {"n": len(have), "missing": miss}
-        if miss:
-            flag(layout.NATIVE, f"dp_maps: missing for {miss}")
-    else:
-        flag(layout.NATIVE, f"dp_maps: missing ({layout.DP_MAPS})")
+    for sp in splits:
+        nat = layout.SPLITS[sp]["native"]
+        dp = data / layout.SPLITS[sp]["dp_maps"]
+        if dp.is_dir():
+            link(layout.dp_maps_dir(sp), dp)
+            have = {p.name[: -len("_disp.png")] for p in dp.glob("*_disp.png")}
+            miss = sorted(names.get(nat, set()) - have)
+            man["checks"][f"dp_maps_{sp}"] = {"n": len(have), "missing": miss}
+            if miss:
+                flag(nat, f"dp_maps: missing for {miss}")
+        else:
+            flag(nat, f"dp_maps: missing ({layout.SPLITS[sp]['dp_maps']})")
 
-    # 2. names and sizes across sources
-    if layout.NATIVE in names:
-        cross = names_report(names, layout.NATIVE)
-        man["checks"]["names_across_sources"] = cross or "identical"
-        for c in cross:
-            flag(c.split(":")[0], c)
-        hw1 = man["sources"][layout.NATIVE]["_hw"]
-        for s in srcs:
-            if s == layout.NATIVE or "_hw" not in man["sources"][s]:
-                continue
-            sc = layout.source(s)["scale"]
-            bad = [n for n, (h, w) in man["sources"][s]["_hw"].items()
-                   if n in hw1 and (h, w) != (hw1[n][0] // sc, hw1[n][1] // sc)]
-            if bad:
-                flag(s, f"{len(bad)} scenes not native/{sc} in size: {bad[:8]}")
+        # 2. names and sizes across the sources of this split
+        if nat in names:
+            group = {k: v for k, v in names.items() if layout.split_of(k) == sp}
+            cross = names_report(group, nat)
+            man["checks"][f"names_across_sources_{sp}"] = cross or "identical"
+            for c in cross:
+                flag(c.split(":")[0], c)
+            hw1 = man["sources"][nat]["_hw"]
+            for s_ in group:
+                if s_ == nat or "_hw" not in man["sources"][s_]:
+                    continue
+                sc = layout.source(s_)["scale"]
+                bad = [n for n, (h, w) in man["sources"][s_]["_hw"].items()
+                       if n in hw1 and (h, w) != (hw1[n][0] // sc, hw1[n][1] // sc)]
+                if bad:
+                    flag(s_, f"{len(bad)} scenes not native/{sc} in size: {bad[:8]}")
 
     # 3. content: official vs ours at x4 (same name = same scene)
     if {"official_x4", "ours_x4"} <= set(files):
@@ -216,10 +224,20 @@ def main():
         rec.pop("_hw", None)
         rec["ok"] = not rec["problems"]
         problems += [f"{s}: {p}" for p in rec["problems"]]
+    # merge with sources checked earlier (e.g. test, then train / val): re-checked sources replace their entry
+    mpath = root / "inputs" / "manifest.json"
+    if mpath.exists():
+        old = json.loads(mpath.read_text())
+        for s, rec in old.get("sources", {}).items():
+            if s not in man["sources"]:
+                man["sources"][s] = rec
+                problems += [f"{s}: {p}" for p in rec.get("problems", [])]
+        for k, v in old.get("checks", {}).items():
+            man["checks"].setdefault(k, v)
     man["problems"] = problems
     man["ok"] = not problems
     (root / "inputs").mkdir(parents=True, exist_ok=True)
-    (root / "inputs" / "manifest.json").write_text(json.dumps(man, indent=1))
+    mpath.write_text(json.dumps(man, indent=1))
 
     for s, rec in man["sources"].items():
         print(f"{s:12s} n={rec.get('n', 0):3d} sizes={rec.get('sizes')} {'ok' if rec['ok'] else 'PROBLEMS'}")

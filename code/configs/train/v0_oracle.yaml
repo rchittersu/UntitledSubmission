@@ -1,0 +1,7 @@
+# v0 with ORACLE exemplars (chosen with the target's high band): upper bound of the exemplar path (go/no-go 1).
+base: v0.yaml
+name: v0_oracle
+data:
+  oracle: true
+val:
+  oracle: true

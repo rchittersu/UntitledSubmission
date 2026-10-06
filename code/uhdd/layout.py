@@ -2,7 +2,8 @@
 
     $UHDD_RESULTS/dpdd/
       inputs/<src>/{inputs,targets,masks} -> symlinks into $UHDD_DATA (setup_inputs.py), manifest.json
-      inputs/dp_maps                      -> DP blur maps (native)
+      inputs/dp_maps, inputs/<split>_dp_maps -> DP maps (1680x1120) of the test / train / val split
+      cache/<split>/                      -> training cache (build_train_cache.py)
       deblur/<src>/<model>@<tiling>/                     PNGs + meta.json + launch.json (+ metrics_<tag>.*)
       upsample/<src>/<anchor>@<tiling>/<sr>@<tiling>/    same; <src> = where the anchor's input came from
       fusion/<src>/<anchor>@<tiling>/<method>/           training-free fusions, reference-based SR
@@ -13,6 +14,7 @@ Metrics live next to the images. Legacy roots (LEGACY) are never written by anyt
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 from pathlib import Path
@@ -31,9 +33,41 @@ SOURCES = {
     # the original DPDD test pairs (1680x1120); no masks. Upsampled to native they are scored against ours_x1
     # (rendering mismatch -> diagnostic only)
     "official_x4": {"scale": 4, "inputs": "dpdd_official/inputs", "targets": "dpdd_official/targets", "masks": None},
+    # training / validation splits of the native set (method training; val = model selection only)
+    "train_x1": {"scale": 1, "inputs": "dpdd_native_train/inputs", "targets": "dpdd_native_train/x1/targets",
+                 "masks": "dpdd_native_train/x1/masks"},
+    "train_x4": {"scale": 4, "inputs": "dpdd_native_train/x4/inputs", "targets": "dpdd_native_train/x4/targets",
+                 "masks": "dpdd_native_train/x4/masks"},
+    "val_x1": {"scale": 1, "inputs": "dpdd_native_val/inputs", "targets": "dpdd_native_val/x1/targets",
+               "masks": "dpdd_native_val/x1/masks"},
+    "val_x4": {"scale": 4, "inputs": "dpdd_native_val/x4/inputs", "targets": "dpdd_native_val/x4/targets",
+               "masks": "dpdd_native_val/x4/masks"},
 }
-NATIVE = "ours_x1"
-DP_MAPS = "dpdd_native/dp_maps"
+# split of every source, its native source (targets of upsampled outputs), DP maps, expected scene count
+SPLITS = {
+    "test": {"native": "ours_x1", "dp_maps": "dpdd_native/dp_maps", "n": 76,
+             "sources": ["ours_x1", "ours_x2", "ours_x4", "official_x4"]},
+    "train": {"native": "train_x1", "dp_maps": "dpdd_native_train/dp_maps", "n": 350, "sources": ["train_x1", "train_x4"]},
+    "val": {"native": "val_x1", "dp_maps": "dpdd_native_val/dp_maps", "n": 74, "sources": ["val_x1", "val_x4"]},
+}
+NATIVE = SPLITS["test"]["native"]
+DP_MAPS = SPLITS["test"]["dp_maps"]
+
+
+def _apply_overrides() -> None:
+    """Optional $UHDD_DATA/uhdd_sources.json: {"sources": {name: {...}}, "splits": {split: {...}}} replaces folder
+    names (relative to $UHDD_DATA) where the secure data tree differs from the defaults above."""
+    d = os.environ.get("UHDD_DATA")
+    f = Path(d) / "uhdd_sources.json" if d else None
+    if f and f.exists():
+        o = json.loads(f.read_text())
+        for k, v in o.get("sources", {}).items():
+            SOURCES.setdefault(k, {}).update(v)
+        for k, v in o.get("splits", {}).items():
+            SPLITS.setdefault(k, {}).update(v)
+
+
+_apply_overrides()
 CROP_NATIVE = 64        # border removed before evaluation, native px (= 64 / scale at lower resolutions)
 
 
@@ -62,8 +96,24 @@ def input_dir(src: str, kind: str = "inputs") -> Path:
     return root() / "inputs" / src / kind
 
 
-def dp_maps_dir() -> Path:
-    return root() / "inputs" / "dp_maps"
+def split_of(src: str) -> str:
+    for k, v in SPLITS.items():
+        if src in v["sources"]:
+            return k
+    raise ValueError(f"source {src} belongs to no split")
+
+
+def native_of(src: str) -> str:
+    """Native-resolution source of the same split (targets for upsampled outputs)."""
+    return SPLITS[split_of(src)]["native"]
+
+
+def dp_maps_dir(split: str = "test") -> Path:
+    return root() / "inputs" / ("dp_maps" if split == "test" else f"{split}_dp_maps")
+
+
+def cache_dir(split: str) -> Path:
+    return root() / "cache" / split
 
 
 def tag(model: str, tile: int = 0, overlap: int = 0, extra: str = "") -> str:

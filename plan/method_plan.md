@@ -158,6 +158,12 @@ After v0: measure the error left in strong-defocus regions with low exemplar rel
 - **Go/no-go 2** (≈ Oct 24): v1 reaches v0's numbers (or close) at practical runtime; plug-in works with a held-out
   anchor.
 
+## 8b. Training setup (2026-10-06)
+Implemented and CPU-tested outside; canonical description and commands in `docs/training.md`. Decisions: 8 GPUs per
+run; cache ≈ 155 GB (memory-mapped); DINO on the ×4 anchor (×2 as ablation; DINO only matches, content is native
+pixels); held-out anchors for plug-in: LaKDNet, IFAN; model selection on a fixed val subset, all 74 at the end;
+TensorBoard if importable, CSV always.
+
 ## 9. Open items
 
 - GPU budget per run (80 GB-class GPUs available; how many for training).

@@ -250,3 +250,21 @@ models:
     tile_batch: 1
     scale: 4
     multiple: 4
+
+  ours_v0:             # the method, v0 (plan/method_plan.md §4): trained with code/scripts/train.py (configs/train/v0.yaml)
+    paper_tile: 128             # LR px = 512 native px (training tile)
+    factory: uhdd.adapters.ours:build
+    adapter: uhdd.adapters.ours:wrap
+    weights_in_factory: true
+    weights: ${UHDD_RESULTS}/dpdd/train/v0/model_ema.pt
+    aux: [native, dp]           # launch.py passes --aux native=... --aux dp=... (native input, DP maps of the split)
+    features: dinov2
+    dino_name: dinov2_vitl14
+    dino_hub: ${UHDD_WEIGHTS}/vosr/torch_cache
+    scales: [1.0, 0.75, 0.5]
+    m: 32
+    k: 16
+    precision: bf16
+    tile_batch: 4
+    scale: 4
+    multiple: 16

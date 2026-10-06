@@ -1,0 +1,61 @@
+# v0 (plan/method_plan.md §4): validate the formulation with a big pretrained backbone.
+# HAT-L (x4 SR, ImageNet pretrain) on the anchor tile; native input + blur through a zero-init encoder; exemplar
+# cross-attention after the body; native refinement head; anchor lock. 8 GPUs: torchrun --nproc_per_node 8.
+name: v0
+seed: 0
+model:
+  version: v0
+  backbone: hat
+  registry: hat_l_x4          # weights + kwargs from configs/models.yaml
+  pretrained: true
+  cond_width: 64
+  cond_blocks: 2
+  exemplars: true
+  ex_px: 64                   # exemplar crop size fed to the encoder (native px, resized from 64 / scale)
+  ex_grid: 4                  # tokens per exemplar side
+  ex_width: 64
+  heads: 6
+  n_null: 4
+  refine_width: 32
+  refine_blocks: 4
+  anchor_lock: true
+  native_input: true
+data:
+  cache: ${UHDD_RESULTS}/dpdd/cache/train
+  tile: 512
+  anchors: {bokehlicious_deblur: 0.5, drbnet_single: 0.15, restormer_dpdd: 0.15, sim: 0.2}
+  sim: {}                     # sim_anchor.DEFAULT ranges (calibrate with M3)
+  m: 32                       # exemplars per tile
+  k: 16                       # per query token
+  oracle: false
+  drop_colocated: 1.0
+  ex_px: 64
+  defocus_thr: 0.4
+  augment: true
+  seed: 0
+val:
+  cache: ${UHDD_RESULTS}/dpdd/cache/val
+  tiles: 256                  # fixed tiles over all 74 val scenes (full-image selection: launcher on val_x4)
+  every: 2000
+  anchors: {bokehlicious_deblur: 1.0}
+loss:
+  l1: 1.0
+  cx: 0.1                     # contextual loss, defocused regions only
+  cx_points: 1024
+  vgg_weights: ${UHDD_WEIGHTS}/vgg/vgg19-dcbb9e9d.pth   # torchvision vgg19 state dict (copy into the offline env)
+optim:
+  lr: 2.0e-4
+  lr_backbone: 5.0e-5         # pretrained HAT-L
+  wd: 0.0
+  betas: [0.9, 0.99]
+  warmup: 2000
+  steps: 100000
+  min_lr: 1.0e-6
+  clip: 1.0
+  ema: 0.999
+batch: 4                      # per GPU
+workers: 6
+log_every: 50
+ckpt_every: 5000
+keep: 3
+amp: true

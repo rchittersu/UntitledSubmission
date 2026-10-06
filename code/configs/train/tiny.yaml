@@ -1,0 +1,33 @@
+# CPU smoke configuration (code/tests/test_train.py): tiny backbone, tiny tiles, pixel features, a few steps.
+base: v0.yaml
+name: tiny
+model:
+  backbone: plain
+  width: 24
+  blocks: 1
+  cond_width: 16
+  cond_blocks: 1
+  ex_width: 16
+  heads: 4
+  refine_width: 8
+  refine_blocks: 1
+data:
+  tile: 128
+  anchors: {bokehlicious_deblur: 0.5, drbnet_single: 0.2, sim: 0.3}
+  m: 8
+  k: 4
+val:
+  tiles: 4
+  every: 2
+loss:
+  cx: 0.05
+  cx_points: 64
+  vgg_weights: null
+optim:
+  steps: 3
+  warmup: 1
+batch: 2
+workers: 0
+log_every: 1
+ckpt_every: 3
+amp: false
