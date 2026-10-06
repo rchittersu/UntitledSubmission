@@ -19,7 +19,7 @@ the table says which. Legend: ✅ done · 🔶 priority · ⏳ todo · [S] secur
 | **C0** | Anchor + bicubic ×4 / ×2 | upsampling floor | registry `bicubic_x4/x2` | ✅ |
 | **C1** | Anchor + SwinIR (classical / real-world) ×4, ×2 | regression / GAN SR | registry `swinir_*` | ✅ |
 | **C2** | Anchor + HAT-L (classical) / Real-HAT-GAN ×4 | strongest regression SR | registry `hat_l_x4`, `hat_x4_real` | ✅ code + sanity, 🔶 [S] run |
-| **C3** | Anchor + OSEDiff ×4 (one-step diffusion SR) | closest prior to variant B | registry `osediff_x4` | ✅ code (CUDA only), 🔶 [S] run |
+| **C3** | Anchor + OSEDiff ×4 (one-step diffusion SR) | closest prior to variant B | registry `osediff_x4` | ✅ [S] h3 (legacy env); ⏸ paused 2026-10-06: does not run in the single env (diffusers 0.41), h3 row kept |
 | **C4** | Anchor + SUPIR or SeeSR (multi-step generative SR) | strongest generative prior | external scripts | ⏳ [S] |
 | **C5** | Anchor + S3Diff (one-step, SD-Turbo + degradation-guided LoRA) | recent one-step diffusion SR | registry `s3diff_x4` (`uhdd/adapters/s3diff.py`) | ✅ code (CPU smoke test, tiny models); 🔶 [S] run |
 | **C6** | Anchor + VOSR 2.0 (one-step 1.4B DiT, CVPR 2026) | latest one-step DiT SR (closest to variant B) | registry `vosr2_x4`, `vosr_0.5b_x4` (`uhdd/adapters/vosr.py`) | ✅ code (CPU smoke test, tiny models); 🔶 [S] run |
