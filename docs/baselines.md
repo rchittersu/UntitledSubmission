@@ -313,3 +313,6 @@ Evaluated on native test set (76): Restormer, LaKDNet-L, DRBNet, IFAN (public-mi
 
 ## Handoff-3 status [S, 2026-10-05]
 All baselines evaluated on all 76 test scenes under `dpdd4`. x4 rows with bicubic / HAT-L for LaKDNet-L, IFAN, Bokehlicious (Bokehlicious also Real-HAT); slow SRs (SwinIR-real, Real-HAT, OSEDiff) for Restormer and DRBNet only. DATSR (MSE weights, DRBNet anchor) done on all 76 for `mosaic` and `mosaic_focus`: ~80-93 s per image on a shared GPU; numbers in the handoff-3 report.
+
+## Handoff-4 status [S, 2026-10-06]
+S3Diff (tile 192 / 24) and VOSR2 (tile 128 / 16) run in the one main environment (`uhdd/adapters/compat.py`: xformers and `torch.compile` off for VOSR) and are evaluated on all 76 scenes for the DRBNet and Bokehlicious anchors. OSEDiff does not run in that environment (diffusers 0.41 / transformers 5.17); it needs the old pinned-library overlay and is left out of the fresh set for now.
