@@ -17,8 +17,10 @@ $1680\times1120$, although it was captured at the $6720\times4480$ resolution of
 Mark~IV. Downscaling by a factor $s$ shrinks every CoC by $s$, so the benchmark poses a much easier
 problem than the photograph the user took: blur kernels are small relative to the network's receptive
 field and training crops, and the finest detail, which is the hardest to restore, has already been
-discarded. How to obtain the all-in-focus image at the native resolution of the sensor has, to our
-knowledge, not been studied.
+discarded. Methods trained on larger images~\cite{seizinger2025bokehlicious} and ultra-high-definition
+restoration methods (\cref{sec:related}) exist, but to our knowledge no defocus deblurring method has been
+evaluated against ground truth at the native resolution of the sensor, nor is it known how existing ones
+behave there.
 
 \begin{figure}[t]
   \centering
@@ -42,13 +44,13 @@ and the fifth~\cite{seizinger2025bokehlicious} gains $0.6$\,dB, while the same n
 $1.4$--$2.4$\,dB when the image is downscaled by $4$. Tile size and test-time statistics
 correction~\cite{chu2022tlc} make no difference. The cause is not missing context or tile seams but
 blur of an extent the networks never saw.
-\emph{Deblurring at low resolution and upsampling} recovers the structure (\eg, $+1.5$\,dB over the
-input with bicubic upsampling) but none of the native detail, and the result is visibly soft.
+\emph{Deblurring at low resolution and upsampling} recovers the structure ($+1.5$--$1.7$\,dB over the
+input with bicubic upsampling, depending on the deblurring network) but none of the native detail, and the result is visibly soft.
 Restoring that detail with super-resolution is not a remedy: learned upsamplers add nothing over
 bicubic in fidelity, and generative ones~\cite{wang2024stablesr,yu2024supir,wu2024osediff,zhang2024s3diff}
 invent detail, rewriting text into different glyphs and degrading regions that were already in focus
-(up to $-1.6$\,dB in the focal plane for one-step diffusion upsamplers built on text-to-image
-models). A conservative one-step model~\cite{wu2026vosr} avoids the damage but stays close to bicubic.
+(in the focal plane, $-1.0$ to $-1.1$\,dB with a DRBNet anchor and up to $-1.6$\,dB with a
+Restormer anchor, for one-step diffusion upsamplers built on text-to-image models). A conservative one-step model~\cite{wu2026vosr} avoids the damage but stays close to bicubic.
 All baselines we evaluate, including training-free fusions of the anchor with the observation and
 reference-based super-resolution, lie on one trade-off curve (\cref{fig:frontier}): the most
 faithful pipeline is perceptually worse than the blurry input, and every perceptual gain is paid
@@ -94,9 +96,12 @@ In summary, our contributions are:
   \item An analysis of defocus deblurring at native sensor resolution, showing on $30$\,MP data that
         native inference is close to the identity and that low-resolution deblurring followed by
         (generative) super-resolution either loses or invents detail, and why.
-  \item \method, an anchor-locked, blur-guided upsampler that recovers native detail from the
-        observation where it survives and transfers real texture from a global in-focus exemplar memory
-        where it does not, and lifts any low-resolution method to native resolution.
+  \item The observation that at native resolution the source of the missing detail depends on the local
+        defocus (the observation itself in focus and under mild defocus, in-focus regions elsewhere in
+        the same image under strong defocus), and that the two can be matched across focus in a
+        deblurred low-resolution anchor. Its components (back-projection, feature modulation, patch
+        retrieval) are known; we combine them into \method, an anchor-locked, blur-guided upsampler with
+        a global in-focus exemplar memory that lifts any low-resolution method to native resolution.
         \todo{headline numbers: +X dB / DISTS / human preference over the strongest baseline; N
         methods lifted, incl.\ held-out ones; no change in focal-plane regions.}
   \item A native-resolution DPDD benchmark rebuilt from raw ($76$ test, $74$ validation, $350$

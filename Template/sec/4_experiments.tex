@@ -25,9 +25,19 @@ border are excluded from all metrics. The left/right dual-pixel views of the inp
 proportional to the local defocus, which we smooth and use to stratify results into four bins: focal
 plane ($b_0$, $|d|<0.4$\,px at $1680$), mild, strong and very strong defocus (edges $1.5$, $3.5$\,px);
 it correlates with the measured loss of sharpness between input and target (median Spearman $0.76$).
-A paired measurement on focal-plane edges shows that the f/22 target is as sharp as the in-focus f/4
-input up to $0.3$\,cycles/px and softer only near Nyquist, so plain PSNR/SSIM are meaningful at native
-resolution. All results use the $76$ test scenes. Because our $\times4$ level is a re-rendering, results at the
+\emph{Ground-truth sharpness.} At f/22 the diffraction cutoff of the camera ($5.36\,\mu$m pixels,
+$\lambda=550$\,nm) is $0.44$\,cycles/px, and diffraction alone reduces the MTF to $0.65$ at the
+Nyquist frequency of a $\times4$ anchor ($0.125$\,cycles/px) and to $0.21$ at $0.3$\,cycles/px. The
+f/4 input is not free of loss either (aberrations, optical low-pass filter, demosaicking), and what
+matters for evaluation is whether the target holds the detail that the camera records in focus, which
+is the detail a method can restore or transfer. A paired measurement on $336$ focal-plane edges of
+$37$ scenes gives a target-to-input MTF ratio of $1.05$, $1.24$, $0.99$ and $0.64$ at $0.1$, $0.2$,
+$0.3$ and $0.4$\,cycles/px (relative Gaussian blur $\sigma\approx0$\,px, $95\%$ CI $0$--$0.31$): the
+target is as sharp as the in-focus input up to $0.3$\,cycles/px and softer only near Nyquist. Plain
+PSNR/SSIM are therefore meaningful at native resolution, but they penalize correct detail above about
+$0.3$\,cycles/px. We report them as the fidelity criterion, together with a sensitivity variant in which
+predictions are blurred with the f/22 diffraction PSF before scoring \todo{numbers; suppl.}, and use
+DISTS and LPIPS to measure restored detail. All results use the $76$ test scenes. Because our $\times4$ level is a re-rendering, results at the
 benchmark resolution are reported both on it and on the original $1680\times1120$ images, on which our
 evaluation reproduces published numbers to within $0.06$\,dB; the two renderings shift individual
 models by $-0.58$ to $+0.16$\,dB and change their order (\cref{tab:gap}).
@@ -173,7 +183,8 @@ $\times4$ and upsampling bicubically ($24.79$\,dB with Bokehlicious); no learned
 upsampler improves on bicubic in PSNR or SSIM, with either anchor. (iii)~Perceptual gains are paid
 for in fidelity: the best LPIPS among upsamplers (S3Diff) costs $0.9$\,dB, the best DISTS overall
 (adding the input's high band) costs SSIM, and the text-to-image-based generative upsamplers damage the
-focal plane by $1.0$--$1.6$\,dB. (iv)~Real texture helps: the non-learned exemplar transfer has a
+focal plane by $1.0$--$1.1$\,dB with the DRBNet anchor (\cref{tab:bins}) and by up to $1.6$\,dB with
+the Restormer anchor. (iv)~Real texture helps: the non-learned exemplar transfer has a
 better DISTS than any generative upsampler ($0.232$ vs.\ $\geq0.254$), within $0.2$\,dB of bicubic
 upsampling of the same anchor and without damaging the focal plane. The region combining both, which no baseline reaches, is the target of
 \method.
