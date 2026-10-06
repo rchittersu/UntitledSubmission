@@ -198,7 +198,7 @@ def main():
             man["checks"][f"official_vs_ours_x4_{kind}"] = {
                 "psnr_median": float(np.median(v)) if len(v) else None, "psnr_min": float(v.min()) if len(v) else None,
                 "below_min": low, "nearest_is_other_scene": perm, "per_scene": per}
-            if low:
+            if low and kind == "inputs":   # targets: informational only (our targets are registered to the input, the official ones are not)
                 flag("official_x4", f"official vs ours x4 {kind}: {len(low)} scenes below {a.min_psnr} dB: {sorted(low)[:8]}")
             if perm:
                 flag("official_x4", f"official vs ours x4 {kind}: nearest scene has another name for {perm[:8]}")
