@@ -2,9 +2,10 @@
 \section{Experiments}
 \label{sec:exp}
 % =====================================================================
-% Numbers: handoff/from_secure/2026-10-05_h3.md (protocol dpdd4, all 76); fusion rows still from h2 (tuned on
-% val; the h3 re-evaluation looked untuned). Handoff 4 re-runs everything through the launcher (new results
-% layout) and adds S3Diff / VOSR: refresh all numbers from it. Protocol frozen on 2026-10-04 before any
+% Numbers: handoff/from_secure/2026-10-05_h3.md and 2026-10-06_h4.md (protocol dpdd4, all 76). h4 re-ran the
+% deblur, bicubic and Real-HAT rows fresh (identical to 4 decimals) and added S3Diff / VOSR 2.0. HAT-L,
+% SwinIR-real, OSEDiff, DATSR rows: h3. Fusion rows still from h2 (tuned on val; the h3 re-evaluation looked
+% untuned). Protocol frozen on 2026-10-04 before any
 % result of the method existed (docs/evaluation.md, decision log).
 
 \subsection{Native-resolution DPDD}
@@ -16,7 +17,7 @@ develop every raw capture (libraw, camera white balance, the crop of the officia
 to $0.07$\,px) and calibrate it to the official rendering of the same capture with a per-capture
 colour polynomial, the converter's unsharp mask and a smooth local-tone field. After $4\times$
 downscaling, our images agree with the official ones to $38.8$\,dB (inputs) and $39.0$\,dB (targets)
-on held-out pixels, and the input--target PSNR of our $\times4$ level ($24.24$\,dB on the $76$ test
+on held-out pixels before registration, and the input--target PSNR of our $\times4$ level ($24.24$\,dB on the $76$ test
 scenes) is close to that of the official images ($23.93$\,dB). Targets are registered to the inputs with a translation; a
 homography over-fits the blur difference between the two apertures (median $6.8$ vs.\ $1.5$\,px
 estimated shift, $12/37$ vs.\ $0/37$ indoor scenes above $10$\,px). Validity masks and a $64$\,px
@@ -126,16 +127,16 @@ resolution}: Restormer and DRBNet fine-tuned on native training crops. \todo{ret
     & SwinIR-real~\cite{liang2021swinir} & 23.96 & 0.638 & 0.470 & 0.267 & 41.9 & 0.397 & 25.33 & 0.760 \\
     & Real-HAT~\cite{chen2023hat} & 24.17 & 0.649 & 0.447 & 0.282 & 37.3 & 0.374 & 25.43 & 0.762 \\
     & OSEDiff~\cite{wu2024osediff} & 23.51 & 0.616 & 0.471 & 0.281 & \textbf{50.0} & \textbf{0.563} & 24.97 & 0.752 \\
-    & S3Diff~\cite{zhang2024s3diff} & \todo{--} & & & & & & & \\
-    & VOSR~\cite{wu2026vosr} & \todo{--} & & & & & & & \\
+    & S3Diff~\cite{zhang2024s3diff} & 23.64 & 0.602 & 0.425 & 0.254 & 45.5 & 0.489 & 25.43 & 0.760 \\
+    & VOSR~\cite{wu2026vosr} & 24.36 & 0.649 & 0.510 & 0.284 & 40.8 & 0.450 & 25.80 & 0.778 \\
     & $\times2$ deblur + bicubic & 23.84 & 0.642 & 0.424 & 0.260 & 28.7 & 0.414 & 25.00 & 0.740 \\
     \midrule
     \multirow{5}{*}{\rotatebox{90}{\scriptsize Bokehl.\ $\times4$ +}}
     & bicubic & \textbf{24.79} & \textbf{0.667} & 0.546 & 0.289 & 24.7 & 0.424 & \textbf{26.10} & \textbf{0.801} \\
     & HAT-L~\cite{chen2023hat} & 24.40 & 0.611 & 0.500 & 0.281 & 36.7 & 0.414 & 26.05 & 0.789 \\
     & Real-HAT~\cite{chen2023hat} & 24.31 & 0.648 & 0.452 & 0.278 & 40.0 & 0.377 & 25.65 & 0.777 \\
-    & S3Diff~\cite{zhang2024s3diff} & \todo{--} & & & & & & & \\
-    & VOSR~\cite{wu2026vosr} & \todo{--} & & & & & & & \\
+    & S3Diff~\cite{zhang2024s3diff} & 23.50 & 0.607 & 0.427 & 0.255 & 48.4 & 0.524 & 25.31 & 0.775 \\
+    & VOSR~\cite{wu2026vosr} & 24.53 & 0.658 & 0.522 & 0.289 & 40.1 & 0.459 & 25.93 & 0.797 \\
     \midrule
     \multirow{5}{*}{\rotatebox{90}{\scriptsize fusion}}
     & DP composite & 24.52 & 0.660 & & 0.259 & & & 25.83 & \\
@@ -153,8 +154,8 @@ resolution}: Restormer and DRBNet fine-tuned on native training crops. \todo{ret
   \end{tabular}
   \caption{\textbf{Native-resolution DPDD ($76$ test scenes, $6720\times4480$).} Fusion and DATSR rows use
   DRBNet as the low-resolution deblurrer (other anchors in the supplementary). ``at $\times4$'': the native
-  result downscaled to the standard DPDD resolution. \todo{runtime column; CIs in the supplementary; S3Diff,
-  VOSR rows and refreshed numbers from handoff 4; fusion rows (handoff 2, tuned on validation) to be
+  result downscaled to the standard DPDD resolution. \todo{runtime column (clean timing pass); CIs in the
+  supplementary; OSEDiff in the shared environment; fusion rows (handoff 2, tuned on validation) to be
   re-evaluated with LPIPS, MUSIQ, CLIPIQA, SSIM at $\times4$.}}
   \label{tab:main}
 \end{table*}
@@ -170,8 +171,10 @@ than anything they were trained on, not because of tiling.
 gains $1.5$--$1.7$\,dB over the input (Bokehlicious anchor: $24.79$\,dB, the best PSNR and SSIM in the
 table), but it is smooth: its LPIPS and DISTS are worse than those of the blurry input. HAT-L does not
 improve on bicubic. The perceptual upsamplers trade fidelity for texture (SwinIR-real $-0.6$\,dB, OSEDiff
-$-1.1$\,dB): OSEDiff has by far the best no-reference scores while losing the most PSNR, and none of
-them improves DISTS over the composite. Reference-based super-resolution with the observation as
+$-1.1$\,dB, S3Diff $-0.9$\,dB): OSEDiff and S3Diff have by far the best no-reference scores and S3Diff
+the best LPIPS of all upsamplers, but only S3Diff reaches the DISTS of the composite ($0.254$ vs.\
+$0.259$), at a cost of $0.9$\,dB. VOSR, a one-step diffusion transformer, is the most conservative
+generative upsampler: within $0.3$\,dB of bicubic, with better LPIPS and no-reference scores. Reference-based super-resolution with the observation as
 reference (DATSR) matches HAT-L in PSNR with a better DISTS, but not the composite. Among the training-free fusions, copying the input in focus keeps the PSNR of
 the bicubic pipeline and improves DISTS, and transferring in-focus texture improves DISTS further
 ($0.259\to0.232$) at $-0.11$\,dB. Nothing training-free improves both. \todo{\method rows and the
@@ -197,6 +200,8 @@ comparison sentence.}
     $\times4$ + SwinIR-real & $-0.21$ & $+0.70$ & $+1.46$ & $+1.72$ & 0.303 \\
     $\times4$ + Real-HAT & $-0.05$ & $+0.92$ & $+1.71$ & $+1.87$ & 0.310 \\
     $\times4$ + OSEDiff & $\mathbf{-1.11}$ & $+0.26$ & $+1.13$ & $+1.48$ & 0.315 \\
+    $\times4$ + S3Diff & $-0.99$ & $+0.43$ & $+1.26$ & $+1.60$ & \todo{--} \\
+    $\times4$ + VOSR & $+0.08$ & $+1.05$ & $+1.87$ & $+2.06$ & \todo{--} \\
     DP composite & $+0.14$ & $+1.31$ & $+2.08$ & $+2.17$ & 0.308 \\
     exemplar (non-learned) & $+0.14$ & $+1.18$ & $+1.92$ & $+1.98$ & 0.266 \\
     \method & \todo{--} & & & & \\
@@ -210,8 +215,9 @@ comparison sentence.}
 
 \paragraph{Where detail is lost and where it is invented (\cref{tab:bins}).} The gains of the
 low-resolution pipelines grow with the amount of defocus, as expected. In the focal plane, where the
-input is already sharp, the generative upsamplers are \emph{worse than the input}: OSEDiff by
-$1.1$\,dB, with $87\%$ of the scenes affected. Visually, OSEDiff rewrites caption text into different
+input is already sharp, the text-to-image-based generative upsamplers are \emph{worse than the input}:
+OSEDiff by $1.1$\,dB, with $87\%$ of the scenes affected, and S3Diff by $1.0$\,dB; VOSR leaves the focal
+plane unchanged ($+0.1$\,dB) but also gains less elsewhere than bicubic upsampling. Visually, OSEDiff rewrites caption text into different
 glyphs, alters faces and adds banding in dark regions, while SwinIR-real and Real-HAT add halos and
 contrast (\cref{fig:qual}). The bicubic pipelines slightly \emph{gain} in the focal plane, because
 the f/22 target is less noisy than the f/4 input; PSNR thus rewards smoothing there, which is why we
