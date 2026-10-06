@@ -395,3 +395,11 @@ def test_adapter_compat_shims(monkeypatch):
     sys.modules["diffusers"].loaders = fake
     compat.diffusers_vae_mixin()
     assert fake.FromOriginalVAEMixin is fake.FromOriginalModelMixin
+
+
+def test_bins_of_uses_the_blurbins_edges():
+    import numpy as np
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    import save_blur_bins as sb
+    blur = np.array([[0.0, 0.39, 0.4, 1.49], [1.5, 3.49, 3.5, 9.0]], np.float32)
+    assert sb.bins_of(blur).tolist() == [[0, 0, 1, 1], [2, 2, 3, 3]]
