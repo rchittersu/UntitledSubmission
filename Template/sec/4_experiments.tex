@@ -167,6 +167,31 @@ from $1120$ to $512$\,px changes the result by at most $0.06$\,dB, and TLC, whic
 statistics for large inputs, changes nothing: the networks fail because the native blur is larger
 than anything they were trained on, not because of tiling.
 
+\begin{figure}[t]
+  \centering
+  \input{fig/frontier}
+  \caption{\textbf{Fidelity vs.\ perceptual quality of existing approaches} at native resolution
+  ($76$ scenes; up and right is better). Every baseline lies on or below one trade-off curve between the most
+  faithful pipeline ($\times4$ Bokehlicious + bicubic, perceptually worse than the input) and fusions
+  that add the input's high band. The shaded region, the fidelity of the best low-resolution
+  pipeline with the texture of the non-learned exemplar transfer, is empty. (B): Bokehlicious anchor,
+  otherwise DRBNet. \todo{\method points.}}
+  \label{fig:frontier}
+\end{figure}
+
+\paragraph{Ceilings of existing approaches (\cref{fig:frontier}).} Four observations hold for both
+anchors and both $\times4$ renderings. (i)~Native inference is bounded by the input: four of five
+networks change PSNR by less than $0.2$\,dB, and the best (Bokehlicious, $+0.64$\,dB) remains
+$1.1$\,dB below the low-resolution pipelines. (ii)~The fidelity ceiling is set by deblurring at
+$\times4$ and upsampling bicubically ($24.79$\,dB with Bokehlicious); no learned or generative
+upsampler improves on bicubic in PSNR or SSIM, with either anchor. (iii)~Perceptual gains are paid
+for in fidelity: the best LPIPS among upsamplers (S3Diff) costs $0.9$\,dB, the best DISTS overall
+(adding the input's high band) costs SSIM, and the text-to-image-based generative upsamplers damage the
+focal plane by $1.0$--$1.6$\,dB. (iv)~Real texture helps: the non-learned exemplar transfer has a
+better DISTS than any generative upsampler ($0.232$ vs.\ $\geq0.254$), within $0.2$\,dB of bicubic
+upsampling of the same anchor and without damaging the focal plane. The region combining both, which no baseline reaches, is the target of
+\method.
+
 \paragraph{Main comparison (\cref{tab:main}).} Deblurring at $\times4$ and upsampling bicubically
 gains $1.5$--$1.7$\,dB over the input (Bokehlicious anchor: $24.79$\,dB, the best PSNR and SSIM in the
 table), but it is smooth: its LPIPS and DISTS are worse than those of the blurry input. HAT-L does not

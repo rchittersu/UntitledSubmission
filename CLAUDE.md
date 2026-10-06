@@ -11,7 +11,7 @@ Research project: **ultra-high-resolution (native sensor resolution, ~30 MP+) si
   - `preamble.tex` — packages and project macros (`\todo` renders red; disable before submission).
   - `sec/0_abstract.tex` … `sec/5_conclusion.tex` — the paper draft (rewritten 2026-10-04 from the results so far):
     abstract, introduction, related work, method (draft, follows `plan/method_plan.md`), experiments (protocol +
-    all baseline numbers from handoff 2; method rows are `\todo`), conclusion. Macros (`\method`, `\todo`, `\up`, …)
+    all baseline numbers from handoffs 2-4, the fidelity/perception frontier figure `fig/frontier.tex` (pgfplots, data inline); method rows are `\todo`), conclusion. Macros (`\method`, `\todo`, `\up`, …)
     are in `preamble.tex`; `cleveref` is loaded in `main.tex`.
   - `sec/X_suppl.tex`, `rebuttal.tex` — untouched template text.
   - `main.bib` — all cited entries (entries preceded by `% VERIFY` need a venue/author check).

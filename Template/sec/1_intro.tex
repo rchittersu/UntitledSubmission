@@ -44,10 +44,15 @@ correction~\cite{chu2022tlc} make no difference. The cause is not missing contex
 blur of an extent the networks never saw.
 \emph{Deblurring at low resolution and upsampling} recovers the structure (\eg, $+1.5$\,dB over the
 input with bicubic upsampling) but none of the native detail, and the result is visibly soft.
-Restoring that detail with super-resolution is not a remedy: learned upsamplers add little over
-bicubic, and generative ones~\cite{wang2024stablesr,yu2024supir,wu2024osediff} invent detail,
-rewriting text into different glyphs and degrading regions that were already in focus
-(up to $-1.6$\,dB in the focal plane for a one-step diffusion upsampler).
+Restoring that detail with super-resolution is not a remedy: learned upsamplers add nothing over
+bicubic in fidelity, and generative ones~\cite{wang2024stablesr,yu2024supir,wu2024osediff,zhang2024s3diff}
+invent detail, rewriting text into different glyphs and degrading regions that were already in focus
+(up to $-1.6$\,dB in the focal plane for one-step diffusion upsamplers built on text-to-image
+models). A conservative one-step model~\cite{wu2026vosr} avoids the damage but stays close to bicubic.
+All baselines we evaluate, including training-free fusions of the anchor with the observation and
+reference-based super-resolution, lie on one trade-off curve (\cref{fig:frontier}): the most
+faithful pipeline is perceptually worse than the blurry input, and every perceptual gain is paid
+for in fidelity.
 
 Our key observation is that the native-resolution observation is far from uninformative, and that
 what it lacks locally it often contains elsewhere. Defocus varies across the image: in-focus regions
@@ -94,6 +99,7 @@ In summary, our contributions are:
         methods lifted, incl.\ held-out ones; no change in focal-plane regions.}
   \item A native-resolution DPDD benchmark rebuilt from raw ($76$ test, $74$ validation, $350$
         training scenes) with registration, dual-pixel blur stratification and a fixed protocol, and
-        an evaluation of $5$ deblurring networks, $5$ upsamplers and $5$ training-free fusion
-        baselines on it.
+        an evaluation of $5$ deblurring networks, $7$ upsamplers (three one-step diffusion models),
+        $5$ training-free fusions and reference-based super-resolution on it, which establishes the
+        fidelity and perceptual ceilings of existing approaches.
 \end{itemize}

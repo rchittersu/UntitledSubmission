@@ -4,8 +4,12 @@ $24$--$200$\,MP. We study the problem at the native resolution of the sensor and
 obvious ways to bridge the gap both fail. Applying a state-of-the-art deblurring network directly to
 $30$\,MP images changes almost nothing, because the circles of confusion grow with resolution beyond
 anything seen in training. Deblurring a $4\times$ downscaled image and upsampling the result
-recovers structure but loses native detail, and generative super-resolution brings detail back by
-inventing it, damaging regions that were already sharp. We observe that the missing detail is often
+recovers structure but loses native detail: with bicubic upsampling it is the most faithful pipeline
+we evaluate, yet perceptually worse than the blurry input. Generative super-resolution brings detail
+back by inventing it, costing up to $1.3$\,dB and damaging regions that were already sharp. Across
+$5$ deblurring networks, $7$ upsamplers including three one-step diffusion models, training-free
+fusions and reference-based super-resolution, no baseline improves on bicubic upsampling of the same
+low-resolution result perceptually without losing fidelity. We observe that the missing detail is often
 present elsewhere in the same photograph: defocus is spatially varying, so the in-focus regions of
 the native observation contain real texture of the very materials that are blurred elsewhere.
 We propose \method, a blur-guided upsampler that lifts any low-resolution deblurring method to native
