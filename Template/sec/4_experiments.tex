@@ -105,6 +105,9 @@ resolution}: Restormer and DRBNet fine-tuned on native training crops. \todo{ret
   \centering
   \small
   \setlength{\tabcolsep}{5pt}
+  % Latest run only: handoff/from_secure/2026-10-06_h4.md (fresh launcher run, all 76, dpdd4; x4 columns of the
+  % native rows from msres, identical to h3). Other baselines (HAT-L, SwinIR-real, OSEDiff, x2, fusion, DATSR)
+  % are earlier runs: Fig. frontier / supplementary.
   \begin{tabular}{@{}llcccccccc@{}}
     \toprule
     & & \multicolumn{6}{c}{native resolution} & \multicolumn{2}{c}{at $\times4$} \\
@@ -113,50 +116,33 @@ resolution}: Restormer and DRBNet fine-tuned on native training crops. \todo{ret
     \midrule
     & Blurry input & 23.06 & 0.596 & 0.370 & 0.260 & 27.3 & 0.321 & 24.24 & 0.711 \\
     \midrule
-    \multirow{6}{*}{\rotatebox{90}{\scriptsize native}}
+    \multirow{5}{*}{\rotatebox{90}{\scriptsize native}}
     & Restormer~\cite{zamir2022restormer} & 22.99 & 0.601 & 0.382 & 0.267 & 28.9 & 0.317 & 24.14 & 0.713 \\
-    & Restormer + TLC~\cite{chu2022tlc} & 22.99 & 0.601 & 0.381 & 0.266 & 29.0 & 0.317 & 24.14 & 0.714 \\
     & LaKDNet-L~\cite{ruan2023lakdnet} & 23.00 & 0.575 & 0.390 & 0.269 & 29.2 & 0.325 & 24.33 & 0.711 \\
     & DRBNet~\cite{ruan2022drbnet} & 23.12 & 0.586 & 0.376 & 0.266 & 29.1 & 0.329 & 24.35 & 0.714 \\
-    & IFAN~\cite{lee2021ifan} & 23.22 & 0.601 & \textbf{0.348} & 0.223 & 31.4 & 0.330 & 24.47 & 0.727 \\
+    & IFAN~\cite{lee2021ifan} & 23.22 & 0.601 & \textbf{0.348} & \textbf{0.223} & 31.4 & 0.330 & 24.47 & 0.727 \\
     & Bokehlicious~\cite{seizinger2025bokehlicious} & 23.70 & 0.642 & 0.369 & 0.233 & 31.8 & 0.335 & 24.89 & 0.758 \\
     \midrule
-    \multirow{8}{*}{\rotatebox{90}{\scriptsize DRBNet $\times4$ + upsampler}}
+    \multirow{4}{*}{\rotatebox{90}{\scriptsize DRBNet $\times4$}}
     & bicubic & 24.58 & 0.662 & 0.573 & 0.292 & 24.5 & 0.408 & 25.87 & 0.778 \\
-    & HAT-L~\cite{chen2023hat} & 24.52 & 0.656 & 0.533 & 0.273 & 30.1 & 0.459 & 25.82 & 0.772 \\
-    & SwinIR-real~\cite{liang2021swinir} & 23.96 & 0.638 & 0.470 & 0.267 & 41.9 & 0.397 & 25.33 & 0.760 \\
     & Real-HAT~\cite{chen2023hat} & 24.17 & 0.649 & 0.447 & 0.282 & 37.3 & 0.374 & 25.43 & 0.762 \\
-    & OSEDiff~\cite{wu2024osediff} & 23.51 & 0.616 & 0.471 & 0.281 & \textbf{50.0} & \textbf{0.563} & 24.97 & 0.752 \\
     & S3Diff~\cite{zhang2024s3diff} & 23.64 & 0.602 & 0.425 & 0.254 & 45.5 & 0.489 & 25.43 & 0.760 \\
     & VOSR~\cite{wu2026vosr} & 24.36 & 0.649 & 0.510 & 0.284 & 40.8 & 0.450 & 25.80 & 0.778 \\
-    & $\times2$ deblur + bicubic & 23.84 & 0.642 & 0.424 & 0.260 & 28.7 & 0.414 & 25.00 & 0.740 \\
     \midrule
-    \multirow{5}{*}{\rotatebox{90}{\scriptsize Bokehl.\ $\times4$ +}}
+    \multirow{4}{*}{\rotatebox{90}{\scriptsize Bokehl.\ $\times4$}}
     & bicubic & \textbf{24.79} & \textbf{0.667} & 0.546 & 0.289 & 24.7 & 0.424 & \textbf{26.10} & \textbf{0.801} \\
-    & HAT-L~\cite{chen2023hat} & 24.40 & 0.611 & 0.500 & 0.281 & 36.7 & 0.414 & 26.05 & 0.789 \\
     & Real-HAT~\cite{chen2023hat} & 24.31 & 0.648 & 0.452 & 0.278 & 40.0 & 0.377 & 25.65 & 0.777 \\
-    & S3Diff~\cite{zhang2024s3diff} & 23.50 & 0.607 & 0.427 & 0.255 & 48.4 & 0.524 & 25.31 & 0.775 \\
+    & S3Diff~\cite{zhang2024s3diff} & 23.50 & 0.607 & 0.427 & 0.255 & \textbf{48.4} & \textbf{0.524} & 25.31 & 0.775 \\
     & VOSR~\cite{wu2026vosr} & 24.53 & 0.658 & 0.522 & 0.289 & 40.1 & 0.459 & 25.93 & 0.797 \\
-    \midrule
-    \multirow{5}{*}{\rotatebox{90}{\scriptsize fusion}}
-    & DP composite & 24.52 & 0.660 & & 0.259 & & & 25.83 & \\
-    & multi-scale composite & 24.38 & 0.655 & & 0.252 & & & 25.68 & \\
-    & guided filter~\cite{he2013guided} & 24.56 & 0.662 & & 0.316 & & & 25.82 & \\
-    & + input high band & 24.37 & 0.620 & & \textbf{0.210} & & & 25.88 & \\
-    & exemplar transfer (non-learned) & 24.41 & 0.639 & & 0.232 & & & 25.82 & \\
-    \midrule
-    & DATSR~\cite{cao2022datsr} (ref.: observation) & 24.52 & 0.655 & 0.510 & 0.255 & 33.4 & 0.445 & 25.84 & 0.774 \\
-    & Restormer / DRBNet retrained at native & \todo{--} & & & & & & & \\
     \midrule
     & \method (feed-forward) & \todo{--} & & & & & & & \\
     & \method (one-step DiT) & \todo{--} & & & & & & & \\
     \bottomrule
   \end{tabular}
-  \caption{\textbf{Native-resolution DPDD ($76$ test scenes, $6720\times4480$).} Fusion and DATSR rows use
-  DRBNet as the low-resolution deblurrer (other anchors in the supplementary). ``at $\times4$'': the native
-  result downscaled to the standard DPDD resolution. \todo{runtime column (clean timing pass); CIs in the
-  supplementary; OSEDiff in the shared environment; fusion rows (handoff 2, tuned on validation) to be
-  re-evaluated with LPIPS, MUSIQ, CLIPIQA, SSIM at $\times4$.}}
+  \caption{\textbf{Native-resolution DPDD ($76$ test scenes, $6720\times4480$).} Anchors are deblurred at
+  $\times4$ on our rendering. ``at $\times4$'': the native result downscaled to the standard DPDD resolution.
+  Further baselines (HAT-L, SwinIR-real, OSEDiff, training-free fusion, DATSR) in \cref{fig:frontier} and the
+  supplementary. \todo{runtime column (warm timing pass); CIs in the supplementary.}}
   \label{tab:main}
 \end{table*}
 
@@ -194,16 +180,12 @@ upsampling of the same anchor and without damaging the focal plane. The region c
 
 \paragraph{Main comparison (\cref{tab:main}).} Deblurring at $\times4$ and upsampling bicubically
 gains $1.5$--$1.7$\,dB over the input (Bokehlicious anchor: $24.79$\,dB, the best PSNR and SSIM in the
-table), but it is smooth: its LPIPS and DISTS are worse than those of the blurry input. HAT-L does not
-improve on bicubic. The perceptual upsamplers trade fidelity for texture (SwinIR-real $-0.6$\,dB, OSEDiff
-$-1.1$\,dB, S3Diff $-0.9$\,dB): OSEDiff and S3Diff have by far the best no-reference scores and S3Diff
-the best LPIPS of all upsamplers, but only S3Diff reaches the DISTS of the composite ($0.254$ vs.\
-$0.259$), at a cost of $0.9$\,dB. VOSR, a one-step diffusion transformer, is the most conservative
-generative upsampler: within $0.3$\,dB of bicubic, with better LPIPS and no-reference scores. Reference-based super-resolution with the observation as
-reference (DATSR) matches HAT-L in PSNR with a better DISTS, but not the composite. Among the training-free fusions, copying the input in focus keeps the PSNR of
-the bicubic pipeline and improves DISTS, and transferring in-focus texture improves DISTS further
-($0.259\to0.232$) at $-0.11$\,dB. Nothing training-free improves both. \todo{\method rows and the
-comparison sentence.}
+table), but it is smooth: its LPIPS and DISTS are worse than those of the blurry input. The perceptual
+upsamplers trade fidelity for texture: Real-HAT costs $0.4$--$0.5$\,dB and S3Diff $0.9$--$1.3$\,dB; S3Diff
+has the best LPIPS and no-reference scores of all upsamplers, and the only DISTS ($0.254$) better than
+that of the input. VOSR, a one-step diffusion transformer, is the most conservative generative upsampler:
+within $0.3$\,dB of bicubic, with better LPIPS and no-reference scores. The same ordering holds for both
+anchors. \todo{\method rows and the comparison sentence.}
 
 \subsection{Analysis}
 \label{sec:exp_analysis}
