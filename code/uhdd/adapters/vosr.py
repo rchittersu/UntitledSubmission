@@ -60,6 +60,8 @@ class VOSRTiles(torch.nn.Module):
 
 
 def build(spec: dict):
+    from .compat import disable_xformers
+    disable_xformers()
     repo, ckpts = Path(spec["repo"]), Path(spec["ckpts"])
     sys.path.insert(0, str(repo))
     from models.lightningdit import LightningDiT

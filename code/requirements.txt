@@ -17,3 +17,4 @@ peft             # LoRA layers (OSEDiff, S3Diff)
 fairscale        # VOSR (models/rmsnorm.py), OSEDiff RAM
 requests         # imported by S3Diff / OSEDiff model files
 tqdm
+loralib          # imported by OSEDiff (RAM / its UNet copy)

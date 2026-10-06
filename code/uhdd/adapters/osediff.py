@@ -22,6 +22,8 @@ class OSEDiffTiles(torch.nn.Module):
 
 
 def build(spec: dict):
+    from .compat import osediff_imports
+    osediff_imports()
     sys.path.insert(0, spec["repo"])
     from osediff import OSEDiff_test
     args = SimpleNamespace(pretrained_model_name_or_path=spec["sd_path"], osediff_path=spec["weights"],
@@ -41,7 +43,7 @@ def build(spec: dict):
                 tok = BertTokenizer.from_pretrained(spec["bert_path"], local_files_only=True)
                 tok.add_special_tokens({"bos_token": "[DEC]"})
                 tok.add_special_tokens({"additional_special_tokens": ["[ENC]"]})
-                tok.enc_token_id = tok.additional_special_tokens_ids[0]
+                tok.enc_token_id = tok.convert_tokens_to_ids("[ENC]")   # same id; `additional_special_tokens_ids` is gone in transformers 5
                 return tok
 
             ram_lora.init_tokenizer = _init_tokenizer

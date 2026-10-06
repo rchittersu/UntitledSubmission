@@ -380,3 +380,18 @@ def test_launch_scored_current(tmp_path):
     assert launch.scored_current(tmp_path)
     (tmp_path / "b.png").write_bytes(b"x")          # new image -> stale
     assert not launch.scored_current(tmp_path)
+
+
+def test_adapter_compat_shims(monkeypatch):
+    import os, sys, types
+    from uhdd.adapters import compat
+    monkeypatch.delenv("XFORMERS_DISABLED", raising=False)
+    compat.disable_xformers()
+    assert os.environ["XFORMERS_DISABLED"] == "1"
+    fake = types.ModuleType("diffusers.loaders")
+    fake.FromOriginalModelMixin = type("M", (), {})
+    monkeypatch.setitem(sys.modules, "diffusers", types.ModuleType("diffusers"))
+    monkeypatch.setitem(sys.modules, "diffusers.loaders", fake)
+    sys.modules["diffusers"].loaders = fake
+    compat.diffusers_vae_mixin()
+    assert fake.FromOriginalVAEMixin is fake.FromOriginalModelMixin
