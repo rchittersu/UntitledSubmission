@@ -16,7 +16,7 @@ Research project: **ultra-high-resolution (native sensor resolution, ~30 MP+) si
   - `sec/X_suppl.tex`, `rebuttal.tex` — untouched template text.
   - `main.bib` — all cited entries (entries preceded by `% VERIFY` need a venue/author check).
   - `notes.txt` — informal research notes (inconsistency taxonomy for tiled inference, papers to read, open directions).
-  - Build artifacts (`*.aux`, `*.log`, `main.pdf`, …) are git-ignored.
+  - Build artifacts (`*.aux`, `*.log`, …) are git-ignored. `main.pdf` is committed by outside (rebuilt before each paper commit); secure patches never include it (binary).
 - `code/` — evaluation harness (`uhdd` package + scripts, see `code/README.md`). Written outside, run in the secure env; outside can only test on CPU (`pytest code/tests`).
   Results layout (`$UHDD_RESULTS/dpdd/`: inputs / deblur / upsample / fusion, by source) and the manual launcher
   (`code/experiments/launch.sh`): `docs/evaluation.md` §5.0.

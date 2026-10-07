@@ -9,7 +9,6 @@
 *.log
 *.out
 *.synctex.gz
-Template/main.pdf
 
 # Python
 __pycache__/
@@ -21,3 +20,5 @@ dataset/
 .venv/
 ext/
 Template/*.pdf
+# the built paper is committed (rebuild before committing; secure patches must not include it: binary)
+!Template/main.pdf
