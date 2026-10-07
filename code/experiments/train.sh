@@ -103,7 +103,7 @@ train_go() {
     echo "  watch:  $0 watch $(basename "$out")      log: $0 log $(basename "$out")      stop: $0 stop $(basename "$out")"
   else
     echo "$$ $(date '+%F %T')" > "$out/train.pid"
-    trap 'rm -f "$out/train.pid"' EXIT
+    trap "rm -f '$out/train.pid'" EXIT   # $out expanded now: it is a function-local, gone (and `set -u` fatal) when the trap fires at exit
     "${cmd[@]}" 2>&1 | tee -a "$out/stdout.log"
     echo; "$PY" "$STATUS" "$out"
   fi
