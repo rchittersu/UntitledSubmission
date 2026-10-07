@@ -120,3 +120,6 @@ Weights needed offline: HAT-L (`$UHDD_WEIGHTS/hat/…`, already used), DINOv2-L 
 `pytest -q code/tests/test_train.py`: synthetic scenes (in-focus textures A | B, defocused A) → cache (pixel features)
 → retrieval finds the same texture (> 80 %), M2 recall above chance → dataset shapes → 3 training steps + resume →
 trained model as a registry model through the tiler; `down4(y) = anchor` on the blended image.
+
+### Secure-env status [S, 2026-10-07] (handoff 5)
+Validated: train / val inputs + DP maps (V1, no scene overlap with test), offline weights (V2), real anchors on train / val (V3), cache + M1 / M2 and a visual retrieval check (V4), step-0 reference (V5: HAT-L x4 + lock, val PSNR 24.38, -0.42 vs bicubic). Open: V6 overfit does not pass yet (L1 + 0.1 contextual plateaus at 32.96 on the two scenes; L1 only reaches bicubic, 33.85, and stays there); V7-V9 and the full runs not started. Fixes found on the way: activation checkpointing (`model.grad_checkpoint`; HAT-L at batch 4 / 512 px otherwise needs > 79 GB), `train.sh` stale pid after foreground runs, `train.sh overfit` ignoring `--set`. Details and tables: `handoff/from_secure/2026-10-07_h5.md`.
