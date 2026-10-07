@@ -192,13 +192,15 @@ case "$cmd" in
            "$PY" "$CACHE" --split "$split" --gpus "$gpu" --compare-pixels "$@" ;;
   step0)   need UHDD_RESULTS
            train_go fg "$CONFIGS/v0.yaml" "$(ngpu "${1:-}")" "$(runs)/_step0" --set optim.steps=0 name=_step0 ;;
-  overfit) [[ $# -ge 1 ]] || die "overfit auto|SCENE_A,SCENE_B [NGPU]"
+  overfit) [[ $# -ge 1 ]] || die "overfit auto|SCENE_A,SCENE_B [NGPU] [--set k=v ...]   (name=... gives the run its own folder)"
            need UHDD_RESULTS
-           sc="$1"; [[ "$sc" == auto ]] && sc="$(overfit_scenes)"
+           sc="$1"; shift; [[ "$sc" == auto ]] && sc="$(overfit_scenes)"
            echo "overfitting on: $sc"
-           train_go fg "$CONFIGS/v0.yaml" "$(ngpu "${2:-}")" "$(runs)/_overfit" --set name=_overfit optim.steps=3000 \
-             optim.warmup=200 "data.names=[$sc]" "val.names=[$sc]" "val.cache=\${UHDD_RESULTS}/dpdd/cache/train" \
-             val.every=500 val.tiles=64 ckpt_every=3000 ;;
+           n="$(ngpu "${1:-}")"; [[ -n "${1:-}" && "${1:-}" != --* ]] && shift
+           base=(--set name=_overfit optim.steps=3000 optim.warmup=200 "data.names=[$sc]" "val.names=[$sc]"
+                 "val.cache=\${UHDD_RESULTS}/dpdd/cache/train" val.every=500 val.tiles=64 ckpt_every=3000)
+           out="$(runs)/$(config_name "$CONFIGS/v0.yaml" "${base[@]}" "$@")"       # later --set values win
+           train_go fg "$CONFIGS/v0.yaml" "$n" "$out" "${base[@]}" "$@" ;;
   smoke)   need UHDD_RESULTS
            n="$(ngpu "${1:-}")"; [[ -n "${1:-}" && "${1:-}" != --* ]] && shift
            train_go fg "$CONFIGS/v0.yaml" "$n" "$(runs)/_smoke" --set name=_smoke optim.steps=300 \
