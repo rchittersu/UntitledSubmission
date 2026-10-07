@@ -208,6 +208,15 @@ def stages(sr: nn.Module) -> int:
     return len(sr.layers) if hasattr(sr, "layers") else len(sr.body)
 
 
+def _run(sr: nn.Module, f, x: torch.Tensor) -> torch.Tensor:
+    """Run one backbone stage; with `sr.grad_ckpt` the activations are recomputed in the backward pass
+    (HAT-L at batch 4 does not fit in 80 GB otherwise)."""
+    if getattr(sr, "grad_ckpt", False) and sr.training and torch.is_grad_enabled():
+        from torch.utils.checkpoint import checkpoint
+        return checkpoint(f, x, use_reentrant=False)
+    return f(x)
+
+
 def modulated_features(sr: nn.Module, x: torch.Tensor, cond: torch.Tensor | None, sfts) -> torch.Tensor:
     """The backbone's forward_features with an SFT after every stage (HAT: residual groups in token space;
     plain: blocks)."""
@@ -228,10 +237,10 @@ def modulated_features(sr: nn.Module, x: torch.Tensor, cond: torch.Tensor | None
             t = t + sr.absolute_pos_embed
         t = sr.pos_drop(t)
         for i, layer in enumerate(sr.layers):
-            t = mod(layer(t, x_size, params), i, True)
+            t = mod(_run(sr, lambda u, layer=layer: layer(u, x_size, params), t), i, True)
         return sr.patch_unembed(sr.norm(t), x_size)
     for i, blk in enumerate(sr.body):
-        x = mod(blk(x), i, False)
+        x = mod(_run(sr, blk, x), i, False)
     return x
 
 
@@ -240,6 +249,7 @@ class OursV0(nn.Module):
         super().__init__()
         self.cfg = cfg
         self.sr = build_backbone(cfg)
+        self.sr.grad_ckpt = cfg.get("grad_checkpoint", True)   # activation checkpointing per backbone stage (training only)
         c = self.sr.embed_dim
         self.d_ch = cfg.get("dp_channels", 2)
         self.use_sft = cfg.get("sft", True)

@@ -215,3 +215,23 @@ def test_sft_on_hat_matches_forward_features():
     sfts = torch.nn.ModuleList([SFT(8, 24) for _ in range(2)])
     with torch.no_grad():
         assert torch.allclose(modulated_features(sr, f, torch.rand(1, 8, 16, 16), sfts), sr.forward_features(f), atol=1e-5)
+
+
+def test_grad_checkpoint_gives_the_same_gradients():
+    cfg = {"backbone": "plain", "width": 16, "blocks": 3, "cond_width": 8, "cond_blocks": 1, "refine_width": 8,
+           "refine_blocks": 1, "exemplars": False}
+    torch.manual_seed(0)
+    m = build_model(dict(cfg, grad_checkpoint=False))
+    m2 = build_model(dict(cfg, grad_checkpoint=True))
+    m2.load_state_dict(m.state_dict())
+    for net in (m, m2):
+        torch.nn.init.normal_(net.cond.sft[1].net[-1].weight, std=0.1)   # make the SFT path non-trivial
+    m2.load_state_dict(m.state_dict())
+    a, x, d = torch.rand(1, 3, 16, 16), torch.rand(1, 3, 64, 64), torch.rand(1, 2, 16, 16)
+    grads = []
+    for net in (m, m2):
+        net.train()
+        net(a, x, d).square().mean().backward()
+        grads.append(torch.cat([p.grad.flatten() for p in net.parameters() if p.grad is not None]))
+    assert m2.sr.grad_ckpt and not m.sr.grad_ckpt
+    assert torch.allclose(grads[0], grads[1], atol=1e-6)
