@@ -253,7 +253,16 @@ report in-focus preservation separately. Conversely, DISTS in the most defocused
 input above every smooth pipeline: perceptual metrics at native resolution reward realistic grain and
 texture, which the smooth pipelines lack and which \method aims to restore from real evidence.
 
-\paragraph{In-focus exemplars carry the missing texture (\cref{fig:texture}).} The non-learned exemplar transfer matches
+\paragraph{Qualitative comparison (\cref{fig:qual}).} At native resolution the DPDD-trained network leaves the lockers and the poster
+caption as blurry as the input. Deblurring at $\times4$ and upsampling bicubically or with HAT-L recovers edges and legible text,
+but no detail beyond the anchor; the DP composite stays close to this result. The generative upsamplers add detail that is not
+the image's own: OSEDiff rewrites the caption into different glyphs and changes the shape of the locks, S3Diff sharpens the caption with
+altered glyphs and adds grain to the dark scene, SwinIR-real adds contrast and halos, and VOSR2 stays closest to bicubic.
+
+\paragraph{In-focus exemplars carry the missing texture (\cref{fig:texture}).} Within one image the same material often appears both in focus and defocused (\cref{fig:texture}):
+the defocused copy loses its fine texture at native resolution, deblurring at $\times4$ recovers its geometry but not the fine texture, and generative
+upsamplers replace it by texture that is not the material's own (a regular mesh for woven fabric). The in-focus copy is the only real evidence of that texture
+in the image. The non-learned exemplar transfer matches
 each defocused $32$\,px cell to the most similar in-focus cell of the same image at $\times4$ and adds
 its native high band. In a pilot on four scenes, matching halved the PSNR cost and doubled the
 perceptual gain compared with copying random in-focus cells, and an oracle that selects cells using the target shows how much usable

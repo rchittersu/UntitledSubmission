@@ -71,6 +71,6 @@
 \newcommand{\dn}{$\downarrow$}
 
 % qualitative figures: crops live in fig/qual/ (git-ignored, made by code/scripts/make_qual_crops.py); a box replaces a missing file
-\newcommand{\qbox}[1]{\fbox{\parbox[c][\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax][c]{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}{\centering\tiny #1}}}
+\newcommand{\qbox}[1]{\fbox{\parbox[b][\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax][c]{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}{\centering\tiny #1}}}
 \newcommand{\qimg}[1]{\IfFileExists{fig/qual/#1.jpg}{\includegraphics[width=\linewidth]{fig/qual/#1.jpg}}{\qbox{missing}}}
 \newcommand{\qhead}[1]{\makebox[\linewidth][c]{\tiny #1}}
