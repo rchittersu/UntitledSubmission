@@ -22,7 +22,7 @@ scenes) is close to that of the official images ($23.93$\,dB). Targets are regis
 homography over-fits the blur difference between the two apertures (median $6.8$ vs.\ $1.5$\,px
 estimated shift, $12/37$ vs.\ $0/37$ indoor scenes above $10$\,px). Validity masks and a $64$\,px
 border are excluded from all metrics. The left/right dual-pixel views of the input give a disparity
-proportional to the local defocus, which we smooth and use to stratify results into four bins: focal
+proportional to the local defocus, which we smooth and use to stratify results into four bins (\cref{fig:bins}): focal
 plane ($b_0$, $|d|<0.4$\,px at $1680$), mild, strong and very strong defocus (edges $1.5$, $3.5$\,px);
 it correlates with the measured loss of sharpness between input and target (median Spearman $0.76$).
 \emph{Ground-truth sharpness.} At f/22 the diffraction cutoff of the camera ($5.36\,\mu$m pixels,
@@ -41,6 +41,16 @@ DISTS and LPIPS to measure restored detail. All results use the $76$ test scenes
 benchmark resolution are reported both on it and on the original $1680\times1120$ images, on which our
 evaluation reproduces published numbers to within $0.06$\,dB; the two renderings shift individual
 models by $-0.58$ to $+0.16$\,dB and change their order (\cref{tab:gap}).
+
+\begin{figure}[t]
+  \centering
+  \input{fig/bins}
+  \caption{\textbf{Dual-pixel defocus bins} on three test scenes (\texttt{1P0A1002}, \texttt{1P0A2030},
+  \texttt{1P0A1890}); top: input at $\times4$, bottom: bins overlaid (blue: focal plane $b_0$, green $b_1$,
+  yellow $b_2$, red $b_3$). Flat, low-texture regions receive low dual-pixel confidence and can fall in $b_0$ even when
+  defocused (the plain wall at the left of the first scene).}
+  \label{fig:bins}
+\end{figure}
 
 \subsection{Protocol}
 \label{sec:exp_protocol}
@@ -251,12 +261,13 @@ texture exists in focus. \todo{full-set numbers for random/oracle; relevance-map
 
 \begin{figure*}[t]
   \centering
-  \fbox{\parbox[c][5cm][c]{0.97\textwidth}{\centering Qualitative comparison placeholder (768\,px native
-  crops): target $\mid$ input $\mid$ native Restormer $\mid$ $\times4$ + bicubic $\mid$ + HAT-L $\mid$ +
-  SwinIR-real $\mid$ + OSEDiff $\mid$ DP composite $\mid$ \method.\\ Rows: lockers (\texttt{1P0A2030}),
-  poster caption (\texttt{1P0A1890}), dark scene (\texttt{1P0A2202}).}}
-  \caption{\textbf{Qualitative comparison at native resolution.} \todo{caption after the visual
-  review of all eight selected scenes.}}
+  \input{fig/qual}
+  \caption{\textbf{Qualitative comparison at native resolution} ($256$\,px native windows; $\times4$ rows use the
+  Restormer anchor). Native-resolution inference leaves the input as blurry as it is. $\times4$ deblur + bicubic and + HAT-L
+  recover edges and legible text; SwinIR-real adds contrast and alters glyph shapes; OSEDiff rewrites the poster caption
+  into different glyphs, changes the shape of the locks and adds banding in the dark scene. Rows: lockers
+  (\texttt{1P0A2030}), poster caption (\texttt{1P0A1890}), dark scene (\texttt{1P0A2202}).
+  \todo{\method column; remaining selected scenes.}}
   \label{fig:qual}
 \end{figure*}
 

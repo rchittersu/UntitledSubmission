@@ -24,15 +24,14 @@ behave there.
 
 \begin{figure}[t]
   \centering
-  \fbox{\parbox[c][4.2cm][c]{0.95\linewidth}{\centering Teaser placeholder: input crop $\mid$
-  native-resolution inference $\mid$ $4\times$ deblur + bicubic $\mid$ + generative SR $\mid$ \method $\mid$ target}}
+  \input{fig/teaser}
   \caption{\textbf{Defocus deblurring at native resolution ($30$\,MP DPDD).}
   Running a deblurring network directly at native resolution leaves the image as blurry as the input.
   Deblurring at $4\times$ lower resolution and upsampling recovers structure but no native detail;
   generative super-resolution adds detail by invention and rewrites text and in-focus texture.
   \method copies the observation where it is sharp and transfers texture from in-focus exemplars of
-  the same image where it is not. \todo{final crops: lockers / poster caption (\texttt{1P0A2030},
-  \texttt{1P0A1890}).}}
+  the same image where it is not. Crops: $256$\,px native windows of the lockers (\texttt{1P0A2030}) and the poster caption
+  (\texttt{1P0A1890}); generative SR is OSEDiff on the $\times4$ Restormer anchor. \todo{\method column.}}
   \label{fig:teaser}
 \end{figure}
 

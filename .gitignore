@@ -22,3 +22,6 @@ ext/
 Template/*.pdf
 # the built paper is committed (rebuild before committing; secure patches must not include it: binary)
 !Template/main.pdf
+
+# Qualitative-figure crops (images stay out of the patch; made by code/scripts/make_qual_crops.py)
+Template/fig/qual/

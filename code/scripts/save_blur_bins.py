@@ -41,6 +41,7 @@ def main():
     ap.add_argument("--inputs", help="folder of blurry inputs (same names) for the overlay")
     ap.add_argument("--size", help="WxH of the saved maps (default: DP resolution)")
     ap.add_argument("--names", help="comma-separated scene names (default: all with a DP map)")
+    ap.add_argument("--thumbs", help="folder for paper thumbnails <name>_input.jpg / <name>_bins.jpg (560 px wide; needs --inputs)")
     a = ap.parse_args()
     out = Path(a.out)
     names = a.names.split(",") if a.names else sorted(p.name[: -len("_disp.png")] for p in Path(a.dp_maps).glob("*_disp.png"))
@@ -64,6 +65,11 @@ def main():
             img = cv2.resize(img, (lab.shape[1], lab.shape[0]), interpolation=cv2.INTER_AREA)
             ov = (0.55 * img + 0.45 * COLORS[lab]).astype(np.uint8)
             cv2.imwrite(str(out / "overlay" / f"{n}.jpg"), ov, [cv2.IMWRITE_JPEG_QUALITY, 90])
+        if a.thumbs and a.inputs:
+            Path(a.thumbs).mkdir(parents=True, exist_ok=True)
+            w, h = 560, round(560 * lab.shape[0] / lab.shape[1])
+            cv2.imwrite(str(Path(a.thumbs) / f"{n}_input.jpg"), cv2.resize(img, (w, h), interpolation=cv2.INTER_AREA), [cv2.IMWRITE_JPEG_QUALITY, 92])
+            cv2.imwrite(str(Path(a.thumbs) / f"{n}_bins.jpg"), cv2.resize(ov, (w, h), interpolation=cv2.INTER_AREA), [cv2.IMWRITE_JPEG_QUALITY, 92])
         print(n, [round(float((lab == k).mean()), 3) for k in range(4)], flush=True)
 
 
