@@ -1,9 +1,9 @@
 % Qualitative comparison at native resolution (included from sec/4_experiments.tex, fig:qual).
-% 256 px native windows, Restormer anchor; crops from code/scripts/make_qual_crops.py (fig/qual/<row>_<column>.jpg).
+% 256 px native windows, DRBNet anchor; crops from code/scripts/make_qual_crops.py (fig/qual/<row>_<column>.jpg).
 \begingroup\setlength{\tabcolsep}{0.6pt}\renewcommand{\arraystretch}{1}%
-\begin{tabular}{@{}*{9}{p{0.1075\textwidth}}@{}}
-  \qhead{Target} & \qhead{Input} & \qhead{Native} & \qhead{$\times4$+bicubic} & \qhead{+HAT-L} & \qhead{+SwinIR-real} & \qhead{+OSEDiff} & \qhead{DP composite} & \qhead{\method} \\
-  \qimg{lockers_target} & \qimg{lockers_input} & \qimg{lockers_native} & \qimg{lockers_bicubic} & \qimg{lockers_hatl} & \qimg{lockers_swinir} & \qimg{lockers_osediff} & \qimg{lockers_composite} & \qbox{\todo{\method}} \\[0.6pt]
-  \qimg{poster_target} & \qimg{poster_input} & \qimg{poster_native} & \qimg{poster_bicubic} & \qimg{poster_hatl} & \qimg{poster_swinir} & \qimg{poster_osediff} & \qimg{poster_composite} & \qbox{\todo{\method}} \\[0.6pt]
-  \qimg{dark_target} & \qimg{dark_input} & \qimg{dark_native} & \qimg{dark_bicubic} & \qimg{dark_hatl} & \qimg{dark_swinir} & \qimg{dark_osediff} & \qimg{dark_composite} & \qbox{\todo{\method}} \\
+\begin{tabular}{@{}*{11}{p{0.086\textwidth}}@{}}
+  \qhead{Target} & \qhead{Input} & \qhead{Native} & \qhead{$\times4$+bicubic} & \qhead{+HAT-L} & \qhead{+SwinIR-real} & \qhead{+OSEDiff} & \qhead{+S3Diff} & \qhead{+VOSR2} & \qhead{DP composite} & \qhead{\method} \\
+  \qimg{lockers_target} & \qimg{lockers_input} & \qimg{lockers_native} & \qimg{lockers_bicubic} & \qimg{lockers_hatl} & \qimg{lockers_swinir} & \qimg{lockers_osediff} & \qimg{lockers_s3diff} & \qimg{lockers_vosr2} & \qimg{lockers_composite} & \qbox{\todo{\method}} \\[0.6pt]
+  \qimg{poster_target} & \qimg{poster_input} & \qimg{poster_native} & \qimg{poster_bicubic} & \qimg{poster_hatl} & \qimg{poster_swinir} & \qimg{poster_osediff} & \qimg{poster_s3diff} & \qimg{poster_vosr2} & \qimg{poster_composite} & \qbox{\todo{\method}} \\[0.6pt]
+  \qimg{dark_target} & \qimg{dark_input} & \qimg{dark_native} & \qimg{dark_bicubic} & \qimg{dark_hatl} & \qimg{dark_swinir} & \qimg{dark_osediff} & \qimg{dark_s3diff} & \qimg{dark_vosr2} & \qimg{dark_composite} & \qbox{\todo{\method}} \\
 \end{tabular}\endgroup

@@ -1,0 +1,10 @@
+% Same texture in focus and defocused in one image (included from sec/4_experiments.tex, fig:texture).
+% 512 px native windows saved at 256 px; (a),(b) 1P0A1046 printed script on fabric, (c),(d) 1P0A1112 woven fabric.
+\begingroup\setlength{\tabcolsep}{0.6pt}\renewcommand{\arraystretch}{1}%
+\begin{tabular}{@{}p{0.02\textwidth}*{11}{p{0.084\textwidth}}@{}}
+  & \qhead{Target} & \qhead{Input} & \qhead{Native} & \qhead{$\times4$+bicubic} & \qhead{+HAT-L} & \qhead{+SwinIR-real} & \qhead{+OSEDiff} & \qhead{+S3Diff} & \qhead{+VOSR2} & \qhead{DP composite} & \qhead{\method} \\
+  \qhead{(a)} & \qimg{scriptF_target} & \qimg{scriptF_input} & \qimg{scriptF_native} & \qimg{scriptF_bicubic} & \qimg{scriptF_hatl} & \qimg{scriptF_swinir} & \qimg{scriptF_osediff} & \qimg{scriptF_s3diff} & \qimg{scriptF_vosr2} & \qimg{scriptF_composite} & \qbox{\todo{\method}} \\[0.6pt]
+  \qhead{(b)} & \qimg{scriptD_target} & \qimg{scriptD_input} & \qimg{scriptD_native} & \qimg{scriptD_bicubic} & \qimg{scriptD_hatl} & \qimg{scriptD_swinir} & \qimg{scriptD_osediff} & \qimg{scriptD_s3diff} & \qimg{scriptD_vosr2} & \qimg{scriptD_composite} & \qbox{\todo{\method}} \\[0.6pt]
+  \qhead{(c)} & \qimg{weaveF_target} & \qimg{weaveF_input} & \qimg{weaveF_native} & \qimg{weaveF_bicubic} & \qimg{weaveF_hatl} & \qimg{weaveF_swinir} & \qimg{weaveF_osediff} & \qimg{weaveF_s3diff} & \qimg{weaveF_vosr2} & \qimg{weaveF_composite} & \qbox{\todo{\method}} \\[0.6pt]
+  \qhead{(d)} & \qimg{weaveD_target} & \qimg{weaveD_input} & \qimg{weaveD_native} & \qimg{weaveD_bicubic} & \qimg{weaveD_hatl} & \qimg{weaveD_swinir} & \qimg{weaveD_osediff} & \qimg{weaveD_s3diff} & \qimg{weaveD_vosr2} & \qimg{weaveD_composite} & \qbox{\todo{\method}} \\
+\end{tabular}\endgroup

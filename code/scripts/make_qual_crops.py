@@ -56,12 +56,17 @@ def main(argv=None):
     for name, r in cfg["rows"].items():
         if a.rows and name not in a.rows.split(","):
             continue
+        rs = int(r.get("size", size))                      # per-row window (native px); saved at `out_px` (default 256)
+        px = int(r.get("out_px", size if a.size else cfg.get("size", 256)))
         for col, tpl in cfg["columns"].items():
             p = expand(tpl).format(scene=r["scene"])
-            cv2.imwrite(str(out / f"{name}_{col}.jpg"), crop(p, r["y"], r["x"], size), [cv2.IMWRITE_JPEG_QUALITY, 95])
+            t = crop(p, r["y"], r["x"], rs)
+            if t.shape[0] != px:
+                t = cv2.resize(t, (px, px), interpolation=cv2.INTER_AREA)
+            cv2.imwrite(str(out / f"{name}_{col}.jpg"), t, [cv2.IMWRITE_JPEG_QUALITY, 95])
         cv2.imwrite(str(out / f"{name}_context.jpg"), context(expand(cfg["columns"]["input"]).format(scene=r["scene"]),
-                                                              r["y"], r["x"], size), [cv2.IMWRITE_JPEG_QUALITY, 90])
-        print(f"{name}: scene {r['scene']} window y={r['y']} x={r['x']} size={size} -> {out}")
+                                                              r["y"], r["x"], rs), [cv2.IMWRITE_JPEG_QUALITY, 90])
+        print(f"{name}: scene {r['scene']} window y={r['y']} x={r['x']} size={rs} -> {px} px, {out}")
 
 
 if __name__ == "__main__":

@@ -253,7 +253,7 @@ report in-focus preservation separately. Conversely, DISTS in the most defocused
 input above every smooth pipeline: perceptual metrics at native resolution reward realistic grain and
 texture, which the smooth pipelines lack and which \method aims to restore from real evidence.
 
-\paragraph{In-focus exemplars carry the missing texture.} The non-learned exemplar transfer matches
+\paragraph{In-focus exemplars carry the missing texture (\cref{fig:texture}).} The non-learned exemplar transfer matches
 each defocused $32$\,px cell to the most similar in-focus cell of the same image at $\times4$ and adds
 its native high band. In a pilot on four scenes, matching halved the PSNR cost and doubled the
 perceptual gain compared with copying random in-focus cells, and an oracle that selects cells using the target shows how much usable
@@ -261,11 +261,25 @@ texture exists in focus. \todo{full-set numbers for random/oracle; relevance-map
 
 \begin{figure*}[t]
   \centering
+  \input{fig/texture}
+  \caption{\textbf{The same texture in focus and defocused in one image, and how it evolves with deblurring and
+  upsampling.} (a),(b) printed script on fabric (\texttt{1P0A1046}), (c),(d) woven fabric (\texttt{1P0A1112});
+  (a),(c) in focus, (b),(d) defocused ($512$\,px native windows shown at half size, DRBNet anchor). Input and native
+  inference keep the defocused texture blurred. $\times4$ deblur + bicubic or HAT-L recover the stroke geometry but not the fine
+  weave. OSEDiff smooths the strokes and replaces the in-focus weave by a regular mesh. S3Diff adds weave-like texture to the defocused
+  fabric; VOSR2 adds a regular grid at the right edge. The in-focus rows contain the texture that exemplar transfer
+  copies into the defocused ones. \todo{\method column.}}
+  \label{fig:texture}
+\end{figure*}
+
+\begin{figure*}[t]
+  \centering
   \input{fig/qual}
   \caption{\textbf{Qualitative comparison at native resolution} ($256$\,px native windows; $\times4$ rows use the
-  Restormer anchor). Native-resolution inference leaves the input as blurry as it is. $\times4$ deblur + bicubic and + HAT-L
-  recover edges and legible text; SwinIR-real adds contrast and alters glyph shapes; OSEDiff rewrites the poster caption
-  into different glyphs, changes the shape of the locks and adds banding in the dark scene. Rows: lockers
+  DRBNet anchor). Native-resolution inference leaves the input as blurry as it is. $\times4$ deblur + bicubic and + HAT-L
+  recover edges and legible text, and so does VOSR2, which stays close to bicubic. SwinIR-real adds contrast and alters
+  glyph shapes; OSEDiff rewrites the poster caption into different glyphs, changes the shape of the locks and adds banding in the dark
+  scene; S3Diff is sharper but also changes glyph shapes and adds grain in the dark scene. Rows: lockers
   (\texttt{1P0A2030}), poster caption (\texttt{1P0A1890}), dark scene (\texttt{1P0A2202}).
   \todo{\method column; remaining selected scenes.}}
   \label{fig:qual}
