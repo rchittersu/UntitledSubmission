@@ -1,0 +1,56 @@
+# Reference-based x4 upsamplers for the tile study (code/scripts/tile_study.py, uhdd/refsr.py).
+# Each model: callable(anchor tile 1x3xhxw, reference 1x3x4hx4w | None) -> native tile, all in [0, 1].
+# Paths use ${UHDD_REPOS} / ${UHDD_WEIGHTS}; `setup` notes in docs/baselines.md ("Reference-based SR").
+models:
+  bicubic:                      # floor: bicubic x4 of the anchor
+    factory: uhdd.refsr:build_bicubic
+  highband:                     # non-learned: bicubic + the reference's high band (aligned `self` reference only)
+    factory: uhdd.refsr:build_highband
+    gain: 1.0
+
+  refir_seesr:                  # ReFIR (NeurIPS 2024) on SeeSR (CVPR 2024), official settings
+    factory: uhdd.adapters.refir:build
+    repo: ${UHDD_REPOS}/ReFIR/seesr
+    sd_path: ${UHDD_WEIGHTS}/sd2_base                 # HF snapshot of stabilityai/stable-diffusion-2-base (not 2.1)
+    seesr_path: ${UHDD_WEIGHTS}/seesr/seesr           # SeeSR release: unet/ + controlnet/
+    dape_path: ${UHDD_WEIGHTS}/seesr/DAPE.pth         # SeeSR release
+    ram_path: ${UHDD_WEIGHTS}/ram/ram_swin_large_14m.pth   # same file as OSEDiff
+    bert_path: ${UHDD_WEIGHTS}/bert-base-uncased      # same tokenizer files as OSEDiff
+    steps: 50
+    guidance: 5.5
+    refir_scale: 0.6            # official default for the reference setting
+    reset_editor: true          # false = official script behaviour (counter never reset; see adapter docstring)
+    align: adain                # official default
+    seed: 1234
+    precision: fp16
+  seesr:                        # the same model without the reference (ReFIR's base)
+    factory: uhdd.adapters.refir:build
+    repo: ${UHDD_REPOS}/ReFIR/seesr
+    sd_path: ${UHDD_WEIGHTS}/sd2_base
+    seesr_path: ${UHDD_WEIGHTS}/seesr/seesr
+    dape_path: ${UHDD_WEIGHTS}/seesr/DAPE.pth
+    ram_path: ${UHDD_WEIGHTS}/ram/ram_swin_large_14m.pth
+    bert_path: ${UHDD_WEIGHTS}/bert-base-uncased
+    steps: 50
+    guidance: 5.5
+    refir_scale: 0
+    align: adain
+    seed: 1234
+    precision: fp16
+
+  irag:                         # iRAG (ICCV 2025), online mode, 50 DDIM steps (their evaluation setting)
+    factory: uhdd.adapters.irag:build
+    repo: ${UHDD_REPOS}/iRAG/sr
+    ckpt: ${UHDD_WEIGHTS}/irag/iRAG.ckpt              # release (Google Drive folder in the iRAG README)
+    vqgan_ckpt: ${UHDD_WEIGHTS}/stablesr/vqgan_cfw_00011.ckpt   # StableSR CFW autoencoder (HF Iceclear/StableSR)
+    steps: 50
+    dec_w: 0.5
+    colorfix: adain             # official default
+    seed: 42
+  irag_inter:                   # iRAG's TTSR branch alone (regression RefSR, no diffusion)
+    factory: uhdd.adapters.irag:build
+    repo: ${UHDD_REPOS}/iRAG/sr
+    ckpt: ${UHDD_WEIGHTS}/irag/iRAG.ckpt
+    vqgan_ckpt: ${UHDD_WEIGHTS}/stablesr/vqgan_cfw_00011.ckpt
+    output: inter
+    seed: 42

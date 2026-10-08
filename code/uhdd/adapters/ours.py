@@ -99,7 +99,7 @@ def wrap(holder: OursNet, spec: dict):
         down4(y) == anchor slightly at seams; one global back-projection step restores it exactly."""
         from uhdd.net.ours import anchor_lock
         y, a = y.float(), anchor.float()
-        for _ in range(spec.get("lock_iters", 4)):   # alternate the lock and [0, 1] (both convex; the anchor's
+        for _ in range(spec.get("lock_iters", 16)):  # alternate the lock and [0, 1] (both convex; the anchor's
             y = anchor_lock(y, a).clamp(0, 1)        # upsampling lies in both, so this converges)
         return y
 

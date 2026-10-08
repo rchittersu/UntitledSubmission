@@ -42,7 +42,9 @@
 #   code/experiments/launch.sh env                            print the environment the launcher will use
 #   code/experiments/launch.sh setup inputs [--protect-legacy]  link + verify inputs (names, sizes, same scene in
 #                                                             official vs ours); REQUIRED before any run
-#   code/experiments/launch.sh setup s3diff|vosr              one-time: clone, Python env, weights (see SETUP)
+#   code/experiments/launch.sh setup s3diff|vosr|refir|irag   one-time: clone, weights (see SETUP)
+#   code/experiments/launch.sh tiles select|prep|run|report [args]   reference-SR tile study on selected val tiles
+#                                                             (scripts/tile_study.py; see TILE STUDY below)
 #   code/experiments/launch.sh check                          verify inputs, S3Diff / VOSR paths, weights, envs
 #   code/experiments/launch.sh list                           sources, models, every run and whether it is scored
 #   code/experiments/launch.sh deblur SRC MODEL [GPU] [args]          one deblurrer on one source, scored
@@ -101,6 +103,26 @@
 #   Fidelity reference (optional): code/external/s3diff_run.py reproduces the official S3Diff script (its own env).
 #   Needs: git, huggingface-cli (pip install -U "huggingface_hub[cli]"), CUDA GPU. Set HF_TOKEN if a repo is gated.
 #
+# TILE STUDY (reference-based SR on selected tiles, fast feedback; code/scripts/tile_study.py, configs/refsr.yaml)
+#   launch.sh tiles select                                   8 val scenes x 2 tiles per DP bin (b0..b3), fixed
+#   launch.sh tiles prep --anchor drbnet                     crops + references: self (native at the tile), retrieved
+#                                                            (mosaic of in-focus exemplars, DINOv2 memory)
+#   launch.sh tiles run --anchor drbnet --model refir_seesr --ref retrieved [--set steps=20] [--gpu 1] [--shard 0/2]
+#   launch.sh tiles run --anchor drbnet --model irag --ref self
+#   launch.sh tiles report --anchor drbnet                   per-bin gains over bicubic, raw and anchor-locked,
+#                                                            LPIPS / DISTS, contact sheets (tilestudy/val/sheets/)
+#   models: bicubic, highband (non-learned), seesr (no reference), refir_seesr, irag, irag_inter (TTSR branch only)
+#   refs:   none | self | retrieved
+#
+#   ReFIR — github.com/csguoh/ReFIR (on SeeSR)          code $UHDD_REPOS/ReFIR, adapter uhdd/adapters/refir.py
+#     weights  $UHDD_WEIGHTS/sd2_base (stabilityai/stable-diffusion-2-base, NOT 2.1),
+#              $UHDD_WEIGHTS/seesr/{seesr/{unet,controlnet},DAPE.pth} (SeeSR release, Google Drive / OneDrive link in
+#              the ReFIR README: download by hand if gdown cannot reach it), RAM + BERT tokenizer as for OSEDiff
+#   iRAG — github.com/ByeonghunLee12/iRAG                code $UHDD_REPOS/iRAG, adapter uhdd/adapters/irag.py
+#     weights  $UHDD_WEIGHTS/irag/iRAG.ckpt (Google Drive folder in the iRAG README),
+#              $UHDD_WEIGHTS/stablesr/vqgan_cfw_00011.ckpt (Iceclear/StableSR), OpenCLIP ViT-H-14 laion2b_s32b_b79k
+#              (fetched into the HF cache by `setup irag`; offline afterwards)
+#
 # OUTPUT CHECKS (after a run)
 #   - 76 PNGs at native size in the run folder; `list` shows the count and whether it was scored.
 #   - metrics_dpdd4.csv / .json next to them; `summary` tables psnr, ssim, lpips, dists, musiq, clipiqa,
@@ -148,6 +170,39 @@ setup_vosr() {
       "Qwen-Image-vae-2d/*" "stable-diffusion-2-1-base/*" "sd21_lwdecoder.pth" "torch_cache/*"
 }
 
+setup_refir() {
+  need UHDD_REPOS UHDD_WEIGHTS
+  step "clone ReFIR -> $UHDD_REPOS/ReFIR"
+  [[ -d "$UHDD_REPOS/ReFIR/.git" ]] || git clone https://github.com/csguoh/ReFIR "$UHDD_REPOS/ReFIR"
+  step "weights: SD-2-base -> $UHDD_WEIGHTS/sd2_base"
+  huggingface-cli download stabilityai/stable-diffusion-2-base --local-dir "$UHDD_WEIGHTS/sd2_base"
+  step "weights: SeeSR + DAPE -> $UHDD_WEIGHTS/seesr (Google Drive folder from the ReFIR README)"
+  if command -v gdown >/dev/null; then
+    gdown --folder https://drive.google.com/drive/folders/12HXrRGEXUAnmHRaf0bIn-S8XSK4Ku0JO -O "$UHDD_WEIGHTS/seesr" || \
+      echo "WARNING: gdown failed; download the SeeSR folder by hand into $UHDD_WEIGHTS/seesr (seesr/unet, seesr/controlnet, DAPE.pth)"
+  else
+    echo "gdown not installed: download the SeeSR folder by hand into $UHDD_WEIGHTS/seesr (seesr/unet, seesr/controlnet, DAPE.pth)"
+  fi
+  [[ -f "$UHDD_WEIGHTS/ram/ram_swin_large_14m.pth" ]] || echo "WARNING: RAM weights missing ($UHDD_WEIGHTS/ram/ram_swin_large_14m.pth, as for OSEDiff)"
+}
+
+setup_irag() {
+  need UHDD_REPOS UHDD_WEIGHTS
+  step "clone iRAG -> $UHDD_REPOS/iRAG"
+  [[ -d "$UHDD_REPOS/iRAG/.git" ]] || git clone https://github.com/ByeonghunLee12/iRAG "$UHDD_REPOS/iRAG"
+  step "weights: iRAG checkpoint -> $UHDD_WEIGHTS/irag (Google Drive folder from the iRAG README)"
+  if command -v gdown >/dev/null; then
+    gdown --folder https://drive.google.com/drive/folders/1-onBC231a5EFVmstBzLx8hYkrN0s1qvJ -O "$UHDD_WEIGHTS/irag" || \
+      echo "WARNING: gdown failed; download the iRAG pretrained folder by hand into $UHDD_WEIGHTS/irag (iRAG.ckpt)"
+  else
+    echo "gdown not installed: download the iRAG pretrained folder by hand into $UHDD_WEIGHTS/irag (iRAG.ckpt)"
+  fi
+  step "weights: StableSR CFW autoencoder -> $UHDD_WEIGHTS/stablesr"
+  huggingface-cli download Iceclear/StableSR vqgan_cfw_00011.ckpt --local-dir "$UHDD_WEIGHTS/stablesr"
+  step "weights: OpenCLIP ViT-H-14 (laion2b_s32b_b79k) into the HF cache (text encoder of the SD-2.1 UNet)"
+  huggingface-cli download laion/CLIP-ViT-H-14-laion2B-s32B-b79K open_clip_pytorch_model.bin
+}
+
 check() {
   local ok=1
   chk() { if eval "$2"; then echo "  ok    $1"; else echo "  FAIL  $1"; ok=0; fi; }
@@ -169,6 +224,16 @@ check() {
   chk "VOSR2       \$UHDD_WEIGHTS/vosr/VOSR2"      "[[ -f '${UHDD_WEIGHTS:-}/vosr/VOSR2/args.json' ]]"
   chk "Qwen VAE    \$UHDD_WEIGHTS/vosr/Qwen-Image-vae-2d" "[[ -d '${UHDD_WEIGHTS:-}/vosr/Qwen-Image-vae-2d' ]]"
   chk "DINOv2 hub  \$UHDD_WEIGHTS/vosr/torch_cache" "[[ -d '${UHDD_WEIGHTS:-}/vosr/torch_cache/facebookresearch_dinov2_main' ]]"
+  echo "ReFIR / iRAG (tile study)"
+  chk "repo        \$UHDD_REPOS/ReFIR"             "[[ -f '${UHDD_REPOS:-}/ReFIR/seesr/seesr_register.py' ]]"
+  chk "SD-2-base   \$UHDD_WEIGHTS/sd2_base"         "[[ -d '${UHDD_WEIGHTS:-}/sd2_base/unet' ]]"
+  chk "SeeSR       \$UHDD_WEIGHTS/seesr/seesr"      "[[ -d '${UHDD_WEIGHTS:-}/seesr/seesr/controlnet' ]]"
+  chk "DAPE        \$UHDD_WEIGHTS/seesr/DAPE.pth"   "[[ -f '${UHDD_WEIGHTS:-}/seesr/DAPE.pth' ]]"
+  chk "repo        \$UHDD_REPOS/iRAG"              "[[ -f '${UHDD_REPOS:-}/iRAG/sr/inference.py' ]]"
+  chk "iRAG ckpt   \$UHDD_WEIGHTS/irag/iRAG.ckpt"   "[[ -f '${UHDD_WEIGHTS:-}/irag/iRAG.ckpt' ]]"
+  chk "CFW VQGAN   \$UHDD_WEIGHTS/stablesr"         "[[ -f '${UHDD_WEIGHTS:-}/stablesr/vqgan_cfw_00011.ckpt' ]]"
+  chk "main env imports open_clip, kornia, omegaconf, accelerate" \
+      "'$PY' -c 'import open_clip, kornia, omegaconf, accelerate' 2>/dev/null"
   (( ok )) && echo "all checks passed" || echo "some checks failed"
 }
 
@@ -192,7 +257,9 @@ case "$cmd" in
              inputs) "$PY" "$SETUP_INPUTS" "$@" ;;
              s3diff) setup_s3diff ;;
              vosr)   setup_vosr ;;
-             *)      die "setup inputs|s3diff|vosr" ;;
+             refir)  setup_refir ;;
+             irag)   setup_irag ;;
+             *)      die "setup inputs|s3diff|vosr|refir|irag" ;;
            esac ;;
   check)   check ;;
   list)    "$PY" "$LAUNCH" list ;;
@@ -210,5 +277,7 @@ case "$cmd" in
              "$PY" "$LAUNCH" upsample --src "$src" --anchor "$a" --sr "$sr" --gpu "$gpu" --eval "$@"
            done ;;
   fresh)   fresh "$@" ;;
+  tiles)   [[ $# -ge 1 ]] || die "tiles select|prep|run|report [args] (see: $0 help, TILE STUDY)"
+           "$PY" "$ROOT/code/scripts/tile_study.py" "$@" ;;
   *)       die "unknown command '$cmd' (see: $0 help)" ;;
 esac

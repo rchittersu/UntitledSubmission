@@ -89,3 +89,86 @@ def osediff_imports() -> None:
     for fn in (invert_attention_mask, get_extended_attention_mask, get_head_mask):
         if not hasattr(PreTrainedModel, fn.__name__):
             setattr(PreTrainedModel, fn.__name__, fn)
+
+
+def seesr_imports() -> None:
+    """SeeSR (used by ReFIR) bundles UNet / ControlNet / pipeline copies written against diffusers ~0.21: alias the
+    modules and names that newer diffusers moved, plus the OSEDiff set (RAM / DAPE share the same BERT copy)."""
+    import sys
+    import types
+    osediff_imports()
+    import diffusers.loaders as loaders
+    if not hasattr(loaders, "FromOriginalControlnetMixin"):
+        loaders.FromOriginalControlnetMixin = loaders.FromOriginalModelMixin
+    import diffusers.models.attention as att
+    if not hasattr(att, "AdaGroupNorm"):
+        from diffusers.models.normalization import AdaGroupNorm
+        att.AdaGroupNorm = AdaGroupNorm
+    moved = {"diffusers.pipeline_utils": "diffusers.pipelines.pipeline_utils",
+             "diffusers.models.dual_transformer_2d": "diffusers.models.transformers.dual_transformer_2d",
+             "diffusers.models.transformer_2d": "diffusers.models.transformers.transformer_2d",
+             "diffusers.models.unet_2d_condition": "diffusers.models.unets.unet_2d_condition",
+             "diffusers.models.controlnet": "diffusers.models.controlnets.controlnet"}
+    import importlib
+    for old, new in moved.items():
+        if old not in sys.modules:
+            try:
+                importlib.import_module(old)
+            except ImportError:
+                sys.modules[old] = importlib.import_module(new)
+    if sys.platform == "darwin" and "modules" not in sys.modules:   # SeeSR's utils/devices.py (A1111 heritage), macOS only
+        pkg = types.ModuleType("modules")
+        pkg.mac_specific = types.SimpleNamespace(has_mps=False)
+        sys.modules["modules"] = pkg
+        sys.modules["modules.mac_specific"] = pkg.mac_specific
+
+
+def irag_imports() -> None:
+    """iRAG (StableSR-style latent diffusion) imports pytorch-lightning and taming-transformers only for training
+    (LightningModule base class, logging decorators, VQ / discriminator losses). For inference in the one main
+    environment, install minimal stand-ins when the real packages are absent: LightningModule = nn.Module."""
+    import sys
+    import types
+
+    import torch.nn as nn
+
+    def _mod(name: str, **attrs) -> types.ModuleType:
+        m = sys.modules.get(name) or types.ModuleType(name)
+        for k, v in attrs.items():
+            setattr(m, k, v)
+        sys.modules[name] = m
+        if "." in name:
+            parent, child = name.rsplit(".", 1)
+            setattr(_mod(parent), child, m)
+        return m
+
+    try:
+        import pytorch_lightning  # noqa: F401
+    except ImportError:
+        class LightningModule(nn.Module):
+            def log(self, *a, **k):
+                pass
+
+            def log_dict(self, *a, **k):
+                pass
+
+        ident = lambda f: f  # noqa: E731
+        _mod("pytorch_lightning", LightningModule=LightningModule, seed_everything=lambda *a, **k: None,
+             Callback=object, Trainer=object)
+        _mod("pytorch_lightning.utilities", rank_zero_only=ident)
+        _mod("pytorch_lightning.utilities.distributed", rank_zero_only=ident)
+        _mod("pytorch_lightning.utilities.rank_zero", rank_zero_only=ident)
+    try:
+        import taming  # noqa: F401
+    except ImportError:
+        class _Unavailable(nn.Module):
+            def __init__(self, *a, **k):
+                raise RuntimeError("taming-transformers is not installed (only needed for iRAG training / VQ models)")
+
+        stub = lambda *a, **k: None  # noqa: E731
+        _mod("taming.modules.vqvae.quantize", VectorQuantizer2=_Unavailable, VectorQuantizer=_Unavailable)
+        _mod("taming.modules.losses.vqperceptual", hinge_d_loss=stub, vanilla_d_loss=stub, LPIPS=_Unavailable)
+        _mod("taming.modules.losses.lpips", LPIPS=_Unavailable)
+        _mod("taming.modules.discriminator.model", NLayerDiscriminator=_Unavailable, weights_init=stub)
+        _mod("taming.data.imagenet", ImagePaths=_Unavailable, str_to_indices=stub, give_synsets_from_indices=stub,
+             download=stub, retrieve=stub)

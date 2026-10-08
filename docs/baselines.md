@@ -225,6 +225,31 @@ four with weights on GitHub releases (`restoration_mse.pth`, `restoration_gan.pt
 ops (the same shim approach may work for C2-Matching), TTSR is pure PyTorch but older. Add one if DATSR turns out to
 be competitive with ours.
 
+**D3 — ReFIR on SeeSR and iRAG (2026-10-08, tile study first)** — the most recent reference-based diffusion SR with
+code + weights; first step of "adapt existing RefSR to our setting" (user decision 2026-10-08).
+- **ReFIR** (Guo et al., NeurIPS 2024, `github.com/csguoh/ReFIR`): training-free; on SeeSR (SD-2-base + ControlNet +
+  DAPE prompts), input and reference are denoised as a batch; in the late decoder self-attention layers of the last 20
+  of 50 steps the input's attention becomes (1 − m)·self + m·cross(input → reference), m = mean similarity to the
+  reference, min-max normalised per image (never abstains); AdaIN colour fix. Multi-step (50, CFG 5.5 → 4 UNet
+  copies per step). Adapter `uhdd/adapters/refir.py`; `seesr` = the same without reference.
+  Found while reading the code: the official script registers the attention editor once and never resets its step
+  counter, so from the second image on the injection runs at all 50 steps (`reset_editor: false` reproduces it;
+  default resets per tile, as described in the paper); xformers replaced by SDPA (tested equal).
+- **iRAG** (Lee et al., ICCV 2025, `github.com/ByeonghunLee12/iRAG`): TTSR branch (bicubic LQ + reference + LR) →
+  intermediate I_inter; StableSR-style SD-2.1 latent diffusion conditioned on [z_LR, z_inter], CFW decoder (dec_w 0.5),
+  AdaIN; 50 DDIM steps (their evaluation; script default 200). Its hash retrieval from a database is replaced by our
+  same-image references. Adapter `uhdd/adapters/irag.py`; `irag_inter` = the TTSR branch alone (regression RefSR).
+- **One environment**: `compat.seesr_imports()` (moved diffusers modules / names) and `compat.irag_imports()`
+  (inference stand-ins for pytorch-lightning / taming; the CFW autoencoder's training loss replaced by Identity).
+  Both import in the main env (diffusers 0.40 / transformers 5 / torch 2.x checked outside on CPU).
+- **References** (same image only, `uhdd/refsr.py`): `self` = native input at the tile (copy path in focus),
+  `retrieved` = 4×4 mosaic of the 16 best in-focus native exemplars (128 px each, at native scale) from the DINOv2
+  memory of the whole anchor (tile region excluded), `none`.
+- **Tile study** (`scripts/tile_study.py`, `launch.sh tiles …`): fixed 512 px val tiles per DP bin, per-bin gain over
+  bicubic of the same anchor, raw and anchor-locked, LPIPS / DISTS, contact sheets. Expected issues to look for:
+  focal-plane damage (SD prior), forced injection where nothing is relevant (ReFIR's mask), mosaic seams copied into
+  the output, colour shifts, glyph changes, runtime.
+
 ## E. Existing defocus deblurring models at native resolution (G1)
 
 | model | weights | default native tile / overlap (§2.7) | status / numbers [S, P1, 37 indoor, v1 renderings, 512 tiles] |

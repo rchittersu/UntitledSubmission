@@ -18,3 +18,10 @@ fairscale        # VOSR (models/rmsnorm.py), OSEDiff RAM
 requests         # imported by S3Diff / OSEDiff model files
 tqdm
 loralib          # imported by OSEDiff (RAM / its UNet copy)
+open_clip_torch  # iRAG (SD-2.1 text encoder, OpenCLIP ViT-H-14)
+kornia           # iRAG model code
+omegaconf        # iRAG configs
+scikit-learn     # imported by iRAG's ddpm.py
+matplotlib       # imported by iRAG's ddpm.py
+accelerate       # SeeSR pipeline (ReFIR)
+gdown            # Google Drive weights (SeeSR, iRAG) in `launch.sh setup refir|irag`

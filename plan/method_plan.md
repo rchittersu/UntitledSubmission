@@ -12,6 +12,12 @@ exemplar helps; the spectral oracle failed).
 - **Evaluation**: frozen protocol `dpdd4` (out-of-the-box PSNR, SSIM, LPIPS, DISTS at native, MUSIQ, CLIPIQA,
   PSNR/SSIM at ×4; diagnostics never rank). All 76 test scenes.
 
+**2026-10-08 — first step changed (user):** before building our own model, adapt the most recent reference-based
+diffusion SR with code + weights — ReFIR on SeeSR (NeurIPS 2024) and iRAG (ICCV 2025, 50 DDIM steps) — to our setting
+(x4 deblurred anchor + same-image references: `self`, `retrieved`), on selected val tiles first (`scripts/tile_study.py`,
+`docs/baselines.md` §D3, handoff 6). Find what breaks, fix it, and decide then whether the synthetic-training plan
+below is still needed.
+
 ## 0. Decisions (2026-10-07)
 
 | Topic | Decision |
