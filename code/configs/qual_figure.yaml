@@ -1,0 +1,18 @@
+# Crops for the qualitative figures of the paper (Template/fig/qual*.tex): `scripts/make_qual_crops.py`.
+# Each row is a native-resolution window (y, x, size in native px) of one test scene; each column a method output.
+# Paths are templates ({scene}) under $UHDD_DATA / $UHDD_RESULTS (legacy layout of handoffs 2-3: Restormer anchor).
+out: ${UHDD_RESULTS}/qual_figure
+size: 256
+columns:
+  target:    ${UHDD_DATA}/dpdd_native_v2/x1/targets/{scene}.png
+  input:     ${UHDD_DATA}/dpdd_native_v2/inputs/{scene}.png
+  native:    ${UHDD_RESULTS}/dpdd_v2/steps/x1__restormer_dpdd@t1120o140/{scene}.png
+  bicubic:   ${UHDD_RESULTS}/dpdd_v2/steps/x4__restormer_dpdd@whole__bicubic_x4@whole/{scene}.png
+  hatl:      ${UHDD_RESULTS}/dpdd_v2/steps/x4__restormer_dpdd@whole__hat_l_x4@t512o64/{scene}.png
+  swinir:    ${UHDD_RESULTS}/dpdd_v2/steps/x4__restormer_dpdd@whole__swinir_x4_real@t400o50/{scene}.png
+  osediff:   ${UHDD_RESULTS}/dpdd_v2/steps/x4__restormer_dpdd@whole__osediff_x4@t128o16/{scene}.png
+  composite: ${UHDD_RESULTS}/dpdd_v2/baselines_bd/restormer_dpdd_composite/{scene}.png
+rows:
+  lockers: {scene: 1P0A2030, y: 1504, x: 3802}
+  poster:  {scene: 1P0A1890, y: 544,  x: 552}
+  dark:    {scene: 1P0A2202, y: 2536, x: 6208}

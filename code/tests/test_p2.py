@@ -403,3 +403,22 @@ def test_bins_of_uses_the_blurbins_edges():
     import save_blur_bins as sb
     blur = np.array([[0.0, 0.39, 0.4, 1.49], [1.5, 3.49, 3.5, 9.0]], np.float32)
     assert sb.bins_of(blur).tolist() == [[0, 0, 1, 1], [2, 2, 3, 3]]
+
+
+def test_make_qual_crops(tmp_path, monkeypatch):
+    import cv2
+    import numpy as np
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    import make_qual_crops as mq
+    rng = np.random.default_rng(0)
+    for col in ("a", "b"):
+        (tmp_path / col).mkdir()
+        img = (rng.random((64, 96, 3)) * 65535).astype(np.uint16) if col == "a" else (rng.random((64, 96, 3)) * 255).astype(np.uint8)
+        cv2.imwrite(str(tmp_path / col / "s1.png"), img)
+    cfg = tmp_path / "q.yaml"
+    cfg.write_text(f"out: {tmp_path}/out\nsize: 16\ncolumns:\n  input: {tmp_path}/a/{{scene}}.png\n  x: {tmp_path}/b/{{scene}}.png\n"
+                   f"rows:\n  r1: {{scene: s1, y: 60, x: 10}}\n")
+    mq.main(["--config", str(cfg)])
+    t = cv2.imread(str(tmp_path / "out" / "r1_input.jpg"))
+    assert t.shape == (16, 16, 3)                                   # window clipped into the image, 16-bit -> 8-bit
+    assert (tmp_path / "out" / "r1_x.jpg").exists() and (tmp_path / "out" / "r1_context.jpg").exists()
