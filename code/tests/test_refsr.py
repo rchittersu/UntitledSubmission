@@ -24,6 +24,11 @@ def isolated_imports():
     yield
     sys.path[:] = path
     for m in set(sys.modules) - mods:
+        # keep installed libraries (torch, torchvision, Lightning, ...): they register C++ operators once per process,
+        # so re-importing them fails; remove only repo modules and the test stubs (modules without a file)
+        f = getattr(sys.modules[m], "__file__", None) or ""
+        if "site-packages" in f or "dist-packages" in f:
+            continue
         del sys.modules[m]
 
 

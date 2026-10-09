@@ -142,9 +142,20 @@ def irag_imports() -> None:
             setattr(_mod(parent), child, m)
         return m
 
-    try:
-        import pytorch_lightning  # noqa: F401
-    except ImportError:
+    def _pl_ok() -> bool:
+        # the installed pytorch-lightning may lack the sub-module iRAG imports (utilities.distributed moved in 2.x).
+        # Look at the files without importing the package (importing it pulls torchmetrics and re-registers torch ops).
+        import importlib.util
+        import os
+        spec = importlib.util.find_spec("pytorch_lightning")
+        if spec is None or not spec.submodule_search_locations:
+            return False
+        root = list(spec.submodule_search_locations)[0]
+        return any(os.path.exists(os.path.join(root, "utilities", n)) for n in ("distributed.py", "distributed"))
+
+    if not _pl_ok():
+        for k in [k for k in sys.modules if k == "pytorch_lightning" or k.startswith("pytorch_lightning.")]:
+            del sys.modules[k]
         class LightningModule(nn.Module):
             def log(self, *a, **k):
                 pass
