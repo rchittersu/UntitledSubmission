@@ -15,7 +15,10 @@ mixtures or recursive kernels~\cite{quan2021gkmnet,quan2023nrknet}, use large ke
 or handle the misalignment of aperture-bracketed pairs~\cite{li2023jdrl}; general restoration
 backbones~\cite{zamir2022restormer,chen2022nafnet,wang2022uformer} are strong on DPDD as well.
 Bokehlicious~\cite{seizinger2025bokehlicious} renders and removes bokeh with aperture control and is
-trained on multi-megapixel captures. All of these are trained on crops and evaluated at about $2$--$3$\,MP,
+trained on multi-megapixel captures; the RealDefocus benchmark~\cite{seizinger2026realdefocus} is captured at
+$6000\times4000$ but trains at $2000\times1500$ and does not release or evaluate the captured resolution, and
+synthetic lens-diverse data~\cite{lee2026cldefocus} targets cross-camera generalisation. All of these are trained
+on crops and evaluated at about $2$--$3$\,MP,
 and hence calibrated to the CoC distribution at that resolution. We do not propose another
 low-resolution deblurrer; any of them serves as our anchor, and we address the step they leave
 open: the native-resolution result.
@@ -54,7 +57,10 @@ and retrieval-augmented restoration conditions large generative models on retrie
 references~\cite{guo2024refir,lee2025irag}. Closest to our setting, RefGC-SR$^2$~\cite{sung2026refgcsr2} upsamples a
 low-resolution generated image with a high-resolution reference, keeping the low frequencies of the generated image and
 transferring high-frequency statistics of the reference with a multi-step FLUX-Kontext model; it processes single
-$1024$\,px object images, and its reference is a separate, sharp photograph. Internal learning exploits the recurrence of patches within a single
+$1024$\,px object images, and its reference is a separate, sharp photograph; reference-guided refinement of
+generated images~\cite{song2025refinebyalign} works at low resolution. Reference-based deblurring uses a sharp image
+of the same scene~\cite{zou2023refmotiondeblur} or a reference generated from the blurry input
+itself~\cite{kim2025refdeblur}, for motion blur. Internal learning exploits the recurrence of patches within a single
 image, across positions and scales~\cite{glasner2009single,zontak2011internal,shocher2018zssr}, a
 principle shared with non-local filtering~\cite{buades2005nlm} and example-based texture
 synthesis~\cite{efros1999texture,hertzmann2001analogies,barnes2009patchmatch}. Our exemplar memory
