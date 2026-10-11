@@ -54,6 +54,32 @@ def _sdpa_editor(seesr_register) -> None:
 
     seesr_register.AttentionBase.forward = base_forward
     seesr_register.MutualSelfAttentionControl.attn_batch = attn_batch
+    _count_injection(seesr_register)
+
+
+def _count_injection(seesr_register) -> None:
+    """Diagnostics: count the attention calls that take ReFIR's injection branch (same condition as the official
+    forward: self-attention, step >= 30, layer >= 28) and accumulate the mean injection weight
+    refir_scale * cosine(layer) * mask, so a run can show that the reference actually reached the output."""
+    cls = seesr_register.MutualSelfAttentionControl
+    if getattr(cls, "_counted", False):
+        return
+    orig = cls.forward
+
+    def forward(self, q, k, v, sim, attn, is_cross, place_in_unet, num_heads, **kw):
+        if not (is_cross or self.cur_step < 30 or self.cur_att_layer < 28):
+            st = self.__dict__.setdefault("stats", {"injected_calls": 0, "weight_sum": 0.0})
+            st["injected_calls"] += 1
+            try:
+                from models.unet_2d_condition import register_mask
+                w = float(seesr_register.cosine_schedule(self.cur_att_layer - 28, 64 - 28))
+                st["weight_sum"] += self.refir_scale * w * float(register_mask[0].float().mean())
+            except Exception:  # noqa: BLE001
+                pass
+        return orig(self, q, k, v, sim, attn, is_cross, place_in_unet, num_heads, **kw)
+
+    cls.forward = forward
+    cls._counted = True
 
 
 class ReFIRSeeSR:
@@ -141,6 +167,7 @@ class ReFIRSeeSR:
         if self.editor is not None:
             if s.get("reset_editor", True):
                 self.editor.reset()
+            self.editor.stats = {"injected_calls": 0, "weight_sum": 0.0}
             self.editor.refir_scale = float(s.get("refir_scale", 0.6)) if use_ref else 0.0
         g = torch.Generator(device=self.device).manual_seed(int(s.get("seed", 1234)))
         ctx = torch.autocast("cuda") if self.device.type == "cuda" else contextlib.nullcontext()
@@ -150,6 +177,12 @@ class ReFIRSeeSR:
                             conditioning_scale=float(s.get("conditioning_scale", 1.0)), start_point=s.get("start_point", "lr"),
                             ram_encoder_hidden_states=embs, latent_tiled_size=2048, latent_tiled_overlap=32,
                             args=SimpleNamespace()).images
+        self.last_stats = None
+        if self.editor is not None:
+            st = dict(getattr(self.editor, "stats", {}))
+            n = st.get("injected_calls", 0)
+            self.last_stats = {"injected_calls": n, "mean_weight": round(st.get("weight_sum", 0.0) / n, 4) if n else 0.0,
+                               "refir_scale": self.editor.refir_scale, "steps_seen": self.editor.cur_step}
         out = out.float().cpu()
         align = s.get("align", "adain")
         if align == "adain":

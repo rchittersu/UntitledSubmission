@@ -153,6 +153,31 @@ def irag_imports() -> None:
         root = list(spec.submodule_search_locations)[0]
         return any(os.path.exists(os.path.join(root, "utilities", n)) for n in ("distributed.py", "distributed"))
 
+    # ldm/modules/encoders/modules.py imports, at module level, two text encoders iRAG never builds (its config uses
+    # FrozenOpenCLIPEmbedder = open_clip): a transformers-4 CLIP text subclass (transformer_utils.py subclasses
+    # `CLIPTextTransformer`, gone in transformers 5) and OpenAI `clip` (needs pkg_resources, gone in setuptools >= 81).
+    # Placeholders let the module import; building either unused encoder raises.
+    import transformers.models.clip.modeling_clip as mclip
+    if not hasattr(mclip, "CLIPTextTransformer"):
+        class CLIPTextTransformer(nn.Module):
+            def __init__(self, *a, **k):
+                raise RuntimeError("transformers-4 CLIPTextTransformer is not available (not used by iRAG's OpenCLIP config)")
+
+        mclip.CLIPTextTransformer = CLIPTextTransformer
+    import transformers.utils as tu
+    for n in ("add_start_docstrings_to_model_forward", "replace_return_docstrings"):
+        if not hasattr(tu, n):
+            setattr(tu, n, lambda *a, **k: (lambda f: f))
+    try:
+        import clip  # noqa: F401
+    except Exception:  # noqa: BLE001  (ImportError, or pkg_resources missing inside it)
+        sys.modules.pop("clip", None)
+
+        def _no_clip(*a, **k):
+            raise RuntimeError("OpenAI clip is not importable (not used by iRAG's OpenCLIP config)")
+
+        _mod("clip", load=_no_clip, tokenize=_no_clip)
+
     if not _pl_ok():
         for k in [k for k in sys.modules if k == "pytorch_lightning" or k.startswith("pytorch_lightning.")]:
             del sys.modules[k]

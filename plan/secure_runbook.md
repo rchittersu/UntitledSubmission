@@ -7,6 +7,42 @@ Audience: the Claude agent in the secure environment. The user runs the commands
 validates; you check each step and report. Read first: `docs/baselines.md` §D3, `code/experiments/launch.sh help`
 (TILE STUDY), `code/uhdd/adapters/{refir,irag}.py` docstrings.
 
+## Update 2026-10-11 (after the partial h6 report) — continue with these first
+Your partial report was applied (`handoff/from_secure/2026-10-09_h6.md`). Answers and fixes:
+- **iRAG unblocked.** iRAG's config uses the OpenCLIP text encoder (`FrozenOpenCLIPEmbedder`, open_clip). The
+  transformers-CLIP subclass that failed (`CLIPTextTransformer`) is only *imported* at module level for an encoder iRAG
+  never builds, as is OpenAI `clip`. `compat.irag_imports()` now installs placeholders for both (building them raises),
+  so no numerical check is needed: nothing of them runs. Checked outside: `ldm.modules.encoders.modules` imports, and the
+  TTSR branch (7 M params) and the structure encoder (52 M) build from the config. No separate environment.
+- **"SeeSR with retrieved = none" is by design**: `seesr` is ReFIR's base without reference injection (`refir_scale: 0`),
+  so it ignores `--ref`. Only `refir_seesr` uses the reference.
+- **Does the reference reach ReFIR's output?** `refir_seesr` runs now write `tile_stats.json` (also in `meta.json`):
+  per tile `injected_calls` (attention calls that took the injection branch; expected 20 steps × 36 decoder layers = 720
+  with the counter reset per tile), `mean_weight` (refir_scale × layer schedule × similarity mask), `steps_seen`.
+  ReFIR mixes `(1 − m)·self + m·cross` and then AdaIN-normalises the result back to the self-attention statistics, so a
+  small effect is plausible even when it runs.
+- The test-scene benchmark (1P0A1046) is recorded as a user-authorised deviation; its numbers are not used for decisions.
+
+Next, in this order (val tiles from your `tiles select` / `prep --anchor drbnet`):
+```bash
+git pull
+A="--anchor drbnet --limit 16"                 # 4 tiles per bin first
+code/experiments/launch.sh tiles run $A --model refir_seesr --ref retrieved --overwrite          # now with tile_stats
+code/experiments/launch.sh tiles run $A --model refir_seesr --ref retrieved --set refir_scale=1.0
+code/experiments/launch.sh tiles run $A --model refir_seesr --ref retrieved --set refir_scale=2.0
+code/experiments/launch.sh tiles run $A --model irag --ref self --tiles <one b2 tile>          # smoke: load_report, time
+for r in self retrieved; do
+  code/experiments/launch.sh tiles run $A --model irag --ref $r
+  code/experiments/launch.sh tiles run $A --model irag_inter --ref $r
+done
+code/experiments/launch.sh tiles run $A --model bicubic --ref none
+code/experiments/launch.sh tiles run $A --model highband --ref self
+code/experiments/launch.sh tiles run $A --model seesr --ref none
+code/experiments/launch.sh tiles report --anchor drbnet
+```
+Report `injected_calls` / `mean_weight` per run (min / mean / max over tiles), the iRAG `load_report`, and the per-bin
+table. Then the full 56 tiles, then Bokehlicious, as in §4–5 below.
+
 ## Why
 User decision 2026-10-08: before building our own model, take the two most recent reference-based diffusion SR methods
 with code and weights — **ReFIR on SeeSR** (NeurIPS 2024) and **iRAG** (ICCV 2025, 50 DDIM steps) — run them in our

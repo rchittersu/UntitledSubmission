@@ -226,7 +226,7 @@ def cmd_run(a, st: Study):
         tiles = [t for t in tiles if t["id"] in keep]
     i, n = map(int, a.shard.split("/"))
     tiles = tiles[i::n][: a.limit or None]
-    times = []
+    times, stats = [], {}
     for t in tiles:
         f = out / f"{t['id']}.png"
         if f.exists() and not a.overwrite:
@@ -238,11 +238,16 @@ def cmd_run(a, st: Study):
         if torch.cuda.is_available():
             torch.cuda.synchronize()
         times.append(time.time() - t0)
+        if getattr(model, "last_stats", None) is not None:
+            stats[t["id"]] = model.last_stats
         write_image(f, to_u16(y.float().cpu()))
         print(f"{t['id']} bin {t['bin']} {times[-1]:.1f}s", flush=True)
     meta = {"model": a.model, "ref": a.ref, "anchor": at, "set": a.set, "n": len(list(out.glob("*.png"))),
             "time_s_mean": round(float(np.mean(times)), 2) if times else None, "device": dev,
             "load_report": getattr(model, "load_report", None)}
+    if stats:   # per-tile model diagnostics (ReFIR: injected attention calls, mean injection weight)
+        meta["tile_stats"] = stats
+        (out / "tile_stats.json").write_text(json.dumps(stats, indent=1))
     (out / "meta.json").write_text(json.dumps(meta, indent=1))
 
 
