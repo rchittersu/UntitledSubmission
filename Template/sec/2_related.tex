@@ -51,14 +51,19 @@ observation nor the exemplars provide detail.
 Reference-based super-resolution transfers texture from a separate high-resolution reference through
 patch correspondence~\cite{zhang2019srntt,yang2020ttsr,jiang2021c2matching,lu2021masasr,cao2022datsr},
 and retrieval-augmented restoration conditions large generative models on retrieved
-references~\cite{guo2024refir}. Internal learning exploits the recurrence of patches within a single
+references~\cite{guo2024refir,lee2025irag}. Closest to our setting, RefGC-SR$^2$~\cite{sung2026refgcsr2} upsamples a
+low-resolution generated image with a high-resolution reference, keeping the low frequencies of the generated image and
+transferring high-frequency statistics of the reference with a multi-step FLUX-Kontext model; it processes single
+$1024$\,px object images, and its reference is a separate, sharp photograph. Internal learning exploits the recurrence of patches within a single
 image, across positions and scales~\cite{glasner2009single,zontak2011internal,shocher2018zssr}, a
 principle shared with non-local filtering~\cite{buades2005nlm} and example-based texture
 synthesis~\cite{efros1999texture,hertzmann2001analogies,barnes2009patchmatch}. Our exemplar memory
 combines both ideas in a setting where neither applies directly: the reference is the observation
 itself, its usable parts are defined by the local defocus, and correspondences are established in the
 deblurred anchor, where sharp and defocused regions look alike, while texture is taken from the native
-observation. We compare against reference-based super-resolution~\cite{cao2022datsr} given the
+observation. Where the observation is in focus, the reference is pixel-aligned with the output and can be copied;
+the low band is locked exactly to the anchor; and a $30$\,MP image is processed in tiles that share one exemplar
+memory. We compare against reference-based super-resolution~\cite{cao2022datsr,guo2024refir,lee2025irag} given the
 observation as reference.
 
 \paragraph{Guided upsampling and patch-wise inference.}

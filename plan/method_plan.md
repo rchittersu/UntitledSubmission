@@ -18,6 +18,25 @@ diffusion SR with code + weights — ReFIR on SeeSR (NeurIPS 2024) and iRAG (ICC
 `docs/baselines.md` §D3, handoff 6). Find what breaks, fix it, and decide then whether the synthetic-training plan
 below is still needed.
 
+**2026-10-11 — closest prior work: RefGC-SR²** (Sung et al., arXiv 2606.15158, v3 Oct 2026; code / weights not
+released). Same task shape as ours — low-res result of a generator + high-res reference → x4 output that keeps the
+low-res structure and takes detail from the reference — on single 1024 px object images, with a multi-step
+FLUX-Kontext DiT (frozen) + frequency-split LoRA experts: low frequencies from the generated image (supervised by GT),
+high-frequency *statistics* from the reference (no pixel alignment: different viewpoint); data: real multi-view pairs +
+a diptych generator for the low-quality inputs. What we keep / differ on (to state in the paper):
+- low band: their soft LF path ↔ our exact anchor lock;
+- high band: their statistics transfer fits our retrieved (unaligned) exemplars; we additionally have a **pixel-exact
+  reference where the observation is in focus** (copy path; the non-learned high-band copy already gave +1.16 dB in
+  focus and the best LPIPS / DISTS in the h6 one-scene benchmark);
+- the reference is the degraded observation itself, usable per pixel by defocus (DP / predicted map), abstain where
+  nothing is usable;
+- **tiling at 30 MP** (they do not tile: one 1024 px image) with a shared exemplar memory and a global lock;
+- **cost**: they sample a 12B-class DiT for many steps; we aim at a single pass (feed-forward v0/v1, or one-step if a
+  generative prior is needed);
+- fidelity first (PSNR no-harm, then DISTS / LPIPS) vs their perceptual / user-study evaluation.
+Their observation that structure forms in the first ~5 % and detail in the last ~10 % of DiT layers is a hint for where
+to inject references if we add a diffusion prior (variant B).
+
 ## 0. Decisions (2026-10-07)
 
 | Topic | Decision |
