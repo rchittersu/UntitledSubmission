@@ -37,6 +37,24 @@ a diptych generator for the low-quality inputs. What we keep / differ on (to sta
 Their observation that structure forms in the first ~5 % and detail in the last ~10 % of DiT layers is a hint for where
 to inject references if we add a diffusion prior (variant B).
 
+**2026-10-12 — tiled VOSR with context cross-attention (user):** make VOSR (one-step DiT SR) work across tiles by
+letting each tile attend to context patches of the same image; later the same for VOSR-0.5B (SD2 VAE) and S3Diff.
+Code: `code/uhdd/net/context_attn.py` (CPU-tested on a tiny LightningDiT, `tests/test_context_attn.py`).
+- One `ContextAttention` layer after selected DiT blocks (default: last third), queries = tile tokens, keys / values =
+  context tokens (context crops VAE-encoded and embedded with VOSR's own patch embedding as clean (lq = state) inputs);
+  Q / K / V / proj / qk-norm initialised from the block's self-attention; **learnable per-channel strength (gate), 0 at
+  init** -> exactly VOSR at init (tested), plus a runtime `strength` multiplier.
+- **Position ids relative to the query tile**: each context token is placed at its true image position in the query
+  tile's token units; 2-D axial RoPE with VOSR's frequencies on queries and keys -> attention depends on the offset
+  (co-located crop = query grid, neighbour at +G, retrieved crop at its true offset). Tested: a common shift of query
+  and context positions leaves attention unchanged; moving a crop changes it.
+- Per-patch geometry [dy, dx, log scale, scale, blur, type (self / neighbour / retrieved), score] -> zero-init MLP added to
+  the keys; learned null tokens (abstain); additive bias for masks / retrieval scores.
+- Open (next): which context patches to sample in training (co-located / neighbours / retrieved / distractors, copy /
+  partial / transfer / null mix), the attention formulation (top-K masking, scale handling, far offsets vs RoPE
+  wavelengths), training data and losses (synthetic tiles from large images; VOSR's one-step objective + L1 / LPIPS),
+  then the VOSR adapter for inference and the tile study.
+
 ## 0. Decisions (2026-10-07)
 
 | Topic | Decision |
